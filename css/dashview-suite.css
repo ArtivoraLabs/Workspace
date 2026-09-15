@@ -1,0 +1,125 @@
+/* ==========================================================================
+   DashView — Auth, Odoo, Widget Builder, Share & TV Mode styles
+   Additive stylesheet — reuses existing tokens from css/base.css and the
+   .panel / .btn / .modal-card / .dash-table / .board-tab component classes
+   already defined in css/components.css, css/dashboard.css and
+   css/dashboard-pro.css. Nothing here redefines those.
+   ========================================================================== */
+
+/* ── Sign-in banner (guest state) ───────────────────────────────────────── */
+.dv-signin-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4);
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-5); margin-bottom: var(--sp-5);
+}
+.dv-signin-banner p { font-size: var(--fs-xs); color: var(--ink-70); margin: 0; }
+.dv-signin-banner p b { color: var(--ink); }
+
+/* ── Demo role picker (auth modal) ──────────────────────────────────────── */
+.dv-demo-role-row { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-5); }
+.dv-demo-role-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
+  background: var(--paper-soft); border: 1px solid var(--line); color: var(--ink-70);
+  font-size: var(--fs-xs); font-weight: 700; padding: 10px 8px; border-radius: var(--r-sm);
+  cursor: pointer; transition: border-color var(--t-fast), color var(--t-fast);
+}
+.dv-demo-role-btn:hover { border-color: var(--line-strong); color: var(--ink); }
+.dv-role-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dv-role-pill { font-size: 10px; font-weight: 700; border: 1px solid; border-radius: var(--r-full); padding: 1px 7px; }
+
+/* ── Account dropdown menu ──────────────────────────────────────────────── */
+.dv-account-menu {
+  position: fixed; z-index: 650; width: 240px; background: var(--paper); border: 1px solid var(--line-strong);
+  border-radius: var(--r-md); box-shadow: var(--shadow-lg); padding: var(--sp-3);
+  opacity: 0; visibility: hidden; transform: translateY(6px); transition: opacity var(--t-fast), transform var(--t-fast), visibility var(--t-fast);
+}
+.dv-account-menu.open { opacity: 1; visibility: visible; transform: translateY(0); }
+.dv-account-menu-head { display: flex; align-items: center; gap: 10px; padding-bottom: var(--sp-3); margin-bottom: var(--sp-2); border-bottom: 1px solid var(--line); }
+.dv-account-menu-head p { font-size: var(--fs-sm); font-weight: 700; color: var(--ink); margin: 0; }
+.dv-account-menu-head span { font-size: 11px; color: var(--ink-30); }
+.dv-account-menu-role { display: flex; align-items: center; gap: 7px; font-size: var(--fs-xs); color: var(--ink-70); padding: 6px 4px; }
+.dv-account-menu-item {
+  display: block; width: 100%; text-align: left; background: none; border: none; color: var(--ink-70);
+  font-size: var(--fs-xs); font-weight: 600; padding: 8px; border-radius: 6px; cursor: pointer;
+}
+.dv-account-menu-item:hover { background: var(--paper-soft); color: var(--ink); }
+
+/* ── Odoo data browser view ─────────────────────────────────────────────── */
+.dv-pill { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--ink-50); background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--r-full); padding: 4px 12px; }
+.dv-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-30); }
+.dv-pill.dv-pill-live { color: var(--emerald,#4fb477); border-color: rgba(79,180,119,.3); }
+.dv-pill.dv-pill-live::before { background: var(--emerald,#4fb477); }
+.dv-odoo-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-4); }
+.dv-odoo-search { max-width: 260px; }
+
+/* ── Widget Builder ──────────────────────────────────────────────────────── */
+.dv-widget-toolbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.dv-widget-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sp-5); }
+.dv-widget-card {
+  background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-5);
+  display: flex; flex-direction: column; min-height: 220px; transition: border-color var(--t-base), box-shadow var(--t-base), opacity var(--t-fast);
+}
+.dv-widget-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-sm); }
+.dv-widget-card.dragging { opacity: 0.4; }
+.dv-widget-card.drop-target { border-color: var(--signal); }
+.dv-widget-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+.dv-widget-head-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dv-widget-drag-handle { cursor: grab; color: var(--ink-30); flex-shrink: 0; }
+.dv-widget-drag-handle:active { cursor: grabbing; }
+.dv-widget-title { font-size: var(--fs-sm); font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dv-widget-source-tag { font-size: 10px; color: var(--ink-30); font-family: var(--f-mono); display: block; margin-top: 2px; }
+.dv-widget-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.dv-widget-icon-btn {
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 6px;
+  background: transparent; border: none; color: var(--ink-30); cursor: pointer; transition: background var(--t-fast), color var(--t-fast);
+}
+.dv-widget-icon-btn:hover { background: var(--paper-soft); color: var(--ink); }
+.dv-widget-icon-btn.danger:hover { color: var(--danger); }
+.dv-widget-body { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.dv-widget-kpi-value { font-family: var(--f-display); font-size: var(--fs-2xl); font-weight: 800; color: var(--ink); line-height: 1; }
+.dv-widget-kpi-sub { font-size: var(--fs-xs); color: var(--ink-50); margin-top: 6px; }
+.dv-widget-chart-wrap { position: relative; height: 170px; }
+.dv-widget-table-wrap { overflow: auto; max-height: 220px; }
+.dv-widget-loading { color: var(--ink-30); font-size: var(--fs-xs); text-align: center; padding: var(--sp-8) 0; }
+.dv-widget-empty { color: var(--ink-30); font-size: var(--fs-xs); text-align: center; padding: var(--sp-8) var(--sp-4); line-height: 1.6; }
+.dv-widget-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--emerald,#4fb477); animation: pro-live-pulse 1.4s ease-in-out infinite; flex-shrink: 0; }
+.dv-widget-card.dv-flash { animation: pro-flash 1.1s ease-out; }
+
+/* Add/edit widget modal extras */
+.dv-source-group-label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-30); margin: var(--sp-3) 0 4px; }
+.dv-widget-live-row { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); }
+.dv-widget-csv-drop {
+  border: 1.5px dashed var(--line-strong); border-radius: var(--r-sm); padding: var(--sp-4); text-align: center;
+  font-size: var(--fs-xs); color: var(--ink-50); cursor: pointer; transition: border-color var(--t-fast), color var(--t-fast);
+}
+.dv-widget-csv-drop:hover { border-color: var(--signal); color: var(--ink); }
+
+/* ── Share modal ─────────────────────────────────────────────────────────── */
+.dv-share-link-row { display: flex; gap: 8px; margin-top: var(--sp-3); }
+.dv-share-link-row input { flex: 1; background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 12px; color: var(--ink); font-family: var(--f-mono); font-size: 11px; }
+
+/* ── TV Mode ─────────────────────────────────────────────────────────────── */
+.dv-tv-overlay {
+  position: fixed; inset: 0; z-index: 900; background: var(--paper-alt);
+  display: none; flex-direction: column; align-items: center; justify-content: center; padding: var(--sp-16);
+}
+.dv-tv-overlay.open { display: flex; }
+.dv-tv-exit {
+  position: absolute; top: var(--sp-6); right: var(--sp-6); background: var(--paper-soft); border: 1px solid var(--line);
+  color: var(--ink-70); border-radius: var(--r-full); padding: 8px 18px; font-size: var(--fs-xs); font-weight: 700; cursor: pointer;
+}
+.dv-tv-exit:hover { color: var(--ink); border-color: var(--line-strong); }
+.dv-tv-widget { width: min(920px, 90vw); text-align: center; }
+.dv-tv-widget .dv-widget-title { font-size: var(--fs-lg); display: block; margin-bottom: var(--sp-6); white-space: normal; }
+.dv-tv-widget .dv-widget-kpi-value { font-size: var(--fs-5xl); }
+.dv-tv-widget .dv-widget-kpi-sub { font-size: var(--fs-md); margin-top: var(--sp-3); }
+.dv-tv-widget .dv-widget-chart-wrap { height: 380px; }
+.dv-tv-dots { display: flex; gap: 8px; margin-top: var(--sp-10); }
+.dv-tv-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-30); transition: background var(--t-fast), width var(--t-fast); }
+.dv-tv-dot.active { background: var(--signal); width: 22px; border-radius: var(--r-full); }
+.dv-tv-clock { position: absolute; top: var(--sp-6); left: var(--sp-6); font-family: var(--f-mono); color: var(--ink-30); font-size: var(--fs-sm); }
+
+@media (max-width: 700px) {
+  .dv-widget-grid { grid-template-columns: 1fr; }
+  .dv-tv-widget .dv-widget-kpi-value { font-size: var(--fs-3xl); }
+}

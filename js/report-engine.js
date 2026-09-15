@@ -1,0 +1,549 @@
+/* ==========================================================================
+   ARTIVORALABS — DashView Report Engine
+   --------------------------------------------------------------------------
+   A professional, print/board-ready export layer for Data Studio, built on
+   top of two industry-standard, MIT-licensed libraries that are lazily
+   loaded from CDN only the moment someone actually exports (matching the
+   "no network calls until you ask for one" spirit of the rest of this repo):
+
+     • ExcelJS   — real styled workbooks: header theming, number formats,
+                   frozen panes, autofilter, totals row, embedded chart
+                   images. (SheetJS, used elsewhere for reading files, has
+                   no styling support in its free build.)
+     • jsPDF +
+       jsPDF-AutoTable — a genuine multi-page report: cover page, executive
+                   summary of KPI tiles, a chart gallery, paginated data /
+                   pivot tables with repeating headers, and a running
+                   header/footer with page numbers.
+
+   This file is deliberately framework-free and side-effect-free at parse
+   time: it exposes a small `DVReportEngine` API and does nothing until
+   called. The "compose*" functions take the library constructor as an
+   argument and are pure builders (no DOM, no globals besides the library
+   itself), which is what makes them unit-testable under Node — the exact
+   pattern js/studio-core.js already uses for Studio.
+   ========================================================================== */
+'use strict';
+
+var DVReportEngine = (function () {
+
+  /* ======================================================================
+     0. Brand tokens — mirrors css/base.css's Data Studio palette
+        (--signal / --beacon / --ink) so exported reports look like they
+        came from the same product, not a generic spreadsheet.
+     ====================================================================== */
+  var BRAND = {
+    name: 'DashView',
+    accentHex: 'e8a33d',      // --signal
+    accentDarkHex: 'd98f27',  // --beacon
+    inkHex: '1c2321',
+    mutedHex: '6b7570',
+    bandHex: 'f6f1e7',
+    borderHex: 'e3dccb',
+  };
+  var ARGB = {
+    accent: 'FF' + BRAND.accentHex.toUpperCase(),
+    accentDark: 'FF' + BRAND.accentDarkHex.toUpperCase(),
+    ink: 'FF' + BRAND.inkHex.toUpperCase(),
+    white: 'FFFFFFFF',
+    band: 'FF' + BRAND.bandHex.toUpperCase(),
+    border: 'FF' + BRAND.borderHex.toUpperCase(),
+  };
+  var RGB = { accent: [232, 163, 61], accentDark: [217, 143, 39], ink: [28, 35, 33], muted: [107, 117, 112], band: [246, 241, 231], border: [227, 220, 203], white: [255, 255, 255] };
+
+  var MAX_PDF_ROWS = 1500; // keep the PDF a sane, printable length; full data always lives in the Excel export
+
+  /* ======================================================================
+     1. Small pure helpers
+     ====================================================================== */
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+  function stamp(d) {
+    d = d || new Date();
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var h = d.getHours(), ampm = h >= 12 ? 'PM' : 'AM'; h = h % 12; if (h === 0) h = 12;
+    return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() + ' · ' + h + ':' + pad2(d.getMinutes()) + ' ' + ampm;
+  }
+  function sanitizeFilename(s) {
+    return String(s || 'Report').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Report';
+  }
+  function isNumericType(type) { return type === 'number' || type === 'currency' || type === 'percent'; }
+
+  function numFmtForType(type) {
+    switch (type) {
+      case 'currency': return '$#,##0.00;[Red]-$#,##0.00';
+      case 'percent': return '0.0"%"';       // values are already on a 0-100 scale in this app, not 0-1 — a literal suffix avoids Excel's automatic ×100
+      case 'number': return '#,##0.##';
+      case 'date': return 'mmm d, yyyy';
+      default: return null;
+    }
+  }
+  /** Converts one raw typed cell (as stored in state.dataset.typedRows) into the value ExcelJS should write. */
+  function excelValue(raw, type) {
+    if (raw === null || raw === undefined || raw === '') return null;
+    if (type === 'date') { var d = new Date(raw); return isNaN(d.getTime()) ? null : d; }
+    if (type === 'boolean') return raw ? 'Yes' : 'No';
+    if (isNumericType(type)) { var n = Number(raw); return isNaN(n) ? null : n; }
+    return String(raw);
+  }
+  function colLetter(n) { // 1-based
+    var s = '';
+    while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+    return s;
+  }
+
+  /* ======================================================================
+     2. Excel report — ExcelJS
+     ====================================================================== */
+  function styleHeaderRow(row, argbFill, argbText) {
+    row.eachCell(function (cell) {
+      cell.font = { bold: true, color: { argb: argbText || ARGB.white }, size: 11 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argbFill } };
+      cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      cell.border = { bottom: { style: 'thin', color: { argb: ARGB.border } } };
+    });
+    row.height = 22;
+  }
+  function zebraFill(row, isEven) {
+    if (!isEven) return;
+    row.eachCell({ includeEmpty: true }, function (cell) {
+      if (!cell.fill || !cell.fill.fgColor) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ARGB.band } };
+    });
+  }
+  function autoWidth(header, sample) {
+    var longest = String(header || '').length;
+    for (var i = 0; i < sample.length; i++) { var len = String(sample[i] == null ? '' : sample[i]).length; if (len > longest) longest = len; }
+    return Math.max(10, Math.min(42, longest + 3));
+  }
+
+  function buildSummarySheet(wb, payload) {
+    var ws = wb.addWorksheet('Summary', { views: [{ showGridLines: false }] });
+    ws.columns = [{ width: 22 }, { width: 46 }, { width: 4 }, { width: 22 }, { width: 22 }];
+
+    ws.mergeCells('A1:E1');
+    var title = ws.getCell('A1');
+    title.value = payload.title || payload.workbookName || 'Report';
+    title.font = { bold: true, size: 20, color: { argb: ARGB.ink } };
+    ws.getRow(1).height = 32;
+
+    ws.mergeCells('A2:E2');
+    var sub = ws.getCell('A2');
+    sub.value = 'Business intelligence report · generated with ' + BRAND.name;
+    sub.font = { italic: true, size: 11, color: { argb: 'FF' + BRAND.mutedHex.toUpperCase() } };
+
+    ws.mergeCells('A3:E3');
+    ws.getRow(3).height = 4;
+    ws.getCell('A3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ARGB.accent } };
+
+    var r = 5;
+    var meta = [
+      ['Workbook', payload.workbookName || '—'],
+      ['Source file', payload.sourceFileName || '—'],
+      ['Generated', stamp(payload.generatedAt)],
+      ['Rows included', (payload.filteredRows != null ? payload.filteredRows.toLocaleString() : '—') + (payload.totalRows && payload.totalRows !== payload.filteredRows ? ' of ' + payload.totalRows.toLocaleString() + ' total (filters applied)' : '')],
+    ];
+    meta.forEach(function (m) {
+      ws.getCell('A' + r).value = m[0];
+      ws.getCell('A' + r).font = { bold: true, color: { argb: 'FF' + BRAND.mutedHex.toUpperCase() }, size: 10 };
+      ws.getCell('B' + r).value = m[1];
+      ws.getCell('B' + r).font = { size: 11, color: { argb: ARGB.ink } };
+      r++;
+    });
+
+    if (payload.filtersSummary && payload.filtersSummary.length) {
+      ws.getCell('A' + r).value = 'Filters applied';
+      ws.getCell('A' + r).font = { bold: true, color: { argb: 'FF' + BRAND.mutedHex.toUpperCase() }, size: 10 };
+      ws.getCell('A' + r).alignment = { vertical: 'top' };
+      ws.getCell('B' + r).value = payload.filtersSummary.join('\n');
+      ws.getCell('B' + r).font = { size: 11, color: { argb: ARGB.ink } };
+      ws.getCell('B' + r).alignment = { wrapText: true, vertical: 'top' };
+      ws.getRow(r).height = Math.max(16, payload.filtersSummary.length * 14);
+      r++;
+    }
+    r += 1;
+
+    if (payload.includeKpis && payload.kpis && payload.kpis.length) {
+      ws.mergeCells('A' + r + ':B' + r);
+      ws.getCell('A' + r).value = 'Key metrics';
+      ws.getCell('A' + r).font = { bold: true, size: 13, color: { argb: ARGB.ink } };
+      r += 1;
+      var headerRow = ws.getRow(r);
+      headerRow.getCell(1).value = 'Metric'; headerRow.getCell(2).value = 'Value';
+      styleHeaderRow(headerRow, ARGB.accent);
+      r += 1;
+      payload.kpis.forEach(function (k, i) {
+        var row = ws.getRow(r);
+        row.getCell(1).value = k.label;
+        row.getCell(2).value = k.value;
+        row.getCell(2).font = { bold: true };
+        zebraFill(row, i % 2 === 1);
+        r += 1;
+      });
+    }
+    return ws;
+  }
+
+  function buildDataSheet(wb, payload) {
+    var fields = payload.fields || [];
+    var ws = wb.addWorksheet('Data', { views: [{ state: 'frozen', ySplit: 1, showGridLines: true }] });
+    var headerRow = ws.getRow(1);
+    fields.forEach(function (f, i) { headerRow.getCell(i + 1).value = f.name; });
+    styleHeaderRow(headerRow, ARGB.accent);
+
+    var rows = payload.rows || [];
+    rows.forEach(function (r, ri) {
+      var row = ws.getRow(ri + 2);
+      fields.forEach(function (f, ci) {
+        var cell = row.getCell(ci + 1);
+        cell.value = excelValue(r[f.name], f.type);
+        var fmt = numFmtForType(f.type);
+        if (fmt) cell.numFmt = fmt;
+        if (isNumericType(f.type)) cell.alignment = { horizontal: 'right' };
+      });
+      zebraFill(row, ri % 2 === 1);
+    });
+
+    // Totals row — SUM() formulas for every numeric-type column, so the sheet stays live if someone edits it.
+    var lastDataRow = rows.length + 1;
+    if (rows.length) {
+      var totalsRow = ws.getRow(lastDataRow + 1);
+      fields.forEach(function (f, i) {
+        var col = colLetter(i + 1);
+        var cell = totalsRow.getCell(i + 1);
+        if (i === 0) { cell.value = 'Total (' + rows.length.toLocaleString() + ' rows)'; cell.font = { bold: true, italic: true }; }
+        else if (isNumericType(f.type)) {
+          cell.value = { formula: 'SUM(' + col + '2:' + col + lastDataRow + ')' };
+          var fmt = numFmtForType(f.type); if (fmt) cell.numFmt = fmt;
+          cell.font = { bold: true };
+          cell.alignment = { horizontal: 'right' };
+        }
+      });
+      totalsRow.eachCell({ includeEmpty: true }, function (cell) { cell.border = { top: { style: 'medium', color: { argb: ARGB.accentDark } } }; });
+    }
+
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: Math.max(1, fields.length) } };
+    ws.columns.forEach(function (col, i) {
+      var f = fields[i]; if (!f) return;
+      var sample = rows.slice(0, 200).map(function (r) { return f.type === 'date' ? '0000-00-00' : r[f.name]; });
+      col.width = autoWidth(f.name, sample);
+    });
+    return ws;
+  }
+
+  function buildPivotSheet(wb, payload) {
+    var pivot = payload.pivot;
+    if (!pivot || !pivot.columns || !pivot.columns.length) return null;
+    var ws = wb.addWorksheet('Pivot', { views: [{ state: 'frozen', ySplit: 1 }] });
+    var headerRow = ws.getRow(1);
+    pivot.columns.forEach(function (c, i) { headerRow.getCell(i + 1).value = c; });
+    styleHeaderRow(headerRow, ARGB.accentDark);
+
+    (pivot.rows || []).forEach(function (r, ri) {
+      var row = ws.getRow(ri + 2);
+      var isGrandTotal = String(r[pivot.columns[0]]).toLowerCase().indexOf('grand total') === 0;
+      pivot.columns.forEach(function (c, ci) {
+        var cell = row.getCell(ci + 1);
+        var v = r[c];
+        cell.value = (v === '' || v === undefined) ? null : v;
+        if (typeof v === 'number') { cell.numFmt = '#,##0.##'; cell.alignment = { horizontal: 'right' }; }
+      });
+      if (isGrandTotal) row.eachCell({ includeEmpty: true }, function (cell) { cell.font = { bold: true }; cell.border = { top: { style: 'medium', color: { argb: ARGB.accentDark } } }; });
+      else zebraFill(row, ri % 2 === 1);
+    });
+    ws.columns.forEach(function (col, i) { col.width = autoWidth(pivot.columns[i], (pivot.rows || []).slice(0, 100).map(function (r) { return r[pivot.columns[i]]; })); });
+    return ws;
+  }
+
+  function buildChartsSheet(wb, payload) {
+    var charts = payload.charts;
+    if (!charts || !charts.length) return null;
+    var ws = wb.addWorksheet('Charts', { views: [{ showGridLines: false }] });
+    ws.getColumn(1).width = 4;
+    var row = 1;
+    charts.forEach(function (c) {
+      ws.getCell('B' + row).value = c.title || 'Chart';
+      ws.getCell('B' + row).font = { bold: true, size: 12, color: { argb: ARGB.ink } };
+      row += 1;
+      if (c.subtitle) { ws.getCell('B' + row).value = c.subtitle; ws.getCell('B' + row).font = { italic: true, size: 10, color: { argb: 'FF' + BRAND.mutedHex.toUpperCase() } }; row += 1; }
+      try {
+        if (c.image) {
+          var base64 = String(c.image).replace(/^data:image\/\w+;base64,/, '');
+          var imgId = wb.addImage({ base64: base64, extension: 'png' });
+          var w = 560, h = 300;
+          ws.addImage(imgId, { tl: { col: 1, row: row - 1 }, ext: { width: w, height: h } });
+          row += Math.ceil(h / 20) + 2;
+        }
+      } catch (e) { /* a single bad image never sinks the whole export */ if (typeof console !== 'undefined') console.warn('DVReportEngine: could not embed chart image', e); }
+    });
+    return ws;
+  }
+
+  /** Pure builder: pass the ExcelJS constructor (window.ExcelJS in the browser, require('exceljs') under Node for tests). Returns the built Workbook — caller decides how to serialize/download it. */
+  function composeWorkbook(ExcelJSLib, payload) {
+    var wb = new ExcelJSLib.Workbook();
+    wb.creator = BRAND.name;
+    wb.created = payload.generatedAt || new Date();
+    wb.title = payload.title || payload.workbookName;
+
+    buildSummarySheet(wb, payload);
+    if (payload.includeData !== false) buildDataSheet(wb, payload);
+    if (payload.includePivot) buildPivotSheet(wb, payload);
+    if (payload.includeCharts) buildChartsSheet(wb, payload);
+    return wb;
+  }
+
+  /* ======================================================================
+     3. PDF report — jsPDF + jsPDF-AutoTable
+     ====================================================================== */
+  var PAGE = { w: 595.28, h: 841.89, margin: 42 }; // A4 in points
+
+  function pdfSetInk(doc) { doc.setTextColor(RGB.ink[0], RGB.ink[1], RGB.ink[2]); }
+  function pdfSetMuted(doc) { doc.setTextColor(RGB.muted[0], RGB.muted[1], RGB.muted[2]); }
+
+  function buildCoverPage(doc, payload) {
+    doc.setFillColor(RGB.accent[0], RGB.accent[1], RGB.accent[2]);
+    doc.rect(0, 0, PAGE.w, 10, 'F');
+
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(26); pdfSetInk(doc);
+    var title = payload.title || payload.workbookName || 'Report';
+    var titleLines = doc.splitTextToSize(title, PAGE.w - PAGE.margin * 2);
+    doc.text(titleLines, PAGE.margin, 190);
+
+    var afterTitleY = 190 + titleLines.length * 30;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(13); pdfSetMuted(doc);
+    doc.text('Business intelligence report', PAGE.margin, afterTitleY + 14);
+
+    doc.setDrawColor(RGB.border[0], RGB.border[1], RGB.border[2]);
+    doc.setLineWidth(0.75);
+    doc.line(PAGE.margin, afterTitleY + 34, PAGE.w - PAGE.margin, afterTitleY + 34);
+
+    var metaY = afterTitleY + 62;
+    var meta = [
+      ['Workbook', payload.workbookName || '—'],
+      ['Source file', payload.sourceFileName || '—'],
+      ['Generated', stamp(payload.generatedAt)],
+      ['Rows included', (payload.filteredRows != null ? payload.filteredRows.toLocaleString() : '—') + (payload.totalRows && payload.totalRows !== payload.filteredRows ? ' of ' + payload.totalRows.toLocaleString() + ' total' : '')],
+    ];
+    doc.setFontSize(10.5);
+    meta.forEach(function (m) {
+      doc.setFont('helvetica', 'bold'); pdfSetMuted(doc);
+      doc.text(m[0].toUpperCase(), PAGE.margin, metaY);
+      doc.setFont('helvetica', 'normal'); pdfSetInk(doc);
+      doc.text(String(m[1]), PAGE.margin + 130, metaY);
+      metaY += 20;
+    });
+
+    if (payload.filtersSummary && payload.filtersSummary.length) {
+      doc.setFont('helvetica', 'bold'); pdfSetMuted(doc);
+      doc.text('FILTERS APPLIED', PAGE.margin, metaY);
+      doc.setFont('helvetica', 'normal'); pdfSetInk(doc);
+      var fLines = doc.splitTextToSize(payload.filtersSummary.join('  ·  '), PAGE.w - PAGE.margin - (PAGE.margin + 130));
+      doc.text(fLines, PAGE.margin + 130, metaY);
+      metaY += fLines.length * 14;
+    }
+
+    doc.setFontSize(9.5); pdfSetMuted(doc);
+    doc.text('Generated with ' + BRAND.name + ' · dashview', PAGE.margin, PAGE.h - PAGE.margin);
+  }
+
+  function sectionHeading(doc, text, y) {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(16); pdfSetInk(doc);
+    doc.text(text, PAGE.margin, y);
+    doc.setDrawColor(RGB.accent[0], RGB.accent[1], RGB.accent[2]);
+    doc.setLineWidth(1.5);
+    doc.line(PAGE.margin, y + 6, PAGE.margin + 28, y + 6);
+    return y + 30;
+  }
+
+  function buildKpiSection(doc, payload) {
+    doc.addPage();
+    var y = sectionHeading(doc, 'Executive summary', 60);
+    var kpis = payload.kpis || [];
+    var cols = 3, gap = 14;
+    var boxW = (PAGE.w - PAGE.margin * 2 - gap * (cols - 1)) / cols;
+    var boxH = 64;
+    kpis.forEach(function (k, i) {
+      var col = i % cols, row = Math.floor(i / cols);
+      if (row > 0 && row % 6 === 0 && col === 0) { doc.addPage(); y = sectionHeading(doc, 'Executive summary (continued)', 60); }
+      var localRow = row % 6;
+      var x = PAGE.margin + col * (boxW + gap);
+      var by = y + localRow * (boxH + gap);
+      doc.setDrawColor(RGB.border[0], RGB.border[1], RGB.border[2]);
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(x, by, boxW, boxH, 4, 4, 'FD');
+      doc.setFillColor(RGB.accent[0], RGB.accent[1], RGB.accent[2]);
+      doc.roundedRect(x, by, 4, boxH, 2, 2, 'F');
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); pdfSetMuted(doc);
+      var labelLines = doc.splitTextToSize(String(k.label || ''), boxW - 18);
+      doc.text(labelLines.slice(0, 2), x + 12, by + 18);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(17); pdfSetInk(doc);
+      doc.text(String(k.value), x + 12, by + 46);
+    });
+    return doc;
+  }
+
+  function buildChartsSection(doc, payload) {
+    var charts = (payload.charts || []).filter(function (c) { return c && c.image; });
+    if (!charts.length) return doc;
+    charts.forEach(function (c, i) {
+      doc.addPage();
+      var y = sectionHeading(doc, i === 0 ? 'Charts' : 'Charts (continued)', 60);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12); pdfSetInk(doc);
+      doc.text(String(c.title || 'Chart'), PAGE.margin, y + 8);
+      var imgY = y + 24;
+      var maxW = PAGE.w - PAGE.margin * 2;
+      var maxH = PAGE.h - imgY - PAGE.margin - 20;
+      var ratio = (c.width && c.height) ? c.width / c.height : 16 / 9;
+      var w = maxW, h = w / ratio;
+      if (h > maxH) { h = maxH; w = h * ratio; }
+      try { doc.addImage(c.image, 'PNG', PAGE.margin, imgY, w, h, undefined, 'FAST'); }
+      catch (e) { doc.setFont('helvetica', 'italic'); doc.setFontSize(10); pdfSetMuted(doc); doc.text('Chart image could not be embedded.', PAGE.margin, imgY + 20); }
+    });
+    return doc;
+  }
+
+  function tableSection(doc, heading, columns, rows, opts) {
+    opts = opts || {};
+    doc.addPage();
+    var y = sectionHeading(doc, heading, 60);
+    var truncatedNote = opts.truncatedFrom ? ('Showing first ' + rows.length.toLocaleString() + ' of ' + opts.truncatedFrom.toLocaleString() + ' rows — the Excel export includes every row.') : null;
+    if (truncatedNote) { doc.setFont('helvetica', 'italic'); doc.setFontSize(9); pdfSetMuted(doc); doc.text(truncatedNote, PAGE.margin, y + 2); y += 14; }
+    doc.autoTable({
+      startY: y + 6,
+      head: [columns],
+      body: rows,
+      margin: { left: PAGE.margin, right: PAGE.margin, top: PAGE.margin + 20 },
+      styles: { fontSize: 8, cellPadding: 4, textColor: RGB.ink, lineColor: RGB.border, lineWidth: 0.5, overflow: 'ellipsize' },
+      headStyles: { fillColor: RGB.accent, textColor: RGB.white, fontStyle: 'bold', halign: 'left' },
+      alternateRowStyles: { fillColor: RGB.band },
+      theme: 'grid',
+      didParseCell: function (data) {
+        if (data.section === 'body' && String(data.row.raw[0]).toLowerCase().indexOf('grand total') === 0) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [255, 255, 255]; }
+      },
+    });
+    return doc;
+  }
+
+  function buildDataTableSection(doc, payload) {
+    var fields = payload.fields || [];
+    var allRows = payload.rows || [];
+    var truncated = allRows.length > MAX_PDF_ROWS;
+    var rows = (truncated ? allRows.slice(0, MAX_PDF_ROWS) : allRows).map(function (r) {
+      return fields.map(function (f) { return payload.formatCell ? payload.formatCell(r[f.name], f.type) : String(r[f.name] == null ? '' : r[f.name]); });
+    });
+    tableSection(doc, 'Data', fields.map(function (f) { return f.name; }), rows, { truncatedFrom: truncated ? allRows.length : null });
+    return doc;
+  }
+
+  function buildPivotSection(doc, payload) {
+    var pivot = payload.pivot;
+    if (!pivot || !pivot.columns || !pivot.columns.length) return doc;
+    var rows = (pivot.rows || []).map(function (r) { return pivot.columns.map(function (c) { var v = r[c]; return v === undefined ? '' : String(v); }); });
+    tableSection(doc, 'Pivot table', pivot.columns, rows);
+    return doc;
+  }
+
+  function addHeaderFooter(doc, payload) {
+    var total = doc.internal.getNumberOfPages();
+    for (var i = 2; i <= total; i++) { // page 1 is the cover — leave it clean
+      doc.setPage(i);
+      doc.setDrawColor(RGB.border[0], RGB.border[1], RGB.border[2]);
+      doc.setLineWidth(0.5);
+      doc.line(PAGE.margin, 30, PAGE.w - PAGE.margin, 30);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); pdfSetMuted(doc);
+      doc.text(String(payload.title || payload.workbookName || BRAND.name), PAGE.margin, 22);
+      doc.text('Page ' + i + ' of ' + total, PAGE.w - PAGE.margin, 22, { align: 'right' });
+      doc.text(BRAND.name + ' · ' + stamp(payload.generatedAt), PAGE.margin, PAGE.h - 20);
+    }
+  }
+
+  /** Pure builder: pass the jsPDF constructor (window.jspdf.jsPDF in the browser; require('jspdf').jsPDF under Node, after requiring 'jspdf-autotable' once to patch the prototype). Returns the built doc — caller decides how to save/output it. */
+  function composePdfDocument(jsPDFCtor, payload) {
+    var doc = new jsPDFCtor({ unit: 'pt', format: 'a4', compress: true });
+    buildCoverPage(doc, payload);
+    if (payload.includeKpis && payload.kpis && payload.kpis.length) buildKpiSection(doc, payload);
+    if (payload.includeCharts) buildChartsSection(doc, payload);
+    if (payload.includeData !== false) buildDataTableSection(doc, payload);
+    if (payload.includePivot) buildPivotSection(doc, payload);
+    addHeaderFooter(doc, payload);
+    return doc;
+  }
+
+  /* ======================================================================
+     4. Browser wiring — lazy CDN loads + download triggers.
+        Everything above this line is pure and Node-testable; everything
+        below touches `document`/`window` and only runs in a browser tab.
+     ====================================================================== */
+  var libState = { excel: { loaded: false, loading: null }, pdf: { loaded: false, loading: null } };
+
+  function loadScript(src, integrity) {
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = src;
+      if (integrity) { s.integrity = integrity; s.crossOrigin = 'anonymous'; }
+      s.onload = function () { resolve(); };
+      s.onerror = function () { reject(new Error('Could not load ' + src + ' from the CDN.')); };
+      document.head.appendChild(s);
+    });
+  }
+  function loadExcelLib() {
+    if (libState.excel.loaded) return Promise.resolve();
+    if (libState.excel.loading) return libState.excel.loading;
+    libState.excel.loading = loadScript('https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js')
+      .then(function () { libState.excel.loaded = true; });
+    return libState.excel.loading;
+  }
+  function loadPdfLib() {
+    if (libState.pdf.loaded) return Promise.resolve();
+    if (libState.pdf.loading) return libState.pdf.loading;
+    libState.pdf.loading = loadScript('https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js')
+      .then(function () { return loadScript('https://cdn.jsdelivr.net/npm/jspdf-autotable@5.0.8/dist/jspdf.plugin.autotable.min.js'); })
+      .then(function () {
+        // jsPDF-AutoTable v5's UMD build exposes a bare `applyPlugin` global rather than
+        // self-attaching to jsPDF the way v3 did — wire it up once, idempotently.
+        if (typeof window.applyPlugin === 'function' && window.jspdf && window.jspdf.jsPDF) window.applyPlugin(window.jspdf.jsPDF);
+        libState.pdf.loaded = true;
+      });
+    return libState.pdf.loading;
+  }
+
+  function triggerDownload(blob, filename) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+  }
+
+  /** Loads ExcelJS, composes the workbook, and downloads it. Returns a Promise. */
+  function generateExcelReport(payload) {
+    return loadExcelLib().then(function () {
+      var wb = composeWorkbook(window.ExcelJS, payload);
+      return wb.xlsx.writeBuffer();
+    }).then(function (buf) {
+      triggerDownload(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), sanitizeFilename(payload.workbookName) + ' - Report.xlsx');
+    });
+  }
+  /** Loads jsPDF + AutoTable, composes the report, and downloads it. Returns a Promise. */
+  function generatePdfReport(payload) {
+    return loadPdfLib().then(function () {
+      var doc = composePdfDocument(window.jspdf.jsPDF, payload);
+      doc.save(sanitizeFilename(payload.workbookName) + ' - Report.pdf');
+    });
+  }
+
+  return {
+    BRAND: BRAND,
+    // pure / testable
+    composeWorkbook: composeWorkbook,
+    composePdfDocument: composePdfDocument,
+    numFmtForType: numFmtForType,
+    excelValue: excelValue,
+    // browser entry points
+    loadExcelLib: loadExcelLib,
+    loadPdfLib: loadPdfLib,
+    generateExcelReport: generateExcelReport,
+    generatePdfReport: generatePdfReport,
+  };
+})();
+
+/* global module */
+if (typeof window !== 'undefined') window.DVReportEngine = DVReportEngine;
+if (typeof module !== 'undefined' && module.exports) module.exports = DVReportEngine;
