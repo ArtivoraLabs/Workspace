@@ -1,0 +1,29 @@
+{
+  "name": "DashView — Autonomous Engineering & BI Platform",
+  "short_name": "DashView",
+  "description": "An autonomous coding agent that plans, writes, tests and ships code into your GitHub repos, plus Data Studio — import a spreadsheet and get a full BI dashboard with charts, KPIs, a pivot table and drill-down hierarchy, entirely in your browser. Includes a local AI assistant with zero API key required.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0e7c66",
+  "icons": [
+    {
+      "src": "assets/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

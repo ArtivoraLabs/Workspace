@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<script>(function(){try{var t=localStorage.getItem('dashview-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Workspace — DashView</title>
+<meta name="description" content="DashView workspace — live sales overview and a full Data Studio (import, type, chart, pivot and drill down) in one place."/>
+<meta name="theme-color" content="#f2f3ef"/>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml"/>
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="stylesheet" href="css/base.css"/>
+<link rel="stylesheet" href="css/components.css"/>
+<link rel="stylesheet" href="css/dashboard.css"/>
+<link rel="stylesheet" href="css/studio-dash.css"/>
+<link rel="stylesheet" href="css/merged.css"/>
+<link rel="stylesheet" href="css/dashboard-pro.css"/>
+<link rel="stylesheet" href="css/ai-embed.css"/>
+<link rel="stylesheet" href="css/dashview-suite.css"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body class="dash-body">
+
+<div class="dash-shell" id="shell">
+
+  <!-- ══════════════════════ SIDEBAR ══════════════════════ -->
+  <aside class="dash-side" id="sidebar">
+    <div class="dash-side-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#e8a33d" stroke-width="1.6"/><path d="M7 13l3-5 2 3 2-4 3 6" stroke="#e8a33d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>DashView</span>
+      <button class="dash-side-collapse-btn" id="sidebarCollapseBtn" title="Collapse sidebar" aria-label="Collapse sidebar">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v16M15 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h10M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M15 4v16"/></svg>
+      </button>
+    </div>
+    <nav class="dash-nav">
+      <p class="dash-nav-label">Workspace</p>
+      <a href="#overview" class="dash-nav-link active" data-view="overview">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Overview</span>
+      </a>
+      <a href="#studio" class="dash-nav-link" data-view="studio">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+        <span>Data Studio</span><span class="badge new">New</span>
+      </a>
+      <a href="people.html" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></svg>
+        <span>People</span><span class="badge new">New</span>
+      </a>
+      <a href="#projects" class="dash-nav-link" data-view="projects">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+        <span>Projects</span><span class="badge">8</span>
+      </a>
+      <a href="#agent-tasks" class="dash-nav-link" data-view="agent-tasks">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
+        <span>Agent tasks</span><span class="badge">14</span>
+      </a>
+      <a href="#team" class="dash-nav-link" data-view="team">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.87"/></svg>
+        <span>Team</span>
+      </a>
+      <p class="dash-nav-label">Analytics</p>
+      <a href="#reports" class="dash-nav-link" data-view="reports">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+        <span>Reports</span>
+      </a>
+      <a href="ai.html" class="dash-nav-link" data-view="ai">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2c-1.7 0-3 1.2-3 3v1H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2V5c0-1.8-1.3-3-3-3Z"/><circle cx="12" cy="13" r="2"/></svg>
+        <span>AI Assistant</span>
+      </a>
+      <a href="#widgets" class="dash-nav-link" data-view="widgets">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="8" height="5" rx="1"/><rect x="13" y="3" width="8" height="10" rx="1"/><rect x="3" y="10" width="8" height="11" rx="1"/><rect x="13" y="15" width="8" height="6" rx="1"/></svg>
+        <span>Widget Builder</span><span class="badge new">New</span>
+      </a>
+      <a href="#odoo" class="dash-nav-link" data-view="odoo">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+        <span>Odoo Data</span>
+      </a>
+      <a href="#audit-log" class="dash-nav-link" data-view="audit-log">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        <span>Audit log</span>
+      </a>
+      <p class="dash-nav-label">Settings</p>
+      <a href="#settings" class="dash-nav-link" data-view="settings">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 18a1.65 1.65 0 0 0-1.51 1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+        <span>Settings</span>
+      </a>
+    </nav>
+    <div class="dash-side-foot" id="dashUserBlock" style="cursor:pointer;">
+      <div class="dash-side-user" id="dashUserAvatar">AK</div>
+      <div class="dash-side-user-info"><p id="dashUserName">Amara Khan</p><span id="dashUserMeta">acme-corp · Admin</span></div>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════ MAIN ══════════════════════ -->
+  <div class="dash-main">
+
+    <header class="dash-topbar">
+      <button class="dash-icon-btn dash-sidebar-toggle" id="mobileSideToggle" aria-label="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <div class="dash-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" placeholder="Search orders, files, actions…" id="topSearchInput"/>
+        <kbd>⌘K</kbd>
+      </div>
+      <div class="dash-top-actions">
+        <button class="dash-icon-btn theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="Switch to light theme" title="Switch theme">
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+        </button>
+        <button class="dash-icon-btn" id="notifBtn" aria-label="Notifications">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="dot"></span>
+        </button>
+        <button class="dash-icon-btn" id="cmdBtn" title="Command palette (⌘K)" aria-label="Command palette">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
+        </button>
+        <div class="dash-side-user" id="dashTopUserAvatar" style="cursor:pointer;width:32px;height:32px;font-size:12px;" title="Account">AK</div>
+      </div>
+    </header>
+
+    <div class="dash-content">
+
+      <!-- ══════════════════════ OVERVIEW ══════════════════════ -->
+      <section class="view-panel active" id="view-overview">
+        <div class="ov-head">
+          <div>
+            <h1>Good morning, Amara.</h1>
+            <p>Sales overview · <span id="dateLabel"></span></p>
+          </div>
+          <div class="ov-head-actions">
+            <div class="date-range">
+              <button data-range="7">7D</button>
+              <button data-range="30" class="active">30D</button>
+              <button data-range="90">90D</button>
+              <button data-range="365">1Y</button>
+            </div>
+            <a href="ai.html" class="btn btn-signal btn-sm" data-view="ai">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c-1.7 0-3 1.2-3 3v1H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2V5c0-1.8-1.3-3-3-3Z"/></svg>
+              AI Insights
+            </a>
+            <div class="export-menu-wrap">
+              <button class="btn btn-outline btn-sm" id="exportOrdersBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>
+                Export <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-left:2px"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="export-menu" id="exportMenu">
+                <button data-export="csv">CSV file</button>
+                <button data-export="xlsx">Excel workbook (.xlsx)</button>
+                <button data-export="pdf">PDF report (print)</button>
+                <button data-export="share">Copy summary link</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Control bar: boards · role · live filters -->
+        <div class="pro-control-bar">
+          <div class="board-tabs" id="boardTabs" role="tablist">
+            <button class="board-tab active" data-board="sales">📊 Sales</button>
+            <button class="board-tab" data-board="marketing">📣 Marketing</button>
+            <button class="board-tab" data-board="finance">💰 Finance</button>
+          </div>
+          <div class="pro-control-right">
+            <label class="pro-live-toggle" title="Simulate incoming orders in real time">
+              <input type="checkbox" id="liveToggle"/>
+              <span class="pro-live-dot"></span> Live
+            </label>
+            <select id="regionFilter" class="pro-select" title="Filter by region">
+              <option value="">All regions</option>
+            </select>
+            <select id="roleSelect" class="pro-select" title="View as role">
+              <option value="admin">View: Admin</option>
+              <option value="manager">View: Sales Manager</option>
+              <option value="rep">View: Sales Rep</option>
+            </select>
+          </div>
+        </div>
+        <p class="pro-role-note" id="roleNote" style="display:none"></p>
+
+        <div id="board-sales">
+
+        <!-- KPIs -->
+        <div class="kpi-grid">
+          <div class="kpi-card c-signal">
+            <div class="kpi-top"><div class="kpi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Z"/><path d="M12 6v6l4 2"/></svg></div></div>
+            <p class="kpi-label">Total Revenue</p>
+            <p class="kpi-value" id="kpiRevenue">$284.5k</p>
+            <p class="kpi-delta up" id="kpiRevDelta">↑ 12.4% vs last period</p>
+            <div class="kpi-spark-wrap"><canvas class="kpi-spark" id="sparkRevenue"></canvas></div>
+          </div>
+          <div class="kpi-card c-accent2">
+            <div class="kpi-top"><div class="kpi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div></div>
+            <p class="kpi-label">Total Orders</p>
+            <p class="kpi-value" id="kpiOrders">4,218</p>
+            <p class="kpi-delta up" id="kpiOrdersDelta">↑ 8.7% vs last period</p>
+            <div class="kpi-spark-wrap"><canvas class="kpi-spark" id="sparkOrders"></canvas></div>
+          </div>
+          <div class="kpi-card c-emerald">
+            <div class="kpi-top"><div class="kpi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div></div>
+            <p class="kpi-label">Unique Customers</p>
+            <p class="kpi-value" id="kpiCustomers">2,841</p>
+            <p class="kpi-delta up" id="kpiCustomersDelta">↑ 5.2% vs last period</p>
+            <div class="kpi-spark-wrap"><canvas class="kpi-spark" id="sparkCustomers"></canvas></div>
+          </div>
+          <div class="kpi-card c-beacon">
+            <div class="kpi-top"><div class="kpi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div></div>
+            <p class="kpi-label">Avg Order Value</p>
+            <p class="kpi-value" id="kpiAOV">$67.44</p>
+            <p class="kpi-delta down" id="kpiAOVDelta">↓ 1.8% vs last period</p>
+            <div class="kpi-spark-wrap kpi-spark-wrap-empty"></div>
+          </div>
+          <div class="kpi-card c-ink">
+            <div class="kpi-top"><div class="kpi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></div></div>
+            <p class="kpi-label">Repeat Customers</p>
+            <p class="kpi-value" id="kpiRepeat">–</p>
+            <p class="kpi-delta neutral">Share of buyers with 2+ orders</p>
+            <div class="kpi-spark-wrap kpi-spark-wrap-empty"></div>
+          </div>
+          <div class="kpi-card c-danger">
+            <div class="kpi-top"><div class="kpi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div></div>
+            <p class="kpi-label">Avg Items / Order</p>
+            <p class="kpi-value" id="kpiAvgItems">–</p>
+            <p class="kpi-delta neutral">Units per basket</p>
+            <div class="kpi-spark-wrap kpi-spark-wrap-empty"></div>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="dash-grid">
+          <div class="panel">
+            <div class="chart-header">
+              <div><h3 style="font-size:var(--fs-sm);font-weight:600;">Revenue Trend</h3><p class="chart-subtitle">Monthly breakdown · 2023</p></div>
+              <div class="chart-actions">
+                <button class="chart-type-btn active" data-type="line" title="Line chart"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l4-8 4 4 4-6 4 8"/></svg></button>
+                <button class="chart-type-btn" data-type="bar" title="Bar chart"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M9 20V4M14 20v-7M19 20v-3"/></svg></button>
+              </div>
+            </div>
+            <div class="chart-wrap"><canvas id="revenueChart"></canvas></div>
+            <div class="chart-legend">
+              <span class="legend-item"><span class="legend-dot" style="background:#e8a33d"></span>Revenue</span>
+              <span class="legend-item"><span class="legend-dot" style="background:#5b8fae"></span>Orders</span>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="chart-header">
+              <div><h3 style="font-size:var(--fs-sm);font-weight:600;">Category Share</h3><p class="chart-subtitle">Revenue by category</p></div>
+            </div>
+            <div class="chart-wrap"><canvas id="categoryChart"></canvas></div>
+            <div class="chart-legend" id="catLegend"></div>
+          </div>
+        </div>
+
+        <!-- New: region performance + customer mix charts -->
+        <div class="dash-grid" id="regionMixGrid">
+          <div class="panel">
+            <div class="chart-header">
+              <div><h3 style="font-size:var(--fs-sm);font-weight:600;">Region Performance</h3><p class="chart-subtitle">Revenue by region</p></div>
+            </div>
+            <div class="chart-wrap"><canvas id="regionBarChart"></canvas></div>
+          </div>
+          <div class="panel">
+            <div class="chart-header">
+              <div><h3 style="font-size:var(--fs-sm);font-weight:600;">Customer Mix</h3><p class="chart-subtitle">New vs. returning</p></div>
+            </div>
+            <div class="chart-wrap"><canvas id="newReturningChart"></canvas></div>
+            <div class="chart-legend" id="newReturningLegend"></div>
+          </div>
+        </div>
+
+        <!-- New: sales pipeline funnel -->
+        <div class="panel" id="pipelinePanel">
+          <div class="panel-head">
+            <h3>Sales Pipeline</h3>
+            <span class="tag">Conversion by stage</span>
+          </div>
+          <div class="funnel" id="salesFunnel"></div>
+        </div>
+
+        <!-- Customer insights, regional split, monthly goal -->
+        <div class="dash-grid-3">
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Top Customers</h3>
+              <span class="tag">By revenue</span>
+            </div>
+            <div class="rank-list" id="topCustomersList"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Sales by Region</h3>
+              <span class="tag">Share of revenue</span>
+            </div>
+            <div class="region-list" id="regionList"></div>
+          </div>
+          <div class="panel goal-panel">
+            <div class="panel-head">
+              <h3>Monthly Goal</h3>
+              <span class="tag">This month</span>
+            </div>
+            <div class="goal-body">
+              <div class="goal-ring" id="goalRing"><span class="goal-ring-inner"><span id="goalPct">0%</span></span></div>
+              <p class="goal-current" id="goalCurrent"></p>
+              <p class="goal-remaining" id="goalRemaining"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Agent Activity (new) -->
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Live Agent Activity</h3>
+            <span class="tag">Last 24 hours</span>
+          </div>
+          <div class="activity-list">
+            <div class="activity-row type-pr">
+              <span class="activity-dot"></span>
+              <div style="flex:1"><p style="font-size:var(--fs-sm);color:var(--ink)">PR #482 opened — <span style="color:var(--ink-50)">sliding-window rate limiter</span> <span class="source-badge custom">agent</span></p><span style="font-size:var(--fs-xs);color:var(--ink-30)">acme-corp/platform-api · 6 minutes ago</span></div>
+              <span class="status-pill review">In review</span>
+            </div>
+            <div class="activity-row type-commit">
+              <span class="activity-dot"></span>
+              <div style="flex:1"><p style="font-size:var(--fs-sm);color:var(--ink)">212 tests passed on branch <span style="color:var(--ink-50)">feat/rate-limiter</span></p><span style="font-size:var(--fs-xs);color:var(--ink-30)">acme-corp/platform-api · 9 minutes ago</span></div>
+              <span class="status-pill active">Passing</span>
+            </div>
+            <div class="activity-row type-deploy">
+              <span class="activity-dot"></span>
+              <div style="flex:1"><p style="font-size:var(--fs-sm);color:var(--ink)">PR #479 merged to main <span class="source-badge">github</span></p><span style="font-size:var(--fs-xs);color:var(--ink-30)">acme-corp/checkout-service · 1 hour ago</span></div>
+              <span class="status-pill active">Shipped</span>
+            </div>
+            <div class="activity-row type-issue">
+              <span class="activity-dot"></span>
+              <div style="flex:1"><p style="font-size:var(--fs-sm);color:var(--ink)">Clarifying question raised on <span style="color:var(--ink-50)">JIRA-2291</span></p><span style="font-size:var(--fs-xs);color:var(--ink-30)">acme-corp/billing · 2 hours ago</span></div>
+              <span class="status-pill review">Waiting on you</span>
+            </div>
+            <div class="activity-row type-alert">
+              <span class="activity-dot"></span>
+              <div style="flex:1"><p style="font-size:var(--fs-sm);color:var(--ink)">CI flagged a flaky test on <span style="color:var(--ink-50)">feat/payments</span></p><span style="font-size:var(--fs-xs);color:var(--ink-30)">acme-corp/payments-api · 4 hours ago</span></div>
+              <span class="status-pill blocked">Blocked</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Orders table -->
+        <div class="panel">
+          <div class="panel-head">
+            <h3>Recent Orders</h3>
+            <div class="ov-table-tools">
+              <div class="data-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Search…" id="tableSearch"/></div>
+              <select id="catFilter" style="padding:7px 10px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--paper);font-size:var(--fs-xs);color:var(--ink);">
+                <option value="">All categories</option>
+                <option>Electronics</option><option>Beauty</option><option>Home</option><option>Toys</option><option>Clothing</option><option>Sports</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="dash-table">
+              <thead><tr><th>Order ID</th><th>Customer</th><th>Category</th><th>Price</th><th>Qty</th><th>Revenue</th><th>Date</th></tr></thead>
+              <tbody id="ordersBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination">
+            <span class="pagination-info" id="paginationInfo"></span>
+            <div class="pagination-btns" id="paginationBtns"></div>
+          </div>
+        </div>
+
+        </div><!-- /#board-sales -->
+
+        <!-- ══════════════════ MARKETING BOARD ══════════════════ -->
+        <div id="board-marketing" style="display:none">
+          <div class="kpi-grid" id="marketingKpiGrid"></div>
+          <div class="dash-grid">
+            <div class="panel">
+              <div class="chart-header"><div><h3 style="font-size:var(--fs-sm);font-weight:600;">Traffic by Channel</h3><p class="chart-subtitle">Sessions, last 30 days</p></div></div>
+              <div class="chart-wrap"><canvas id="marketingChannelChart"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="chart-header"><div><h3 style="font-size:var(--fs-sm);font-weight:600;">Campaign Performance</h3><p class="chart-subtitle">Spend vs. conversions</p></div></div>
+              <div class="chart-wrap"><canvas id="marketingCampaignChart"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════════════ FINANCE BOARD ══════════════════ -->
+        <div id="board-finance" style="display:none">
+          <div class="kpi-grid" id="financeKpiGrid"></div>
+          <div class="dash-grid">
+            <div class="panel">
+              <div class="chart-header"><div><h3 style="font-size:var(--fs-sm);font-weight:600;">Profit &amp; Loss</h3><p class="chart-subtitle">Monthly trend</p></div></div>
+              <div class="chart-wrap"><canvas id="financePnlChart"></canvas></div>
+            </div>
+            <div class="panel">
+              <div class="chart-header"><div><h3 style="font-size:var(--fs-sm);font-weight:600;">Expense Breakdown</h3><p class="chart-subtitle">By department</p></div></div>
+              <div class="chart-wrap"><canvas id="financeExpenseChart"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ══════════════════════ DATA STUDIO ══════════════════════ -->
+      <section class="view-panel" id="view-studio">
+
+        <div class="studio-toolbar">
+          <div class="studio-toolbar-left">
+            <input type="text" id="workbookNameInput" class="studio-workbook-name" value="Untitled workbook" maxlength="80" spellcheck="false"/>
+            <span class="studio-save-state" id="saveStateTag">No changes yet</span>
+            <span class="studio-dataset-tag" id="datasetTag"></span>
+          </div>
+          <div class="studio-toolbar-right">
+            <button class="studio-icon-btn studio-fields-toggle" id="fieldsToggleBtn" type="button" aria-label="Toggle fields panel" style="color:var(--ink-50);">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+            </button>
+            <div class="studio-dropdown" id="workbooksDropdown">
+              <button class="btn btn-outline btn-sm" id="openWorkbooksBtn" type="button" title="My workbooks">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
+                My workbooks
+              </button>
+            </div>
+            <button class="btn btn-outline btn-sm" id="newWorkbookBtn" type="button">New</button>
+            <div class="studio-dropdown" id="exportDropdown">
+              <button class="btn btn-outline btn-sm" id="exportDropdownBtn" type="button">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3M7 10l5 5 5-5M4 21h16"/></svg>
+                Export
+              </button>
+              <div class="studio-dropdown-menu">
+                <button class="studio-dropdown-item" id="exportCsvBtn" type="button">Data as CSV</button>
+                <div class="studio-dropdown-sep"></div>
+                <button class="studio-dropdown-item" id="exportXlsxBtn" type="button">Excel report (.xlsx)</button>
+                <button class="studio-dropdown-item" id="exportPdfBtn" type="button">PDF report</button>
+              </div>
+            </div>
+            <button class="btn btn-signal btn-sm" id="topbarImportBtn" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>
+              Import file
+            </button>
+            <input type="file" id="fileInput" accept=".csv,.tsv,.xlsx,.xls,.json" style="display:none;"/>
+          </div>
+        </div>
+
+        <!-- Empty state -->
+        <div class="studio-empty" id="emptyState">
+          <div class="studio-dropzone" id="dropzone">
+            <svg class="studio-dropzone-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="8" width="26" height="32" rx="3"/>
+              <path d="M9 17h15M9 25h15M9 33h11"/>
+              <path d="M23 42h24"/>
+              <path d="M27 42V32M35 42V24M43 42V16"/>
+            </svg>
+            <h2>Drop a spreadsheet here</h2>
+            <p>DashView reads it, types every column, and drafts a full dashboard with KPIs, charts, a pivot table and a drill-down hierarchy — you review the suggestions and pick what stays.</p>
+            <div class="studio-dropzone-actions">
+              <button class="btn btn-primary btn-lg" id="emptyImportBtn" type="button">Choose a file</button>
+              <button class="btn btn-outline btn-lg" id="sampleDataBtn" type="button">Try it with sample data</button>
+            </div>
+            <p class="studio-dropzone-formats">CSV · TSV · XLSX · XLS · JSON</p>
+            <p class="studio-privacy-note">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+              Parsed entirely in this browser — no file, and no AI API call, ever leaves your machine.
+            </p>
+          </div>
+        </div>
+
+        <!-- Main workbench -->
+        <div class="studio-main" id="studioMain" style="display:none;">
+
+          <aside class="studio-fields-rail" id="fieldsRail">
+            <div class="fields-rail-head">
+              <h4>Fields <span class="tag" id="fieldCountTag" style="font-size:10px;"></span></h4>
+              <input type="text" id="fieldSearchInput" placeholder="Search fields…"/>
+            </div>
+            <div class="fields-list" id="fieldsList"></div>
+            <div class="fields-rail-foot">
+              <button class="btn btn-outline btn-sm btn-block" id="addCalcFieldBtn" type="button">ƒx Add calculated column</button>
+              <button class="btn btn-ghost btn-sm btn-block" id="dataHealthBtn" type="button">Data health</button>
+            </div>
+          </aside>
+
+          <div class="studio-center">
+
+            <div class="studio-summary-strip">
+              <p id="summaryText"></p>
+              <div class="studio-summary-actions">
+                <button class="btn btn-outline btn-sm" id="reopenSuggestionsBtn" type="button">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>
+                  Suggestions
+                </button>
+              </div>
+            </div>
+
+            <div class="drill-breadcrumb" id="drillBreadcrumb" style="display:none;"></div>
+            <div class="studio-slicer-bar" id="slicerBar"></div>
+
+            <div class="studio-tabs" id="studioTabs">
+              <button class="studio-tab active" data-tab="overview" type="button">Overview</button>
+              <button class="studio-tab" data-tab="data" type="button">Data<span class="badge" id="dataTabBadge"></span></button>
+              <button class="studio-tab" data-tab="pivot" type="button">Pivot table</button>
+              <button class="studio-tab" data-tab="hierarchy" type="button">Hierarchy</button>
+            </div>
+
+            <div class="studio-tab-panel studio-print-target" id="panel-overview">
+              <div class="kpi-grid" id="overviewKpiGrid"></div>
+              <div class="widget-grid" id="overviewWidgetGrid"></div>
+            </div>
+
+            <div class="studio-tab-panel" id="panel-data" style="display:none;">
+              <div class="data-toolbar">
+                <div class="data-search grow">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+                  <input type="text" id="dataSearchInput" placeholder="Search all rows…"/>
+                </div>
+                <button class="btn btn-outline btn-sm" id="columnsMenuBtn" type="button">Columns</button>
+                <button class="btn btn-outline btn-sm" id="highlightToggleBtn" type="button">Highlight numbers</button>
+                <button class="btn btn-outline btn-sm" id="addRowBtn" type="button">+ Add row</button>
+                <button class="btn btn-ghost btn-sm" id="deleteRowsBtn" type="button" style="display:none;color:var(--danger);">Delete selected</button>
+                <span class="data-count-tag" id="dataCountTag"></span>
+              </div>
+              <div class="grid-scroll"><table class="data-grid" id="dataGridTable"><thead id="dataGridHead"></thead><tbody id="dataGridBody"></tbody></table></div>
+              <div class="data-pagination">
+                <select id="pageSizeSelect">
+                  <option value="25">25 rows / page</option>
+                  <option value="50" selected>50 rows / page</option>
+                  <option value="100">100 rows / page</option>
+                  <option value="250">250 rows / page</option>
+                </select>
+                <div class="pager-btns">
+                  <button id="pagerFirstBtn" type="button" aria-label="First page">«</button>
+                  <button id="pagerPrevBtn" type="button" aria-label="Previous page">‹</button>
+                  <span id="pagerInfo">Page 1 of 1</span>
+                  <button id="pagerNextBtn" type="button" aria-label="Next page">›</button>
+                  <button id="pagerLastBtn" type="button" aria-label="Last page">»</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="studio-tab-panel" id="panel-pivot" style="display:none;">
+              <div class="pivot-wells">
+                <div class="pivot-well" id="pivotWellFilters" data-well="filters"><div class="pivot-well-title">Filters</div><div class="pivot-well-body"><p class="pivot-well-empty">Add a field from the rail (F)</p></div></div>
+                <div class="pivot-well" id="pivotWellRows" data-well="rows"><div class="pivot-well-title">Rows (nested)</div><div class="pivot-well-body"><p class="pivot-well-empty">Add a field from the rail (R)</p></div></div>
+                <div class="pivot-well" id="pivotWellColumns" data-well="columns"><div class="pivot-well-title">Columns</div><div class="pivot-well-body"><p class="pivot-well-empty">Add a field from the rail (C)</p></div></div>
+                <div class="pivot-well" id="pivotWellValues" data-well="values"><div class="pivot-well-title">Values</div><div class="pivot-well-body"><p class="pivot-well-empty">Add a field from the rail (V)</p></div></div>
+              </div>
+              <div class="studio-summary-strip" style="margin-bottom:var(--sp-3);">
+                <p id="pivotSummaryText">Build a pivot using the wells above.</p>
+                <div class="studio-summary-actions">
+                  <button class="btn btn-outline btn-sm" id="pivotExportCsvBtn" type="button">Export CSV</button>
+                  <button class="btn btn-primary btn-sm" id="pivotPinBtn" type="button">Pin to Overview</button>
+                </div>
+              </div>
+              <div class="pivot-table-wrap"><table class="pivot-table" id="pivotTable"></table></div>
+            </div>
+
+            <div class="studio-tab-panel" id="panel-hierarchy" style="display:none;">
+              <div class="hierarchy-controls">
+                <label class="visually-hidden" for="hLevel1">Level 1</label><select id="hLevel1"></select>
+                <label class="visually-hidden" for="hLevel2">Level 2</label><select id="hLevel2"></select>
+                <label class="visually-hidden" for="hLevel3">Level 3</label><select id="hLevel3"></select>
+                <span class="studio-divider-v" style="background:var(--line-strong);"></span>
+                <select id="hMetricField"></select>
+                <select id="hMetricAgg">
+                  <option value="sum">Sum</option><option value="avg">Average</option><option value="count">Count</option>
+                  <option value="min">Min</option><option value="max">Max</option><option value="countRows">Row count</option>
+                </select>
+                <button class="btn btn-outline btn-sm" id="hApplyBtn" type="button">Apply</button>
+                <button class="btn btn-primary btn-sm" id="hPinBtn" type="button" style="margin-left:auto;">Pin to Overview</button>
+              </div>
+              <div class="hierarchy-tree-wrap" id="hierarchyTreeWrap"></div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ AI ASSISTANT (embedded SPA view) ══════════════════════ -->
+      <section class="view-panel" id="view-ai">
+        <div class="ov-head">
+          <div><h1>AI Assistant</h1><p>Local engine · runs in this tab, no network calls</p></div>
+          <div class="ov-head-actions">
+            <button class="btn btn-outline btn-sm" id="aiEmbedNewChatBtn">+ New chat</button>
+            <button class="btn btn-outline btn-sm" id="aiEmbedExportBtn">Export chat</button>
+          </div>
+        </div>
+        <div class="ai-embed-shell panel">
+          <div class="ai-embed-messages" id="aiEmbedMessages">
+            <div class="ai-embed-empty" id="aiEmbedEmpty">
+              <div class="ai-embed-empty-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M7 13l3-5 2 3 2-4 3 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <h3>What can I help you with?</h3>
+              <p>Local intelligence engine — no API key, no account, nothing leaves this tab. Paste code to debug, ask about a DashView feature, or just tell me how things are going.</p>
+              <div class="ai-embed-suggest-grid">
+                <button class="ai-embed-suggest-card" data-prompt="How does the auto-suggest engine in Data Studio decide which charts and KPIs to recommend?">How does Data Studio work?</button>
+                <button class="ai-embed-suggest-card" data-prompt="What's the safest way to roll out a risky deploy and roll it back if something breaks?">Deploys &amp; rollbacks</button>
+                <button class="ai-embed-suggest-card" data-prompt="What does the region filter and date range do on the Overview board?">What do the dashboard filters do?</button>
+                <button class="ai-embed-suggest-card" data-prompt="Honestly, I'm feeling pretty overwhelmed with everything on my plate right now.">Just need to talk something through</button>
+              </div>
+            </div>
+          </div>
+          <div class="ai-embed-composer">
+            <textarea id="aiEmbedInput" placeholder="Message DashView AI…" rows="1"></textarea>
+            <button class="btn btn-signal btn-sm" id="aiEmbedSendBtn" disabled>Send</button>
+          </div>
+          <p class="ai-embed-footnote">DashView AI · local engine · <a href="ai.html">Open full-page chat ↗</a></p>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ WIDGET BUILDER ══════════════════════ -->
+      <section class="view-panel" id="view-widgets">
+        <div class="ov-head">
+          <div><h1>Widget Builder</h1><p>Compose KPI, chart and table widgets from demo data, Odoo (mock), or an imported file — then share or put them on a TV.</p></div>
+          <div class="ov-head-actions dv-widget-toolbar">
+            <button class="btn btn-outline btn-sm" id="dvImportLayoutBtn" data-require-perm="importExport">⬆ Import layout</button>
+            <input type="file" id="dvImportLayoutFile" accept="application/json" style="display:none"/>
+            <button class="btn btn-outline btn-sm" id="dvExportLayoutBtn" data-require-perm="importExport">⬇ Export layout</button>
+            <button class="btn btn-outline btn-sm" id="dvShareBtn" data-require-perm="share">🔗 Share</button>
+            <button class="btn btn-outline btn-sm" id="dvTvModeBtn" data-require-perm="tvMode">📺 TV Mode</button>
+            <button class="btn btn-signal btn-sm" id="dvAddWidgetBtn" data-require-perm="editWidgets">+ Add widget</button>
+          </div>
+        </div>
+        <p class="dv-signin-banner" id="dvGuestBanner" style="display:none;">
+          <span>Browsing as <b>Guest (Viewer)</b> — widgets are read-only. <button type="button" class="dv-account-menu-item" style="display:inline;padding:2px 4px;" id="dashSignInBtn">Sign in</button> to edit.</span>
+        </p>
+        <div class="dv-widget-grid" id="dvWidgetGrid"></div>
+      </section>
+
+      <!-- ══════════════════════ ODOO DATA (mock browser) ══════════════════════ -->
+      <section class="view-panel" id="view-odoo">
+        <div class="ov-head">
+          <div><h1>Odoo Data</h1><p>Browse the models this workspace can map — <code>sale.order</code>, <code>product.template</code>, <code>res.partner</code>, <code>crm.lead</code>.</p></div>
+          <div class="ov-head-actions"><span class="dv-pill" id="odooViewStatusPill">Not connected</span></div>
+        </div>
+        <div class="panel">
+          <div class="dv-odoo-toolbar">
+            <div class="board-tabs" id="odooModelTabs"></div>
+            <div class="data-search dv-odoo-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Search records…" id="odooRecordsSearch"/></div>
+          </div>
+          <table class="dash-table" id="odooRecordsTable"><thead></thead><tbody></tbody></table>
+          <p class="settings-note" style="margin-top:var(--sp-4);">This is a mock dataset standing in for a real Odoo connection — see <b>Settings → Odoo integration</b> to configure a URL, or read <code>js/odoo-service.js</code> for the production seam.</p>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ PROJECTS ══════════════════════ -->
+      <section class="view-panel" id="view-projects">
+        <div class="ov-head">
+          <div><h1>Projects</h1><p>8 active repositories across acme-corp</p></div>
+          <div class="ov-head-actions">
+            <div class="data-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Search projects…" id="projectSearch"/></div>
+            <button class="btn btn-signal btn-sm" id="newProjectBtn">+ New project</button>
+          </div>
+        </div>
+        <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:var(--sp-5);">
+          <div class="kpi-card c-signal"><p class="kpi-label">Active Projects</p><p class="kpi-value" id="projKpiActive">–</p><p class="kpi-delta neutral" id="projKpiActiveSub">of 8 total</p></div>
+          <div class="kpi-card c-accent2"><p class="kpi-label">Avg. Progress</p><p class="kpi-value" id="projKpiAvgProgress">–</p><p class="kpi-delta up">↑ 4% this week</p></div>
+          <div class="kpi-card c-emerald"><p class="kpi-label">On Track</p><p class="kpi-value" id="projKpiOnTrack">–</p><p class="kpi-delta neutral">Meeting milestones</p></div>
+          <div class="kpi-card c-danger"><p class="kpi-label">At Risk</p><p class="kpi-value" id="projKpiAtRisk">–</p><p class="kpi-delta down" id="projKpiAtRiskSub">—</p></div>
+        </div>
+        <div class="projects-grid" id="projectsGrid"></div>
+      </section>
+
+      <!-- ══════════════════════ AGENT TASKS ══════════════════════ -->
+      <section class="view-panel" id="view-agent-tasks">
+        <div class="ov-head">
+          <div><h1>Agent tasks</h1><p>14 tasks currently tracked across all repos</p></div>
+          <div class="ov-head-actions">
+            <div class="data-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Search tasks…" id="taskSearch"/></div>
+            <select id="taskStatusFilter" class="pro-select">
+              <option value="">All statuses</option>
+              <option value="active">Passing</option>
+              <option value="review">In review</option>
+              <option value="blocked">Blocked</option>
+            </select>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table class="dash-table">
+              <thead><tr><th>Task</th><th>Repository</th><th>Agent</th><th>Status</th><th>Updated</th></tr></thead>
+              <tbody id="taskBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ TEAM ══════════════════════ -->
+      <section class="view-panel" id="view-team">
+        <div class="ov-head">
+          <div><h1>Team</h1><p>8 members in acme-corp</p></div>
+          <div class="ov-head-actions">
+            <button class="btn btn-signal btn-sm" id="inviteTeamBtn">+ Invite member</button>
+          </div>
+        </div>
+        <div class="team-grid" id="teamGrid"></div>
+      </section>
+
+      <!-- ══════════════════════ REPORTS ══════════════════════ -->
+      <section class="view-panel" id="view-reports">
+        <div class="ov-head">
+          <div><h1>Reports</h1><p>Scheduled and on-demand exports</p></div>
+          <div class="ov-head-actions">
+            <button class="btn btn-signal btn-sm" id="newReportBtn">+ New report</button>
+          </div>
+        </div>
+        <div class="reports-grid" id="reportsGrid"></div>
+      </section>
+
+      <!-- ══════════════════════ AUDIT LOG ══════════════════════ -->
+      <section class="view-panel" id="view-audit-log">
+        <div class="ov-head">
+          <div><h1>Audit log</h1><p>Security and account activity for acme-corp</p></div>
+          <div class="ov-head-actions">
+            <div class="data-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Search log…" id="auditSearch"/></div>
+            <button class="btn btn-outline btn-sm" id="exportAuditBtn">Export CSV</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table class="dash-table">
+              <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Resource</th><th>IP address</th><th>Status</th></tr></thead>
+              <tbody id="auditBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════════════════ SETTINGS ══════════════════════ -->
+      <section class="view-panel" id="view-settings">
+        <div class="ov-head">
+          <div><h1>Settings</h1><p>Workspace, data and integrations for acme-corp</p></div>
+        </div>
+
+        <div class="settings-grid">
+
+          <!-- Workspace profile -->
+          <div class="panel settings-panel">
+            <div class="panel-head"><h3>Workspace profile</h3><span class="tag">acme-corp</span></div>
+            <div class="settings-field-row"><label>Workspace name</label><input type="text" class="pro-select" id="setWorkspaceName" value="acme-corp" style="width:100%"/></div>
+            <div class="settings-field-row"><label>Display name</label><input type="text" class="pro-select" id="setDisplayName" value="Amara Khan" style="width:100%"/></div>
+            <div class="settings-field-row"><label>Theme</label>
+              <select class="pro-select" id="setThemeSelect" style="width:100%">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
+            </div>
+            <button class="btn btn-signal btn-sm" id="saveProfileBtn" style="align-self:flex-start;margin-top:4px;">Save profile</button>
+          </div>
+
+          <!-- Data & backup: local persistence -->
+          <div class="panel settings-panel">
+            <div class="panel-head"><h3>Data &amp; backup</h3><span class="tag" id="storageUsageTag">—</span></div>
+            <p class="settings-note">This is a static, no-backend app — everything (workbooks, filters, chat history, preferences) is saved in <b>this browser's local storage</b>, not on a server. Use the points below to keep your data safe.</p>
+            <ul class="settings-point-list">
+              <li><b>Auto-save</b> — every change in Data Studio and Settings is saved to local storage the moment you make it. No "Save" button needed day-to-day.</li>
+              <li><b>Backup file</b> — export everything to one JSON file you can store safely or move to another browser/device.</li>
+              <li><b>Restore</b> — import a previously exported backup file to bring your data back.</li>
+              <li><b>Per-browser scope</b> — data does not sync across browsers/devices on its own; export/import is how you move it.</li>
+              <li><b>Real database (optional)</b> — connect Odoo below to keep orders/products in a real backend instead of local storage only.</li>
+            </ul>
+            <div class="settings-btn-row">
+              <button class="btn btn-outline btn-sm" id="exportBackupBtn">⬇ Export backup (.json)</button>
+              <button class="btn btn-outline btn-sm" id="importBackupBtn">⬆ Import backup</button>
+              <input type="file" id="importBackupFile" accept="application/json" style="display:none"/>
+              <button class="btn btn-outline btn-sm" id="clearLocalBtn" style="color:var(--danger);border-color:var(--danger-10)">🗑 Clear local data</button>
+            </div>
+          </div>
+
+          <!-- Odoo integration -->
+          <div class="panel settings-panel">
+            <div class="panel-head"><h3>Odoo integration</h3><span class="tag" id="odooStatusTag">Not connected</span></div>
+            <p class="settings-note">Link this workspace to an Odoo instance so Orders, Products and Customers here can read/write to your real Odoo database instead of the local demo data.</p>
+            <div class="settings-field-row"><label>Odoo URL</label><input type="text" class="pro-select" id="odooUrl" placeholder="https://yourcompany.odoo.com" style="width:100%"/></div>
+            <div class="settings-field-row"><label>Database</label><input type="text" class="pro-select" id="odooDb" placeholder="yourcompany-live" style="width:100%"/></div>
+            <div class="settings-field-row"><label>Username / email</label><input type="text" class="pro-select" id="odooUser" placeholder="admin@yourcompany.com" style="width:100%"/></div>
+            <div class="settings-field-row"><label>API key</label><input type="password" class="pro-select" id="odooKey" placeholder="Odoo API key (Settings → Account Security)" style="width:100%"/></div>
+            <ul class="settings-point-list">
+              <li>Generate the key in Odoo under <b>Settings → Users → API Keys</b>.</li>
+              <li>Uses Odoo's standard <code>/jsonrpc</code> endpoint — works with Odoo Online, Odoo.sh, or self-hosted.</li>
+              <li>Recommended mapping: DashView <code>Orders</code> ⇄ Odoo <code>sale.order</code>, <code>Products</code> ⇄ <code>product.template</code>.</li>
+              <li>Credentials are stored locally in this browser only; this demo build does not make the live network call.</li>
+            </ul>
+            <div class="settings-btn-row">
+              <button class="btn btn-signal btn-sm" id="odooConnectBtn" data-require-perm="manageOdoo">Connect to Odoo</button>
+              <button class="btn btn-outline btn-sm" id="odooTestBtn">Test connection</button>
+              <a href="#odoo" class="btn btn-outline btn-sm" data-view="odoo">Browse Odoo data</a>
+            </div>
+          </div>
+
+          <!-- AI Assistant API -->
+          <div class="panel settings-panel">
+            <div class="panel-head"><h3>AI Assistant API</h3><span class="tag" id="aiKeyStatusTag">—</span></div>
+            <p class="settings-note">The AI Assistant runs a local offline engine by default. To have it call a real model instead, add your key to one dedicated file: <code>js/ai-api-config.js</code> — nothing else needs editing.</p>
+            <ul class="settings-point-list">
+              <li>Open <code>js/ai-api-config.js</code> and paste your key into <code>apiKey</code>.</li>
+              <li>Leave it blank to keep the free, offline demo engine — nothing breaks either way.</li>
+              <li>The key is only ever read from that file, in your browser — never sent anywhere but the model API you configure.</li>
+            </ul>
+            <a href="ai.html" class="btn btn-outline btn-sm" style="align-self:flex-start;">Open AI Assistant</a>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ NOTIFICATION PANEL ══════════════════════ -->
+<div class="notif-panel" id="notifPanel">
+  <div class="notif-header">
+    <h4>Notifications</h4>
+    <button class="btn btn-ghost btn-sm">Mark all read</button>
+  </div>
+  <div class="notif-list">
+    <div class="notif-item"><div class="notif-icon" style="background:var(--emerald-10)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4fb477" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></div><div class="notif-body"><p>PR #482 merged to main successfully</p><span>2 minutes ago</span></div><div class="notif-unread"></div></div>
+    <div class="notif-item"><div class="notif-icon" style="background:var(--signal-10)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e8a33d" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg></div><div class="notif-body"><p>New agent task created: refactor auth module</p><span>18 minutes ago</span></div><div class="notif-unread"></div></div>
+    <div class="notif-item"><div class="notif-icon" style="background:var(--beacon-10)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d98f27" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="1"/></svg></div><div class="notif-body"><p>CI warning on feat/payments branch</p><span>1 hour ago</span></div></div>
+    <div class="notif-item"><div class="notif-icon" style="background:var(--accent2-10)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b8fae" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div><div class="notif-body"><p>3 new team members joined acme-corp</p><span>Yesterday</span></div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════ COMMAND PALETTE ══════════════════════ -->
+<div class="cmd-overlay" id="cmdOverlay">
+  <div class="cmd-box">
+    <div class="cmd-input-wrap">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 3a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3H6a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3V6a3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3h12a3 3 0 0 0 3-3 3 3 0 0 0-3-3z"/></svg>
+      <input type="text" id="cmdInput" placeholder="Search pages, actions, charts…"/>
+    </div>
+    <div class="cmd-list">
+      <p class="cmd-group-label">Navigation</p>
+      <div class="cmd-item" data-action="home"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div><span class="cmd-item-label">Go to Home</span><span class="cmd-item-hint">index.html</span></div>
+      <div class="cmd-item focused" data-action="overview"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></div><span class="cmd-item-label">Overview</span><span class="cmd-item-hint">Dashboard</span></div>
+      <div class="cmd-item" data-action="studio"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></div><span class="cmd-item-label">Data Studio</span><span class="cmd-item-hint">Import & build</span></div>
+      <div class="cmd-item" data-action="ai"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c-1.7 0-3 1.2-3 3v1H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2V5c0-1.8-1.3-3-3-3Z"/></svg></div><span class="cmd-item-label">AI Assistant</span></div>
+      <div class="cmd-item" data-action="widgets"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="5" rx="1"/><rect x="13" y="3" width="8" height="10" rx="1"/></svg></div><span class="cmd-item-label">Widget Builder</span></div>
+      <div class="cmd-item" data-action="odoo"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/></svg></div><span class="cmd-item-label">Odoo Data</span></div>
+      <div class="cmd-item" data-action="projects"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg></div><span class="cmd-item-label">Projects</span></div>
+      <div class="cmd-item" data-action="agent-tasks"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg></div><span class="cmd-item-label">Agent tasks</span></div>
+      <div class="cmd-item" data-action="team"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg></div><span class="cmd-item-label">Team</span></div>
+      <div class="cmd-item" data-action="reports"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7"/></svg></div><span class="cmd-item-label">Reports</span></div>
+      <div class="cmd-item" data-action="audit-log"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div><span class="cmd-item-label">Audit log</span></div>
+      <div class="cmd-item" data-action="settings"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82"/></svg></div><span class="cmd-item-label">Settings</span></div>
+      <p class="cmd-group-label">Actions</p>
+      <div class="cmd-item" data-action="export"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg></div><span class="cmd-item-label">Export orders as CSV</span></div>
+      <div class="cmd-item" data-action="theme"><div class="cmd-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg></div><span class="cmd-item-label">Toggle light / dark theme</span></div>
+    </div>
+    <div class="cmd-footer">
+      <span><kbd class="cmd-key">↑↓</kbd> navigate</span>
+      <span><kbd class="cmd-key">↵</kbd> open</span>
+      <span><kbd class="cmd-key">Esc</kbd> close</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<!-- ══════════════════════ SHEET PICKER MODAL ══════════════════════ -->
+<div class="modal-overlay" id="sheetPickerModal">
+  <div class="modal-card">
+    <button class="modal-close" id="sheetPickerClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);">Multiple sheets found</p>
+    <h3>Which sheet should we read?</h3>
+    <p>This workbook has more than one sheet — pick the one with your data.</p>
+    <div class="workbook-list" id="sheetPickerList"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════ SUGGESTIONS MODAL ══════════════════════ -->
+<div class="modal-overlay" id="suggestionsModal">
+  <div class="modal-card modal-card-lg">
+    <button class="modal-close" id="suggestionsClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);">Read from your data — no API involved</p>
+    <h3>Here's what we found</h3>
+    <p>DashView scored your columns and drafted these. Tick the ones you want, then finish the dashboard — you can always add or remove more later.</p>
+    <div class="role-preset-row" id="rolePresetRow">
+      <span class="role-preset-label">Build for:</span>
+      <button class="role-preset-btn" data-role="executive" type="button" title="Just the top-line totals — nothing else">Executive</button>
+      <button class="role-preset-btn" data-role="manager" type="button" title="Totals plus a couple of breakdowns">Manager</button>
+      <button class="role-preset-btn" data-role="analyst" type="button" title="Everything — every KPI, chart, and table">Analyst</button>
+    </div>
+    <div class="suggestion-tabs" id="suggestionTabs">
+      <button class="active" data-kind="all" type="button">All</button>
+      <button data-kind="kpi" type="button">KPIs</button>
+      <button data-kind="chart" type="button">Charts</button>
+      <button data-kind="hierarchy" type="button">Hierarchy</button>
+      <button data-kind="pivot" type="button">Pivot</button>
+    </div>
+    <div class="suggestion-list" id="suggestionList"></div>
+    <div class="suggestion-modal-foot">
+      <span class="suggestion-count-tag" id="suggestionCountTag"></span>
+      <div style="display:flex;gap:var(--sp-2);">
+        <button class="btn btn-ghost btn-sm" id="suggestionSelectAllBtn" type="button">Select all</button>
+        <button class="btn btn-primary" id="suggestionAddBtn" type="button">Add selected & finish</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ CALCULATED FIELD MODAL ══════════════════════ -->
+<div class="modal-overlay" id="calcFieldModal">
+  <div class="modal-card">
+    <button class="modal-close" id="calcFieldClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);">New column, computed per row</p>
+    <h3>Add a calculated column</h3>
+    <p>Reference other columns with square brackets, Excel-style. This adds a real column to your data grid.</p>
+    <div class="field"><label for="calcFieldName">Column name</label><input type="text" id="calcFieldName" placeholder="e.g. Profit"/></div>
+    <div class="field">
+      <label for="calcFieldFormula">Formula</label>
+      <div class="formula-input-row"><span class="formula-fx">fx</span><input type="text" id="calcFieldFormula" placeholder="=[Revenue]-[Cost]" spellcheck="false"/></div>
+      <p class="formula-error" id="calcFieldError" style="display:none;"></p>
+    </div>
+    <details class="formula-help"><summary>Available functions</summary><div class="formula-help-grid" id="calcFieldHelpGrid"></div></details>
+    <button class="btn btn-primary btn-block btn-lg" id="calcFieldSaveBtn" type="button" style="margin-top:var(--sp-5);">Add column</button>
+  </div>
+</div>
+
+<!-- ══════════════════════ ADD WIDGET MODAL ══════════════════════ -->
+<div class="modal-overlay" id="addWidgetModal">
+  <div class="modal-card">
+    <button class="modal-close" id="addWidgetClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);">Added to Overview</p>
+    <h3>Add a widget</h3>
+    <div class="chip-select-row" id="widgetTypeChips" style="margin-bottom:var(--sp-5);">
+      <button class="chip-select active" data-type="kpi" type="button">KPI</button>
+      <button class="chip-select" data-type="chart" type="button">Chart</button>
+      <button class="chip-select" data-type="hierarchy" type="button">Hierarchy</button>
+    </div>
+    <div id="addWidgetFields"></div>
+    <button class="btn btn-primary btn-block btn-lg" id="addWidgetSaveBtn" type="button" style="margin-top:var(--sp-5);">Add to Overview</button>
+  </div>
+</div>
+
+<!-- ══════════════════════ REPORT OPTIONS MODAL ══════════════════════ -->
+<div class="modal-overlay" id="reportOptionsModal">
+  <div class="modal-card">
+    <button class="modal-close" id="reportOptionsClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);" id="reportOptionsEyebrow">Board-ready export</p>
+    <h3 id="reportOptionsTitle">Report options</h3>
+    <div class="field">
+      <label for="reportTitleInput">Report title</label>
+      <input type="text" id="reportTitleInput" maxlength="120" spellcheck="false"/>
+    </div>
+    <div class="field">
+      <label>Include</label>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:var(--sp-2);">
+        <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);color:var(--ink-70);cursor:pointer;"><input type="checkbox" id="reportIncludeKpis" checked/> Key metrics summary</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);color:var(--ink-70);cursor:pointer;"><input type="checkbox" id="reportIncludeCharts" checked/> Charts</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);color:var(--ink-70);cursor:pointer;"><input type="checkbox" id="reportIncludeData" checked/> Data table</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);color:var(--ink-70);cursor:pointer;"><input type="checkbox" id="reportIncludePivot" checked/> Pivot table</label>
+      </div>
+    </div>
+    <p id="reportOptionsHint" style="margin-top:var(--sp-3);font-size:var(--fs-sm);color:var(--ink-30);"></p>
+    <button class="btn btn-primary btn-block btn-lg" id="reportGenerateBtn" type="button" style="margin-top:var(--sp-5);">Generate report</button>
+  </div>
+</div>
+
+<!-- ══════════════════════ DATA HEALTH MODAL ══════════════════════ -->
+<div class="modal-overlay" id="dataHealthModal">
+  <div class="modal-card modal-card-wide">
+    <button class="modal-close" id="dataHealthClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);">Auto-checked on import — clean before you build</p>
+    <h3>Data health</h3>
+    <div id="dataHealthBody"></div>
+    <div id="dataHealthFooter" style="margin-top:var(--sp-4);"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════ WORKBOOKS MODAL ══════════════════════ -->
+<div class="modal-overlay" id="workbooksModal">
+  <div class="modal-card">
+    <button class="modal-close" id="workbooksClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);">Saved in this browser</p>
+    <h3>My workbooks</h3>
+    <p>Stored locally with <code>localStorage</code> — nothing is uploaded. Clearing your browser data will remove these too.</p>
+    <div class="workbook-list" id="workbookList"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════ ADD / EDIT WIDGET MODAL (Widget Builder) ══════════════════════ -->
+<div class="modal-overlay" id="dvWidgetModal">
+  <div class="modal-card">
+    <button class="modal-close" id="dvWidgetModalClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);">Widget Builder</p>
+    <h3 id="dvWidgetModalTitle">Add a widget</h3>
+    <div class="field"><label for="dvWidgetTitleInput">Title</label><input type="text" id="dvWidgetTitleInput" placeholder="e.g. Total revenue"/></div>
+    <p class="dv-source-group-label">Type</p>
+    <div class="chip-select-row" id="dvWidgetTypeChips">
+      <button class="chip-select active" data-type="kpi" type="button">KPI</button>
+      <button class="chip-select" data-type="chart" type="button">Chart</button>
+      <button class="chip-select" data-type="table" type="button">Table</button>
+    </div>
+    <p class="dv-source-group-label">Data source</p>
+    <select class="pro-select" id="dvWidgetSourceSelect" style="width:100%;"></select>
+    <div id="dvWidgetCsvRow" style="display:none;margin-top:var(--sp-3);">
+      <div class="dv-widget-csv-drop" id="dvWidgetCsvDrop">⬆ Click to choose a CSV or Excel file<br/><span id="dvWidgetCsvStatus" style="display:block;margin-top:4px;color:var(--ink-30);">No file loaded yet.</span></div>
+      <input type="file" id="dvWidgetCsvInput" accept=".csv,.xlsx,.xls" style="display:none"/>
+      <div id="dvWidgetNumericFieldRow" style="display:none;margin-top:var(--sp-3);">
+        <label style="font-size:var(--fs-xs);color:var(--ink-50);font-weight:600;display:block;margin-bottom:5px;">Sum this column for the KPI</label>
+        <select class="pro-select" id="dvWidgetNumericFieldSelect" style="width:100%;"></select>
+      </div>
+    </div>
+    <div class="dv-widget-live-row">
+      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-xs);color:var(--ink-70);">
+        <input type="checkbox" id="dvWidgetLiveCheck"/> Live refresh
+      </label>
+      <select class="pro-select" id="dvWidgetIntervalSelect" style="width:auto;">
+        <option value="5">Every 5s</option>
+        <option value="15" selected>Every 15s</option>
+        <option value="60">Every 60s</option>
+      </select>
+    </div>
+    <button class="btn btn-primary btn-block btn-lg" id="dvWidgetSaveBtn" type="button" style="margin-top:var(--sp-5);">Save widget</button>
+  </div>
+</div>
+
+<!-- ══════════════════════ SHARE MODAL (Widget Builder) ══════════════════════ -->
+<div class="modal-overlay" id="dvShareModal">
+  <div class="modal-card">
+    <button class="modal-close" id="dvShareModalClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);">Read-only · no sign-in required</p>
+    <h3>Share this dashboard</h3>
+    <p>Anyone with this link can view these widgets exactly as they are right now — they can't edit, delete, or see anything else in this workspace. The data is encoded directly in the link; nothing is uploaded to a server.</p>
+    <div class="dv-share-link-row">
+      <input type="text" id="dvShareLinkInput" readonly/>
+      <button class="btn btn-primary btn-sm" id="dvShareCopyBtn" type="button">Copy</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ TV MODE OVERLAY ══════════════════════ -->
+<div class="dv-tv-overlay" id="dvTvOverlay">
+  <span class="dv-tv-clock" id="dvTvClock"></span>
+  <button type="button" class="dv-tv-exit" id="dvTvExitBtn">Exit TV Mode (Esc)</button>
+  <div id="dvTvStage"></div>
+  <div class="dv-tv-dots" id="dvTvDots"></div>
+</div>
+
+<!-- ══════════════════════ CONFIRM MODAL (generic) ══════════════════════ -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-card">
+    <button class="modal-close" id="confirmClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);" id="confirmEyebrow">Please confirm</p>
+    <h3 id="confirmTitle">Are you sure?</h3>
+    <p id="confirmBody"></p>
+    <div style="display:flex;gap:var(--sp-3);margin-top:var(--sp-5);">
+      <button class="btn btn-outline btn-block" id="confirmCancelBtn" type="button">Cancel</button>
+      <button class="btn btn-primary btn-block" id="confirmOkBtn" type="button" style="background:var(--danger);">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script src="js/studio-core.js"></script>
+<script src="js/studio-ui.js"></script>
+<script src="js/report-engine.js"></script>
+<script src="js/ai-api-config.js"></script>
+<script src="js/ai-engine.js"></script>
+<script src="js/overview.js"></script>
+<script src="js/dashboard-pro.js"></script>
+<script src="js/auth-service.js"></script>
+<script src="js/odoo-service.js"></script>
+<script src="js/widget-builder.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/ai-embed.js"></script>
+</body>
+</html>

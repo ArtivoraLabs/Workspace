@@ -1,0 +1,311 @@
+# Changelog
+
+## People workspace - 2026-09-15
+
+A new `people.html` — an HR/operations workspace built to a supplied visual
+brief, with a working feature set rather than a static mockup.
+
+- **Self-contained light theme.** `css/people.css` deliberately shares no
+  tokens with the graphite/amber BI side and is namespaced under `.hr-`, so
+  the two themes cannot leak into each other. Palette sampled from the brief:
+  ink `#16160F`, cream `#FBF7EC`, butter `#F3D15F`, on a white→cream→butter
+  wash built from two radial layers so the accent reads as light falling
+  across the panel rather than a flat diagonal ramp. Type is Outfit.
+- **Dashboard.** Four-column grid — employee spotlight, weekly work-time
+  chart, live time tracker, onboarding checklist — with the onboarding card
+  spanning both rows and the week agenda spanning the middle two columns.
+  A segmented capacity meter and three headline counters sit under the
+  welcome line.
+- **A time tracker that stays honest.** The running clock persists as a
+  *start timestamp*, not an accumulating counter. A counter only advances
+  while the tab is open, so it silently under-reports the moment you switch
+  tabs or the machine sleeps; an anchor timestamp stays correct across both,
+  survives a reload, and banks itself automatically at midnight rollover.
+  Today's bar in the weekly chart updates live off the same anchor.
+- **Onboarding checklist** — ticking a task recalculates the headline
+  percentage, the `2/8` counter and all three phase bars together, and the
+  bars describe real completion rather than decorating the card.
+- **Week agenda** — click any empty slot to add an event. Two things booked
+  in the same hour share the column side by side instead of one hiding
+  behind the other. Month buttons page the week; the dialog traps Tab and
+  returns focus to whatever opened it.
+- **Seven more sections, all real.** People (search / filter / sort / CSV,
+  any row can be sent to the spotlight), Hiring (five-stage pipeline with
+  drag-and-drop *and* arrow-button fallback so it works without a pointer),
+  Devices (asset register where the status tag itself is the dropdown, so
+  the table stays quiet until clicked), Apps (seat utilisation and
+  recoverable idle spend), Salary (totals, median/average, cost by
+  department, CSV), Calendar (month grid), Reviews, and Settings — where the
+  organisation name, greeting, working-day target and capacity split all
+  feed straight back into the dashboard.
+- **One store, one key.** `js/hr-store.js` holds seed data, persistence and
+  a small pub/sub; every mutation goes through `update()` so saving and
+  notifying can't be forgotten. A change in any section shows up on the
+  dashboard immediately and survives a reload. The 90-day work history uses
+  a seeded PRNG, so headline numbers never reshuffle between reloads.
+- **Keyboard and assistive support.** ⌘K / Ctrl-K command palette jumps to
+  any section or colleague, `Space` toggles the timer, `Esc` closes whatever
+  is open; the nav follows the ARIA tabs pattern with arrow-key movement,
+  tasks expose `aria-pressed`, chart bars carry readable labels, and
+  `prefers-reduced-motion` is respected. Print styles included.
+- **New `test/people.smoke.test.js`** (64 checks), wired into `npm test` and
+  runnable alone with `npm run test:people`. It boots the real page and
+  drives the actual UI rather than calling internals.
+- Linked from the landing-page nav and footer, the dashboard sidebar, and
+  `sitemap.xml`.
+
+### Fixed during review
+
+- Calendar right-hand edge used `:last-child`, which only ever closed the
+  final row — the grid is a flat list of seven children per row, so the edge
+  is every seventh child.
+- Two events in the same hour rendered on top of each other; they now split
+  the column.
+- Typing mid-word in the directory search threw the caret to the end of the
+  field on every keystroke, because the re-render replaced the input.
+- Dashboard cards sized to their own content instead of sharing a row
+  height, so the four-card band didn't line up.
+
+## Professional Excel & PDF reporting - 2026-09-15
+
+- **Real reporting engine, not `window.print()`.** Data Studio's Export
+  menu now builds genuine board-ready deliverables via a new
+  `js/report-engine.js`, using [ExcelJS](https://github.com/exceljs/exceljs)
+  and [jsPDF](https://github.com/parallax/jsPDF) +
+  [AutoTable](https://github.com/simonbengtsson/jsPDF-AutoTable) — both
+  lazily loaded from CDN only when you actually export, same as the
+  existing SheetJS/Chart.js loads.
+- **Excel report (.xlsx)** — a styled, multi-sheet workbook: a **Summary**
+  sheet (title, generated-at timestamp, source file, row counts, active
+  filters, a key-metrics table); a **Data** sheet with a colored header,
+  frozen header row, autofilter, per-column number formats
+  (currency/percent/date), zebra striping, and a live `SUM()` totals row;
+  a **Pivot** sheet when a pivot is built; and a **Charts** sheet with your
+  pinned charts embedded as images.
+- **PDF report** — an actual multi-page report: a cover page (title,
+  metadata, active filters), an Executive Summary of KPI tiles, a chart
+  gallery (one chart per page, pulled straight from the live Chart.js
+  instances), paginated data/pivot tables with repeating styled headers,
+  and a running header + footer with page numbers on every page. Very
+  large tables are capped at 1,500 rows with a note pointing to the full
+  Excel export, so the PDF never balloons into an unusable page count.
+- **Report options modal.** Both formats share one dialog: an editable
+  report title and checkboxes for what to include (key metrics / charts /
+  data table / pivot table) — options that don't apply to the current
+  workbook are greyed out automatically.
+- New `test/report-engine.smoke.test.js`, wired into `npm test`, drives the
+  export UI end-to-end (opens the modal, generates, checks the payload
+  handed to the engine) so this stays covered going forward.
+
+## Role-based dashboard builder + PDF export - 2026-08-18
+
+- **"Create dashboard" from imported data.** After importing a spreadsheet,
+  a new "Create dashboard" button opens a modal to name the dashboard and
+  pick who it's for — **Executive** (a handful of top-line totals, nothing
+  else), **Manager** (totals + a breakdown by whatever category/status
+  column looks most useful + the key columns as a table), or **Analyst**
+  (every column, every row, plus min/avg/max on each numeric column). The
+  logic (`js/dashboard-builder.js`, `generateSpec()`) inspects the imported
+  columns to guess which are numeric/date/text and picks what to feature
+  automatically — no manual column mapping required.
+- **Dashboards are saved.** Each generated dashboard is a snapshot (values
+  computed once, at generation time) stored in `localStorage`
+  (`al_dashboards`), so it stays exactly as it was even if the source import
+  is later cleared. A new "Saved dashboards" panel lists them with Open/
+  Delete actions.
+- **Export as PDF.** The generated dashboard panel has an "Export as PDF"
+  button that uses the browser's own print-to-PDF (`window.print()`) with a
+  dedicated print stylesheet that isolates just that panel — no extra
+  library to load, nothing that can fail from a broken CDN or hash mismatch.
+
+## AI reliability + Excel import - 2026-08-18
+
+- **AI Assistant is now 100% local, always.** `js/assistant.js` previously
+  tried a live backend AI gateway first (`AL_API.aiChat`) when a project was
+  connected, falling back to the local topic-matcher only on error. That
+  live path is removed entirely — every message now goes straight to the
+  local, keyword-matched knowledge base. Same input always produces the same
+  answer, with no dependency on network, backend uptime, or an API key.
+  `js/dashview-api.js` is no longer loaded on `ai.html`.
+- **Import Excel/CSV into the dashboard.** New "Import Excel" button next to
+  "Add project" (`dashboard.html`) opens a file picker for `.xlsx` / `.xls` /
+  `.csv` — the kind of file typically exported from Excel or a Power BI
+  report. Parsing happens fully client-side via SheetJS (loaded from CDN with
+  a pinned version + SRI hash on first use, same pattern as the existing
+  Report Studio export). The parsed rows render in a new "Imported data"
+  panel that reuses the existing `.panel` / `.dash-table` / `.tag` classes,
+  so it stays visually aligned with the rest of the dashboard through future
+  changes without any new CSS. The data is saved to `localStorage`
+  (`al_imported_sheet`) and reloads automatically on your next visit; it's
+  searchable and re-exportable to CSV, and capped at 500 rows for
+  responsiveness. New file: `js/dashboard-import.js`.
+
+## Visual polish - 2026-08-04
+
+Three additions, all built from scratch (no chart/image libraries beyond the
+Chart.js already in use), continuing the no-stock-assets approach used
+throughout this project.
+
+- **Contribution heatmap** - a 52-week, GitHub-style activity calendar on the
+  dashboard's Analytics section, recolored to the site's monochrome palette.
+  Hover any day for an exact count and date. Deterministic data generated in
+  `js/dashboard-data.js` (`buildContributionCalendar`), rendered in
+  `js/dashboard.js` (`renderHeatmap`) with a staggered fade-in.
+- **Language distribution bar** - an aggregate, color-coded breakdown of
+  languages across all repos, below the heatmap.
+- **Dashboard showcase on the landing page** - a new section (`#dashboard-showcase`
+  in `index.html`) framing a real screenshot of the live dashboard in a
+  browser-chrome mockup (traffic-light dots, fake URL bar). The screenshot
+  (`assets/dashboard-preview.png`) was captured directly from the working
+  page with Playwright at 2x resolution, not mocked up - regenerate it after
+  any future dashboard changes so it stays accurate.
+
+Verified with the same Playwright regression suite as prior rounds, plus a
+manual trace-down of two apparent rendering issues that turned out to be test
+artifacts (the cursor-spotlight effect needs real mouse movement to position
+itself; a scroll-reveal transition was caught mid-animation by too short a
+wait) - not bugs in the site itself.
+
+## Dashboard merge - 2026-08-03
+
+Merged a second project ("DashView," a GitHub-organization dashboard) into
+this one, as a new `dashboard.html` page. Full details below.
+
+### Why it looks the way it does
+The source project actually contained **two more** distinct visual languages
+of its own (a flat "console" landing page, and a separate blue/violet
+gradient sidebar app) on top of a real Express backend hitting the live
+GitHub API for a fictional org. Since the ask was *one* layout, everything
+was rebuilt in this project's existing glass design system rather than
+stitching three aesthetics together. The org tracked is `acme-corp`, matching
+what the homepage's GitHub panel already referenced.
+
+### What was ported in (rebuilt, not copy-pasted)
+- Collapsible sidebar workspace shell, KPI rows, team/projects/milestones
+  grids, three Chart.js analytics charts, a filterable activity log, a
+  sortable/searchable repository table (table + card views), a command
+  palette (`⌘K`) with fuzzy search across everything, a full keyboard-shortcut
+  layer, and CSV export.
+- Emoji icons (🏠👥📁 etc.) were replaced with the site's existing hand-drawn
+  SVG icon style throughout, for visual consistency with the rest of the site.
+- The toast system already on the homepage was extended with success/error/
+  warning/info color variants and reused as-is, rather than building a second
+  one.
+
+### Bug caught in the source project
+DashView's `dashboard.html` loaded Chart.js from
+`.../chart.js@4.4.2/dist/chart.umd.min.js` - **that minified file doesn't
+exist in that package version** (only the unminified `chart.umd.js` is
+published), so the original would have 404'd and silently shown no charts at
+all. Fixed to the correct filename, with a real SRI hash computed from the
+actual published file (same method as the SRI hashes added in the previous
+audit).
+
+### No live backend, by design
+The original project required a Node/Express server with a real GitHub token
+to show anything. This project is intentionally static (no build step, no
+server), so `js/dashboard-data.js` generates a realistic, deterministic
+dataset in the *exact same shape* a real API would return. `js/dashboard.js`
+consumes that shape the same way it would consume a real `fetch()` response -
+see the comment at the top of `dashboard-data.js` for the two-line swap to
+point it at a real backend later.
+
+### Wired into the existing site
+- Added to the nav dropdown and footer as "Dashboard."
+- Added an "Open full dashboard →" button to the homepage's GitHub section.
+- "Back to site" in the dashboard's sidebar returns to `index.html`.
+
+### Verified
+Full Playwright pass covering both pages: KPI/chart/log/repo rendering,
+activity-log filtering, repo search/sort/view-toggle, command palette open/
+search/select/close, keyboard shortcuts (`⌘K`, `R`, `E`, `?`, `G`+letter),
+sidebar collapse, CSV download, and cross-page navigation in both directions
+- plus a full regression pass confirming every fix from the previous audit
+(the early-access modal, branch-item keyboard access, etc.) still holds.
+
+## Production audit - 2026-08-02
+
+A full pass over the project: every file read, the live UI exercised end-to-end
+in a real headless browser (not just static code review), and every finding
+below fixed in place. Nothing about the design, copy, or product behavior was
+changed - only correctness, accessibility, security, and deploy-readiness.
+
+### 🐛 Fixed
+- **Early-access modal never showed a clean success state.** `#waitlistFormBody`
+  had no `class` attribute, so the CSS rule meant to hide it after submit
+  (`.form-body.hide`) could never match. After submitting, the form fields
+  stayed on screen stacked on top of the "You're on the list" success message.
+  Confirmed with a scripted browser test before and after the fix.
+  Fix: added `class="form-body"` to the element (`index.html`).
+- **Branch list wasn't keyboard-accessible.** The three items under
+  Branches in the GitHub panel were `<div>`s with a click handler and no way
+  to reach them from the keyboard (`tabIndex` was `-1`). Converted to real
+  `<button>` elements, matching the pattern already used for file rows and
+  commit hashes elsewhere in the same panel. No JS logic changed - click
+  behavior is identical, Tab/Enter/Space now work too. (`index.html`, `css/workspace.css`)
+- **Copying a commit hash failed silently.** If `navigator.clipboard` was
+  unavailable (e.g. non-HTTPS context), the commit-hash copy button did
+  nothing with no feedback, unlike the code-copy button which shows an error
+  toast. Both now behave the same way. (`js/main.js`)
+- **Duplicate/conflicting CSS declaration** on `.github-action-btn.running .github-action-icon`
+  - two rules set different colors for the same selector; it happened to
+  render correctly by cascade order but was confusing and fragile. Consolidated
+  into one unambiguous rule per state. (`css/workspace.css`)
+
+### 🔒 Security
+- **Added Subresource Integrity (SRI) hashes** to the three CDN-loaded export
+  libraries (`docx`, `pptxgenjs`, `xlsx` from jsDelivr) in the AI Studio's
+  Report Studio. Previously these were loaded with no integrity check at all -
+  if the CDN were ever compromised or MITM'd, arbitrary code would execute
+  with full page privileges. Hashes were computed from the exact bytes of the
+  pinned npm package versions already used (jsDelivr serves npm packages
+  unmodified), so nothing about which library version loads has changed -
+  the browser now just verifies it before running it. (`js/studio.js`)
+
+### ♿ Accessibility
+- Waitlist modal now traps Tab focus while open and **returns focus to
+  whichever button opened it** when closed, instead of leaving focus
+  wherever it happened to be (standard WCAG dialog pattern). (`js/main.js`)
+- Branch-item keyboard fix above also counts here.
+- Defensive null-checks added around the editable GitHub repo-name field so a
+  future markup change fails quietly instead of throwing. (`js/main.js`)
+
+### ⚡ Performance
+- Google Fonts were loaded via `@import` inside `globals.css`, which blocks
+  CSS parsing until the remote stylesheet round-trips and can't be discovered
+  by the browser's preload scanner until the CSS file itself has already
+  loaded. Moved to preconnected `<link>` tags in `<head>`, discoverable
+  immediately from the HTML. (`index.html`, `css/globals.css`)
+- Added `rel="preconnect"` for the hero background video's CDN host so the
+  connection warms up in parallel with everything else on first paint.
+
+### 🔍 SEO / sharing
+- Added Open Graph and Twitter Card meta tags, plus a canonical link.
+- Generated a real 1200×630 social preview image (`assets/og-image.png`)
+  matching the site's actual design system, not a placeholder.
+- Added a full favicon set (16/32/180/192/512 px, generated from the existing
+  `favicon.svg`) plus `manifest.json` for add-to-home-screen support.
+- Added `robots.txt` and `sitemap.xml`.
+
+### 📱 Responsive
+- The AI Studio image-history gallery (6-column grid) was cramped on phone
+  widths; now steps down to 4 columns at ≤768px and 3 at ≤480px.
+
+### 🚀 Deployment
+- Restored `.github/workflows/deploy.yml` - the README documented this
+  GitHub Actions auto-deploy workflow, but the file was missing from the
+  project entirely, so Pages deploys would never have worked out of the box.
+- Added a branded `404.html` for GitHub Pages (previously the default,
+  unstyled GitHub 404 would show).
+
+### ⚠️ Flagged, not changed (needs your input)
+- **Hero background video** points to a CloudFront URL
+  (`d8j0ntlcm91z4.cloudfront.net/user_.../hf_...mp4`) that looks like a
+  temporary asset from another generation platform rather than infrastructure
+  you own. It works today, but nothing guarantees it stays online - replace
+  it with a video hosted on your own domain/CDN before a real launch. The
+  gradient fallback (both the CSS layering and the `onerror` handler) already
+  works correctly either way, so nothing breaks visually if it does go down.
+- **Placeholder domain** (`your-domain.example.com`) is used in the canonical
+  tag, Open Graph/Twitter tags, `sitemap.xml`, and `robots.txt`. Search-and-replace
+  with your real deployed domain before launch.
