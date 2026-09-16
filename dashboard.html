@@ -74,13 +74,13 @@
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="8" height="5" rx="1"/><rect x="13" y="3" width="8" height="10" rx="1"/><rect x="3" y="10" width="8" height="11" rx="1"/><rect x="13" y="15" width="8" height="6" rx="1"/></svg>
         <span>Widget Builder</span><span class="badge new">New</span>
       </a>
-      <a href="#odoo" class="dash-nav-link" data-view="odoo">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
-        <span>Odoo Data</span>
-      </a>
       <a href="#odoo-live" class="dash-nav-link" data-view="odoo-live">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/><circle cx="19.5" cy="5" r="3" fill="#6fe3a5" stroke="none"/></svg>
-        <span>Live Odoo</span><span class="badge new">Live</span>
+        <span>Odoo</span><span class="badge new">Live</span>
+      </a>
+      <a href="#odoo" class="dash-nav-link" data-view="odoo">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+        <span>Odoo (Demo data)</span>
       </a>
       <a href="#audit-log" class="dash-nav-link" data-view="audit-log">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
@@ -638,7 +638,7 @@
 
         <div class="odoo-demo-banner" id="odooDemoBanner">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16" r=".6" fill="currentColor" stroke="none"/></svg>
-          <p>You're browsing a demo dataset. <a href="#settings" data-view="settings">Connect your Odoo instance</a> to map these models to live records.</p>
+          <p>This tab always shows a fixed sample dataset for layout/testing — it never talks to a real Odoo server. For your actual company data, use the <a href="#odoo-live" data-view="odoo-live">Odoo (Live)</a> tab instead.</p>
         </div>
 
         <div class="panel">
@@ -692,6 +692,18 @@
           </aside>
 
           <div class="odoo-live-main">
+            <div class="panel odoo-live-exec-panel" id="odooLiveExecPanel">
+              <div class="odoo-live-exec-head">
+                <h4>Executive breakdown</h4>
+                <div class="odoo-live-exec-controls">
+                  <select class="pro-select" id="odooLiveGroupBy"><option value="">Group by…</option></select>
+                  <select class="pro-select" id="odooLiveMeasure"><option value="__count">Count records</option></select>
+                </div>
+              </div>
+              <div id="odooLiveExecBody" class="odoo-live-exec-body">
+                <p class="odoo-live-exec-empty">Pick a model, then a "Group by" field, to see live totals — e.g. Sales Orders grouped by Stage, or Leads grouped by Salesperson.</p>
+              </div>
+            </div>
             <div class="panel">
               <div class="odoo-live-filterbar">
                 <select class="pro-select" id="odooLiveModelSelect"><option value="">Select a model…</option></select>
