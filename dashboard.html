@@ -628,15 +628,22 @@
       <section class="view-panel" id="view-odoo">
         <div class="ov-head">
           <div><h1>Odoo Data</h1><p>Browse the models this workspace can map — <code>sale.order</code>, <code>product.template</code>, <code>res.partner</code>, <code>crm.lead</code>.</p></div>
-          <div class="ov-head-actions"><span class="dv-pill" id="odooViewStatusPill">Not connected</span></div>
+          <div class="ov-head-actions"><span class="odoo-status-pill" id="odooViewStatusPill">Not connected</span></div>
         </div>
+
+        <div class="odoo-demo-banner" id="odooDemoBanner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16" r=".6" fill="currentColor" stroke="none"/></svg>
+          <p>You're browsing a demo dataset. <a href="#settings" data-view="settings">Connect your Odoo instance</a> to map these models to live records.</p>
+        </div>
+
         <div class="panel">
           <div class="dv-odoo-toolbar">
             <div class="board-tabs" id="odooModelTabs"></div>
             <div class="data-search dv-odoo-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Search records…" id="odooRecordsSearch"/></div>
           </div>
-          <table class="dash-table" id="odooRecordsTable"><thead></thead><tbody></tbody></table>
-          <p class="settings-note" style="margin-top:var(--sp-4);">This is a mock dataset standing in for a real Odoo connection — see <b>Settings → Odoo integration</b> to configure a URL, or read <code>js/odoo-service.js</code> for the production seam.</p>
+          <div class="table-wrap">
+            <table class="dash-table" id="odooRecordsTable"><thead></thead><tbody></tbody></table>
+          </div>
         </div>
       </section>
 
@@ -765,22 +772,47 @@
           </div>
 
           <!-- Odoo integration -->
-          <div class="panel settings-panel">
-            <div class="panel-head"><h3>Odoo integration</h3><span class="tag" id="odooStatusTag">Not connected</span></div>
-            <p class="settings-note">Link this workspace to an Odoo instance so Orders, Products and Customers here can read/write to your real Odoo database instead of the local demo data.</p>
-            <div class="settings-field-row"><label>Odoo URL</label><input type="text" class="pro-select" id="odooUrl" placeholder="https://yourcompany.odoo.com" style="width:100%"/></div>
-            <div class="settings-field-row"><label>Database</label><input type="text" class="pro-select" id="odooDb" placeholder="yourcompany-live" style="width:100%"/></div>
-            <div class="settings-field-row"><label>Username / email</label><input type="text" class="pro-select" id="odooUser" placeholder="admin@yourcompany.com" style="width:100%"/></div>
-            <div class="settings-field-row"><label>API key</label><input type="password" class="pro-select" id="odooKey" placeholder="Odoo API key (Settings → Account Security)" style="width:100%"/></div>
-            <ul class="settings-point-list">
-              <li>Generate the key in Odoo under <b>Settings → Users → API Keys</b>.</li>
-              <li>Uses Odoo's standard <code>/jsonrpc</code> endpoint — works with Odoo Online, Odoo.sh, or self-hosted.</li>
-              <li>Recommended mapping: DashView <code>Orders</code> ⇄ Odoo <code>sale.order</code>, <code>Products</code> ⇄ <code>product.template</code>.</li>
-              <li>Credentials are stored locally in this browser only; this demo build does not make the live network call.</li>
-            </ul>
-            <div class="settings-btn-row">
+          <div class="panel settings-panel odoo-panel">
+            <div class="panel-head odoo-panel-head">
+              <div class="odoo-panel-title">
+                <span class="odoo-icon-badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3A5 5 0 0 0 13.5 3.5L11.7 5.3"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3A5 5 0 0 0 10.5 20.5l1.8-1.8"/></svg></span>
+                <div>
+                  <h3>Odoo integration</h3>
+                  <p class="odoo-panel-sub">Sync Orders, Products and Customers with a real Odoo database</p>
+                </div>
+              </div>
+              <span class="odoo-status-pill" id="odooStatusTag">Not connected</span>
+            </div>
+
+            <div class="odoo-connection-meta" id="odooConnMeta" hidden>
+              <div><span class="odoo-meta-label">Instance</span><span class="odoo-meta-value" id="odooMetaUrl">—</span></div>
+              <div><span class="odoo-meta-label">Database</span><span class="odoo-meta-value" id="odooMetaDb">—</span></div>
+              <div><span class="odoo-meta-label">Signed in as</span><span class="odoo-meta-value" id="odooMetaUser">—</span></div>
+              <div><span class="odoo-meta-label">Last tested</span><span class="odoo-meta-value" id="odooMetaTested">—</span></div>
+            </div>
+
+            <div class="odoo-field-grid">
+              <div class="settings-field-row"><label>Odoo URL</label><input type="text" class="pro-select" id="odooUrl" placeholder="https://yourcompany.odoo.com" style="width:100%"/></div>
+              <div class="settings-field-row"><label>Database</label><input type="text" class="pro-select" id="odooDb" placeholder="yourcompany-live" style="width:100%"/></div>
+              <div class="settings-field-row"><label>Username / email</label><input type="text" class="pro-select" id="odooUser" placeholder="admin@yourcompany.com" style="width:100%"/></div>
+              <div class="settings-field-row"><label>API key</label><input type="password" class="pro-select" id="odooKey" placeholder="Odoo API key (Settings → Account Security)" style="width:100%"/></div>
+            </div>
+
+            <div class="odoo-security-note">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+              <p>Credentials stay in this browser only. This demo build simulates the handshake rather than calling a live Odoo server — see <code>js/odoo-service.js</code> for the production seam.</p>
+            </div>
+
+            <ol class="odoo-steps">
+              <li><span class="odoo-step-num">1</span><div><b>Generate an API key</b><p>In Odoo, go to <b>Settings → Users → API Keys</b>.</p></div></li>
+              <li><span class="odoo-step-num">2</span><div><b>Add your credentials above</b><p>Works with Odoo Online, Odoo.sh, or self-hosted — uses the standard <code>/jsonrpc</code> endpoint.</p></div></li>
+              <li><span class="odoo-step-num">3</span><div><b>Connect, then map your data</b><p>Recommended mapping: <code>Orders</code> ⇄ <code>sale.order</code>, <code>Products</code> ⇄ <code>product.template</code>.</p></div></li>
+            </ol>
+
+            <div class="settings-btn-row odoo-btn-row">
               <button class="btn btn-signal btn-sm" id="odooConnectBtn" data-require-perm="manageOdoo">Connect to Odoo</button>
               <button class="btn btn-outline btn-sm" id="odooTestBtn">Test connection</button>
+              <button class="btn btn-outline btn-sm" id="odooDisconnectBtn" style="display:none;color:var(--danger);border-color:var(--danger-10)">Disconnect</button>
               <a href="#odoo" class="btn btn-outline btn-sm" data-view="odoo">Browse Odoo data</a>
             </div>
           </div>

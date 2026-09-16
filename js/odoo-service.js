@@ -19,10 +19,22 @@
 
   var CONFIG_KEY = 'dashview_odoo_config';
   var CONNECTED_KEY = 'dashview_odoo_connected';
+  var LAST_TESTED_KEY = 'dashview_odoo_last_tested';
 
   function loadJSON(key, fallback) { try { var v = JSON.parse(localStorage.getItem(key)); return v === null || v === undefined ? fallback : v; } catch (e) { return fallback; } }
   function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
   function delay(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+
+  /* ── Small inline icon set, matching the stroke-icon style used elsewhere ── */
+  var ICON_PATHS = {
+    'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/>',
+    'box': '<path d="m21 8-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
+    'users': '<path d="M17 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>',
+    'target': '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/>'
+  };
+  function modelIconSvg(name) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON_PATHS[name] || ICON_PATHS.box) + '</svg>';
+  }
 
   /* ── Canned dataset, standing in for a real Odoo db ─────────────────────── */
   var MODELS = {
@@ -85,6 +97,7 @@
     var cfg = getConfig();
     return delay(700 + Math.random() * 400).then(function () {
       if (!cfg.url) return { ok: false, error: 'No Odoo URL configured yet.' };
+      saveJSON(LAST_TESTED_KEY, Date.now());
       return { ok: true, latencyMs: Math.round(120 + Math.random() * 180) };
     });
   }
@@ -112,17 +125,47 @@
   function byId(id) { return document.getElementById(id); }
   function toast(msg) { if (window.showToast) window.showToast(msg); }
 
+  function formatTestedAt(ts) {
+    if (!ts) return '—';
+    var diffMin = Math.round((Date.now() - ts) / 60000);
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return diffMin + 'm ago';
+    var d = new Date(ts);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  }
+
   function refreshStatusTag() {
     var tag = byId('odooStatusTag');
-    if (!tag) return;
-    if (isConnected()) { tag.textContent = 'Connected (mock)'; tag.style.color = 'var(--emerald,#4fb477)'; }
-    else if (getConfig().url) { tag.textContent = 'Configured, not connected'; tag.style.color = ''; }
-    else { tag.textContent = 'Not connected'; tag.style.color = ''; }
+    var connected = isConnected();
+    var cfg = getConfig();
+    if (tag) {
+      tag.classList.remove('is-configured', 'is-live', 'is-connecting');
+      if (connected) { tag.textContent = 'Connected (mock)'; tag.classList.add('is-live'); }
+      else if (cfg.url) { tag.textContent = 'Configured, not connected'; tag.classList.add('is-configured'); }
+      else { tag.textContent = 'Not connected'; }
+    }
+
+    var meta = byId('odooConnMeta');
+    var disconnectBtn = byId('odooDisconnectBtn');
+    if (meta) {
+      meta.hidden = !connected;
+      if (connected) {
+        if (byId('odooMetaUrl')) byId('odooMetaUrl').textContent = cfg.url || '—';
+        if (byId('odooMetaDb')) byId('odooMetaDb').textContent = cfg.db || '—';
+        if (byId('odooMetaUser')) byId('odooMetaUser').textContent = cfg.user || 'admin';
+        if (byId('odooMetaTested')) byId('odooMetaTested').textContent = formatTestedAt(loadJSON(LAST_TESTED_KEY, null));
+      }
+    }
+    if (disconnectBtn) disconnectBtn.style.display = connected ? '' : 'none';
+
     var viewPill = byId('odooViewStatusPill');
     if (viewPill) {
-      viewPill.textContent = isConnected() ? 'Connected (mock data)' : 'Demo dataset — connect in Settings for live mapping';
-      viewPill.classList.toggle('dv-pill-live', isConnected());
+      viewPill.classList.remove('is-configured', 'is-live');
+      viewPill.textContent = connected ? 'Connected (mock data)' : 'Demo dataset — connect in Settings for live mapping';
+      if (connected) viewPill.classList.add('is-live');
     }
+    var banner = byId('odooDemoBanner');
+    if (banner) banner.classList.toggle('is-hidden', connected);
   }
 
   function initSettingsPanel() {
@@ -137,10 +180,12 @@
       var newCfg = { url: byId('odooUrl').value.trim(), db: byId('odooDb').value.trim(), user: byId('odooUser').value.trim() };
       if (!newCfg.url || !newCfg.db) { toast('Add at least the Odoo URL and database name.'); return; }
       var btn = byId('odooConnectBtn'); var prev = btn.textContent; btn.textContent = 'Connecting…'; btn.disabled = true;
-      byId('odooStatusTag').textContent = 'Connecting…';
+      var tag = byId('odooStatusTag');
+      if (tag) { tag.textContent = 'Connecting…'; tag.classList.add('is-connecting'); }
       connect(newCfg).then(function (res) {
         btn.textContent = prev; btn.disabled = false;
         if (!res.ok) { toast(res.error); refreshStatusTag(); return; }
+        saveJSON(LAST_TESTED_KEY, Date.now());
         refreshStatusTag();
         toast('Connected to ' + newCfg.url + ' (mock) — browse it under "Odoo Data". A real deployment proxies this through server/.');
       });
@@ -150,8 +195,15 @@
       var btn = byId('odooTestBtn'); var prev = btn.textContent; btn.textContent = 'Testing…'; btn.disabled = true;
       testConnection().then(function (res) {
         btn.textContent = prev; btn.disabled = false;
+        refreshStatusTag();
         toast(res.ok ? ('Reachable — ~' + res.latencyMs + 'ms round trip (simulated).') : res.error);
       });
+    });
+
+    if (byId('odooDisconnectBtn')) byId('odooDisconnectBtn').addEventListener('click', function () {
+      disconnect();
+      refreshStatusTag();
+      toast('Disconnected. DashView will use local demo data until you reconnect.');
     });
   }
 
@@ -161,7 +213,8 @@
     var wrap = byId('odooModelTabs');
     if (!wrap) return;
     wrap.innerHTML = Object.keys(MODELS).map(function (key) {
-      return '<button type="button" class="board-tab' + (key === activeModel ? ' active' : '') + '" data-model="' + key + '">' + MODELS[key].label + '</button>';
+      return '<button type="button" class="board-tab odoo-model-tab' + (key === activeModel ? ' active' : '') + '" data-model="' + key + '">' +
+        modelIconSvg(MODELS[key].icon) + '<span>' + MODELS[key].label + '</span></button>';
     }).join('');
     wrap.querySelectorAll('.board-tab').forEach(function (btn) {
       btn.addEventListener('click', function () { activeModel = btn.getAttribute('data-model'); renderModelTabs(); renderTable(); });
