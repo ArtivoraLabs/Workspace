@@ -11,6 +11,7 @@ if (!fs.existsSync(dbPath)) require('./db/migrate');
 const authRoutes = require('./routes/auth.routes');
 const projectRoutes = require('./routes/projects.routes');
 const aiRoutes = require('./routes/ai.routes');
+const odooRoutes = require('./routes/odoo.routes');
 
 const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
@@ -20,6 +21,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api', projectRoutes);
 app.use('/api', aiRoutes);
+app.use('/api/odoo', odooRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err);
