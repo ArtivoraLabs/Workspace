@@ -71,6 +71,8 @@ window.AL_API_BASE = window.AL_API_BASE || 'http://localhost:4000/api';
   const odooModels = (cfg, moduleTechnicalName) => request('/odoo/models', { method: 'POST', body: JSON.stringify(Object.assign({ module: moduleTechnicalName }, cfg)) }).then(d => d.models);
   const odooFields = (cfg, model) => request('/odoo/fields', { method: 'POST', body: JSON.stringify(Object.assign({ model }, cfg)) }).then(d => d.fields);
   const odooRecords = (cfg, model, opts) => request('/odoo/records', { method: 'POST', body: JSON.stringify(Object.assign({ model }, opts || {}, cfg)) });
+  // Executive KPI aggregation — sums/counts computed live in Odoo, not in the browser.
+  const odooReadGroup = (cfg, model, opts) => request('/odoo/read-group', { method: 'POST', body: JSON.stringify(Object.assign({ model }, opts || {}, cfg)) }).then(d => d.groups);
 
   // history: [{role:'user'|'assistant', content:string}]
   const aiChat = (projectId, history, opts) => request('/projects/' + projectId + '/ai/chat', {
@@ -82,6 +84,6 @@ window.AL_API_BASE = window.AL_API_BASE || 'http://localhost:4000/api';
     isConnected, user, register, login, disconnect,
     getProjects, createProject, getProjectSummary, getProjectStats, getUsers, getOrders,
     getRevenue, getActivity, searchProject, getReport, getAiProviders, aiChat,
-    odooTest, odooModules, odooModels, odooFields, odooRecords,
+    odooTest, odooModules, odooModels, odooFields, odooRecords, odooReadGroup,
   };
 })();

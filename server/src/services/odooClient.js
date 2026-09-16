@@ -155,6 +155,18 @@ async function searchRead(cfg, model, { domain, fields, limit, offset, order }) 
   return { rows, total };
 }
 
+/** Live aggregated totals via read_group — e.g. "sale.order amount_total
+ *  summed, grouped by stage_id" — what an executive KPI card actually
+ *  needs, computed server-side so the browser never pulls raw rows just
+ *  to add them up. `fields` supports Odoo's "field:agg" syntax, e.g.
+ *  ['amount_total:sum']; groupby is a list of field names. */
+async function readGroup(cfg, model, { domain, fields, groupby }) {
+  const uid = await authenticate(cfg);
+  return executeKw(cfg, uid, model, 'read_group', [
+    domain || [], (fields && fields.length ? fields : ['__count']), groupby || []
+  ], { lazy: false });
+}
+
 module.exports = {
   OdooError,
   authenticate,
@@ -162,5 +174,6 @@ module.exports = {
   listInstalledModules,
   listModelsForModule,
   getFields,
-  searchRead
+  searchRead,
+  readGroup
 };

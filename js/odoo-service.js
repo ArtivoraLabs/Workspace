@@ -140,7 +140,7 @@
     var cfg = getConfig();
     if (tag) {
       tag.classList.remove('is-configured', 'is-live', 'is-connecting');
-      if (connected) { tag.textContent = 'Connected (mock)'; tag.classList.add('is-live'); }
+      if (connected) { tag.textContent = 'Sample data only — no real Odoo connection'; tag.classList.add('is-configured'); }
       else if (cfg.url) { tag.textContent = 'Configured, not connected'; tag.classList.add('is-configured'); }
       else { tag.textContent = 'Not connected'; }
     }
@@ -161,11 +161,14 @@
     var viewPill = byId('odooViewStatusPill');
     if (viewPill) {
       viewPill.classList.remove('is-configured', 'is-live');
-      viewPill.textContent = connected ? 'Connected (mock data)' : 'Demo dataset — connect in Settings for live mapping';
-      if (connected) viewPill.classList.add('is-live');
+      viewPill.textContent = 'Sample dataset — this view never reads real Odoo data';
     }
+    // This tab is always a fixed sample dataset, regardless of the config
+    // saved below — the "Connect" button here only stores settings for the
+    // real "Odoo" (live) nav item to use. The banner stays visible always
+    // so this is never mistaken for a live connection.
     var banner = byId('odooDemoBanner');
-    if (banner) banner.classList.toggle('is-hidden', connected);
+    if (banner) banner.classList.remove('is-hidden');
   }
 
   function initSettingsPanel() {
@@ -187,7 +190,7 @@
         if (!res.ok) { toast(res.error); refreshStatusTag(); return; }
         saveJSON(LAST_TESTED_KEY, Date.now());
         refreshStatusTag();
-        toast('Connected to ' + newCfg.url + ' (mock) — browse it under "Odoo Data". A real deployment proxies this through server/.');
+        toast('Settings saved. Note: "Odoo (Demo data)" always shows sample rows — open the "Odoo (Live)" tab to actually connect to ' + newCfg.url + '.');
       });
     });
 

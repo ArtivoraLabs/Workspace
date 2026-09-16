@@ -158,6 +158,63 @@
     var names = Object.keys(state.fields).filter(function (k) { return CHAR_TYPES[state.fields[k].type]; }).sort();
     select.innerHTML = '<option value="">Filter field…</option>' +
       names.map(function (n) { return '<option value="' + esc(n) + '">' + esc(state.fields[n].string || n) + '</option>'; }).join('');
+    populateExecControls();
+  }
+
+  /* ── Executive breakdown (read_group totals) ─────────────────────────── */
+  var GROUPABLE_TYPES = { selection: 1, many2one: 1, boolean: 1 };
+  var MEASURABLE_TYPES = { integer: 1, float: 1, monetary: 1 };
+
+  function populateExecControls() {
+    var groupSel = byId('odooLiveGroupBy');
+    var measureSel = byId('odooLiveMeasure');
+    if (!groupSel || !measureSel) return;
+
+    var groupNames = Object.keys(state.fields).filter(function (k) { return GROUPABLE_TYPES[state.fields[k].type]; }).sort();
+    groupSel.innerHTML = '<option value="">Group by…</option>' +
+      groupNames.map(function (n) { return '<option value="' + esc(n) + '">' + esc(state.fields[n].string || n) + '</option>'; }).join('');
+
+    var measureNames = Object.keys(state.fields).filter(function (k) { return MEASURABLE_TYPES[state.fields[k].type]; }).sort();
+    measureSel.innerHTML = '<option value="__count">Count records</option>' +
+      measureNames.map(function (n) { return '<option value="' + esc(n) + '">Sum of ' + esc(state.fields[n].string || n) + '</option>'; }).join('');
+
+    var execBody = byId('odooLiveExecBody');
+    if (execBody) execBody.innerHTML = '<p class="odoo-live-exec-empty">Pick a "Group by" field above to see live totals for ' + esc(state.activeModel || 'this model') + '.</p>';
+  }
+
+  function loadExecBreakdown() {
+    var groupField = byId('odooLiveGroupBy') ? byId('odooLiveGroupBy').value : '';
+    var measure = byId('odooLiveMeasure') ? byId('odooLiveMeasure').value : '__count';
+    var execBody = byId('odooLiveExecBody');
+    if (!execBody) return;
+    if (!state.activeModel || !groupField) {
+      execBody.innerHTML = '<p class="odoo-live-exec-empty">Pick a "Group by" field above to see live totals for ' + esc(state.activeModel || 'this model') + '.</p>';
+      return;
+    }
+    var cfg = getOdooCfg();
+    if (!cfg) return;
+    execBody.innerHTML = '<p class="odoo-live-exec-empty">Loading live totals…</p>';
+    var measureFields = measure === '__count' ? [] : [measure + ':sum'];
+    window.AL_API.odooReadGroup(cfg, state.activeModel, { domain: buildDomain(), fields: measureFields, groupby: [groupField] })
+      .then(function (groups) {
+        groups = groups || [];
+        var rows = groups.map(function (g) {
+          var rawLabel = g[groupField];
+          var label = Array.isArray(rawLabel) ? rawLabel[1] : (rawLabel === false || rawLabel == null ? '(none)' : String(rawLabel));
+          var value = measure === '__count' ? (g.__count || g[groupField + '_count'] || 0) : (g[measure] || 0);
+          return { label: label, value: value };
+        }).sort(function (a, b) { return b.value - a.value; });
+        var max = rows.reduce(function (m, r) { return Math.max(m, r.value); }, 0) || 1;
+        if (!rows.length) { execBody.innerHTML = '<p class="odoo-live-exec-empty">No records to group.</p>'; return; }
+        execBody.innerHTML = rows.slice(0, 12).map(function (r) {
+          var pct = Math.max(4, Math.round((r.value / max) * 100));
+          var displayVal = measure === '__count' ? r.value.toLocaleString() : r.value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+          return '<div class="odoo-live-exec-row"><span class="exec-label" title="' + esc(r.label) + '">' + esc(r.label) + '</span>' +
+            '<span class="exec-bar-track"><span class="exec-bar-fill" style="width:' + pct + '%"></span></span>' +
+            '<span class="exec-value">' + displayVal + '</span></div>';
+        }).join('');
+      })
+      .catch(function (e) { execBody.innerHTML = '<p class="odoo-live-exec-empty">' + esc((e && e.message) || 'Could not load totals.') + '</p>'; });
   }
 
   function searchableFields() {
@@ -225,6 +282,7 @@
       renderTable();
       setKpis();
       renderPagination();
+      loadExecBreakdown();
     }).catch(function (e) { state.lastLatency = null; failTable(e); });
   }
 
@@ -305,6 +363,9 @@
     });
 
     byId('odooLiveModelSelect').addEventListener('change', function () { if (this.value) selectModel(this.value); });
+
+    if (byId('odooLiveGroupBy')) byId('odooLiveGroupBy').addEventListener('change', loadExecBreakdown);
+    if (byId('odooLiveMeasure')) byId('odooLiveMeasure').addEventListener('change', loadExecBreakdown);
 
     byId('odooLiveAddFilterBtn').addEventListener('click', function () {
       var field = byId('odooLiveFilterField').value;

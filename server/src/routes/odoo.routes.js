@@ -74,4 +74,14 @@ router.post('/records', (req, res) => {
     .then(r => res.json({ ok: true, model, ...r })));
 });
 
+// POST /api/odoo/read-group — live aggregated totals (executive KPI cards),
+// e.g. { model: 'sale.order', fields: ['amount_total:sum'], groupby: ['stage_id'] }
+router.post('/read-group', (req, res) => {
+  const cfg = readCfg(req);
+  const { model, domain, fields, groupby } = req.body || {};
+  if (!model) return res.status(400).json({ ok: false, error: 'model is required' });
+  handle(res, odoo.readGroup(cfg, model, { domain, fields, groupby })
+    .then(groups => res.json({ ok: true, model, groups })));
+});
+
 module.exports = router;

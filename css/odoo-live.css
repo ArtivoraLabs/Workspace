@@ -93,3 +93,22 @@
 
 .odoo-live-refresh-btn.is-spinning svg { animation: odoo-live-spin .8s linear infinite; }
 @keyframes odoo-live-spin { to { transform: rotate(360deg); } }
+
+/* Executive breakdown card — live read_group totals, director-scale */
+.odoo-live-exec-panel { margin-bottom: var(--sp-4); }
+.odoo-live-exec-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  flex-wrap: wrap; margin-bottom: var(--sp-3);
+}
+.odoo-live-exec-head h4 { margin: 0; font-size: var(--fs-sm); color: var(--ink-70); text-transform: uppercase; letter-spacing: .04em; }
+.odoo-live-exec-controls { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.odoo-live-exec-controls select.pro-select { min-width: 150px; }
+.odoo-live-exec-empty { color: var(--ink-40); font-size: var(--fs-sm); margin: var(--sp-3) 0; }
+.odoo-live-exec-body { display: flex; flex-direction: column; gap: 8px; }
+.odoo-live-exec-row {
+  display: grid; grid-template-columns: 160px 1fr 90px; align-items: center; gap: var(--sp-3);
+}
+.odoo-live-exec-row .exec-label { font-size: var(--fs-sm); color: var(--ink-80); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.odoo-live-exec-row .exec-bar-track { background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--r-full); height: 10px; overflow: hidden; }
+.odoo-live-exec-row .exec-bar-fill { height: 100%; background: #6fe3a5; border-radius: var(--r-full); }
+.odoo-live-exec-row .exec-value { font-family: var(--f-mono); font-size: var(--fs-xs); color: var(--ink-70); text-align: right; }
