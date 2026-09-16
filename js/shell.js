@@ -44,7 +44,7 @@
   });
 
   /* ── View switching: Overview ⇄ Data Studio ⇄ AI Assistant ⇄ … ─────────── */
-  var views = ['overview', 'studio', 'ai', 'widgets', 'odoo', 'projects', 'agent-tasks', 'team', 'reports', 'audit-log', 'settings'];
+  var views = ['overview', 'studio', 'ai', 'widgets', 'odoo', 'odoo-live', 'projects', 'agent-tasks', 'team', 'reports', 'audit-log', 'settings'];
   function showView(name) {
     if (views.indexOf(name) === -1) name = 'overview';
     views.forEach(function (v) {
@@ -114,7 +114,7 @@
       if (a === 'home') window.location.href = 'index.html';
       else if (a === 'export') { if (window.showToast) window.showToast('Exporting orders…'); setTimeout(function(){ if (window.__overviewExportCSV) window.__overviewExportCSV(); }, 400); }
       else if (a === 'theme') applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
-      else if (views.indexOf(a) > -1) showView(a); // overview, studio, ai, projects, agent-tasks, team, reports, audit-log, settings
+      else if (views.indexOf(a) > -1) showView(a); // overview, studio, ai, widgets, odoo, odoo-live, projects, agent-tasks, team, reports, audit-log, settings
       closeCmd();
     });
   });

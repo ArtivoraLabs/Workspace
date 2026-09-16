@@ -1,0 +1,95 @@
+/* ==========================================================================
+   DashView — Live Odoo view (director / executive scale)
+   ========================================================================== */
+
+.odoo-live-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.odoo-live-head h1 { display: flex; align-items: center; gap: var(--sp-3); }
+
+.odoo-live-status {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--f-mono); font-size: var(--fs-xs); letter-spacing: .04em;
+  padding: 6px 12px; border-radius: var(--r-full);
+  border: 1px solid var(--line-strong); color: var(--ink-70); background: var(--paper-soft);
+}
+.odoo-live-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-30); flex: none; }
+.odoo-live-status.is-live { color: #6fe3a5; border-color: rgba(111,227,165,.35); background: rgba(111,227,165,.08); }
+.odoo-live-status.is-live .dot { background: #6fe3a5; box-shadow: 0 0 0 0 rgba(111,227,165,.6); animation: odoo-live-pulse 1.8s infinite; }
+.odoo-live-status.is-error { color: var(--danger); border-color: var(--danger-10); background: var(--danger-10); }
+@keyframes odoo-live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(111,227,165,.55); }
+  70% { box-shadow: 0 0 0 8px rgba(111,227,165,0); }
+  100% { box-shadow: 0 0 0 0 rgba(111,227,165,0); }
+}
+
+.odoo-live-toolbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.odoo-live-toolbar select.pro-select { min-width: 132px; }
+
+/* KPI strip — director-scale numbers */
+.odoo-live-kpis {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-4);
+  margin: var(--sp-5) 0;
+}
+.odoo-live-kpi {
+  background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: var(--sp-5); position: relative; overflow: hidden;
+}
+.odoo-live-kpi::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: linear-gradient(90deg, var(--signal), transparent);
+}
+.odoo-live-kpi p.label { font-size: var(--fs-xs); color: var(--ink-50); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+.odoo-live-kpi p.value { font-family: var(--f-display); font-size: var(--fs-2xl); font-weight: 800; color: var(--ink); line-height: 1.1; }
+.odoo-live-kpi p.sub { font-size: var(--fs-xs); color: var(--ink-30); margin-top: 4px; }
+
+/* Body: module rail + main data panel */
+.odoo-live-body { display: grid; grid-template-columns: 260px 1fr; gap: var(--sp-5); align-items: start; }
+@media (max-width: 1000px) { .odoo-live-body { grid-template-columns: 1fr; } }
+
+.odoo-live-modules {
+  background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: var(--sp-3); max-height: 640px; overflow-y: auto;
+}
+.odoo-live-modules h4 { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-50); padding: var(--sp-2) var(--sp-2) var(--sp-3); }
+.odoo-live-module-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; text-align: left; background: transparent; border: 1px solid transparent;
+  border-radius: var(--r-md); padding: 10px 12px; color: var(--ink-70); cursor: pointer;
+  font-size: var(--fs-sm); margin-bottom: 2px; transition: background var(--t-fast), border-color var(--t-fast);
+}
+.odoo-live-module-item:hover { background: var(--signal-10); }
+.odoo-live-module-item.active { background: var(--signal-10); border-color: var(--line-strong); color: var(--ink); font-weight: 600; }
+.odoo-live-module-item .m-count { font-family: var(--f-mono); font-size: 11px; color: var(--ink-30); }
+.odoo-live-modules-empty, .odoo-live-modules-loading { padding: var(--sp-4) var(--sp-3); color: var(--ink-30); font-size: var(--fs-sm); }
+
+.odoo-live-main .panel { padding: var(--sp-4); }
+.odoo-live-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.odoo-live-filterbar .pro-select { min-width: 160px; }
+.odoo-live-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 var(--sp-3); }
+.odoo-live-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--signal-10); border: 1px solid var(--line-strong); color: var(--ink);
+  border-radius: var(--r-full); padding: 4px 6px 4px 10px; font-size: var(--fs-xs); font-family: var(--f-mono);
+}
+.odoo-live-chip button { background: none; border: none; color: var(--ink-50); cursor: pointer; font-size: 13px; line-height: 1; padding: 2px; }
+.odoo-live-chip button:hover { color: var(--danger); }
+
+.odoo-live-table-state { padding: var(--sp-8) 0; text-align: center; color: var(--ink-30); }
+.odoo-live-table-state.is-error { color: var(--danger); }
+
+.odoo-live-pagination { display: flex; align-items: center; justify-content: space-between; margin-top: var(--sp-3); gap: var(--sp-3); flex-wrap: wrap; }
+.odoo-live-pagination .p-info { font-size: var(--fs-xs); color: var(--ink-50); font-family: var(--f-mono); }
+.odoo-live-pagination .p-btns { display: flex; gap: 6px; }
+
+.odoo-live-connect-banner {
+  display: flex; align-items: flex-start; gap: var(--sp-3);
+  background: var(--danger-10); border: 1px solid var(--danger-10); color: var(--ink-70);
+  border-radius: var(--r-lg); padding: var(--sp-4); margin-bottom: var(--sp-5);
+}
+.odoo-live-connect-banner svg { flex: none; color: var(--danger); margin-top: 2px; }
+.odoo-live-connect-banner a { color: var(--signal); font-weight: 600; }
+
+.odoo-live-refresh-btn.is-spinning svg { animation: odoo-live-spin .8s linear infinite; }
+@keyframes odoo-live-spin { to { transform: rotate(360deg); } }

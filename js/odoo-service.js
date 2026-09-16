@@ -177,7 +177,7 @@
 
     if (byId('odooConnectBtn')) byId('odooConnectBtn').addEventListener('click', function () {
       if (window.DVAuth && !window.DVAuth.can('manageOdoo')) { toast('Only Admins can connect Odoo in this workspace.'); return; }
-      var newCfg = { url: byId('odooUrl').value.trim(), db: byId('odooDb').value.trim(), user: byId('odooUser').value.trim() };
+      var newCfg = { url: byId('odooUrl').value.trim(), db: byId('odooDb').value.trim(), user: byId('odooUser').value.trim(), apiKey: byId('odooKey') ? byId('odooKey').value.trim() : '' };
       if (!newCfg.url || !newCfg.db) { toast('Add at least the Odoo URL and database name.'); return; }
       var btn = byId('odooConnectBtn'); var prev = btn.textContent; btn.textContent = 'Connecting…'; btn.disabled = true;
       var tag = byId('odooStatusTag');

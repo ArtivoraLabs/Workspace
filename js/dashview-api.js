@@ -65,6 +65,13 @@ window.AL_API_BASE = window.AL_API_BASE || 'http://localhost:4000/api';
   const getReport = (id) => request('/projects/' + id + '/report');
   const getAiProviders = () => request('/ai/providers');
 
+  // Live Odoo proxy (server/src/routes/odoo.routes.js) — cfg = {url, db, username, apiKey}
+  const odooTest = (cfg) => request('/odoo/test', { method: 'POST', body: JSON.stringify(cfg) });
+  const odooModules = (cfg) => request('/odoo/modules', { method: 'POST', body: JSON.stringify(cfg) }).then(d => d.modules);
+  const odooModels = (cfg, moduleTechnicalName) => request('/odoo/models', { method: 'POST', body: JSON.stringify(Object.assign({ module: moduleTechnicalName }, cfg)) }).then(d => d.models);
+  const odooFields = (cfg, model) => request('/odoo/fields', { method: 'POST', body: JSON.stringify(Object.assign({ model }, cfg)) }).then(d => d.fields);
+  const odooRecords = (cfg, model, opts) => request('/odoo/records', { method: 'POST', body: JSON.stringify(Object.assign({ model }, opts || {}, cfg)) });
+
   // history: [{role:'user'|'assistant', content:string}]
   const aiChat = (projectId, history, opts) => request('/projects/' + projectId + '/ai/chat', {
     method: 'POST',
@@ -75,5 +82,6 @@ window.AL_API_BASE = window.AL_API_BASE || 'http://localhost:4000/api';
     isConnected, user, register, login, disconnect,
     getProjects, createProject, getProjectSummary, getProjectStats, getUsers, getOrders,
     getRevenue, getActivity, searchProject, getReport, getAiProviders, aiChat,
+    odooTest, odooModules, odooModels, odooFields, odooRecords,
   };
 })();
