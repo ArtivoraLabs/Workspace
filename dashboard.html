@@ -19,6 +19,7 @@
 <link rel="stylesheet" href="css/ai-embed.css"/>
 <link rel="stylesheet" href="css/dashview-suite.css"/>
 <link rel="stylesheet" href="css/odoo-live.css"/>
+<link rel="stylesheet" href="css/dashboard-hr-match.css"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -678,6 +679,9 @@
           <p id="odooLiveConnectBannerText">Connect Odoo in <a href="#settings" data-view="settings">Settings</a> first, then sign in to the DashView API server so this view can proxy live requests.</p>
         </div>
 
+        <!-- Odoo API connectivity checkpoints — the tough/critical connection points, marked live -->
+        <div class="odoo-checkpoints compact" id="odooLiveCheckpoints"></div>
+
         <div class="odoo-live-kpis">
           <div class="odoo-live-kpi"><p class="label">Modules live</p><p class="value" id="odooLiveKpiModules">–</p><p class="sub">Installed &amp; readable</p></div>
           <div class="odoo-live-kpi"><p class="label">Records in view</p><p class="value" id="odooLiveKpiRecords">–</p><p class="sub" id="odooLiveKpiRecordsSub">of total in model</p></div>
@@ -892,6 +896,9 @@
               <li><span class="odoo-step-num">2</span><div><b>Add your credentials above</b><p>Works with Odoo Online, Odoo.sh, or self-hosted — uses the standard <code>/jsonrpc</code> endpoint.</p></div></li>
               <li><span class="odoo-step-num">3</span><div><b>Connect, then map your data</b><p>Recommended mapping: <code>Orders</code> ⇄ <code>sale.order</code>, <code>Products</code> ⇄ <code>product.template</code>.</p></div></li>
             </ol>
+
+            <!-- Odoo API connectivity checkpoints — tough/critical integration points, marked & explained -->
+            <div class="odoo-checkpoints" id="odooSettingsCheckpoints"></div>
 
             <div class="settings-btn-row odoo-btn-row">
               <button class="btn btn-signal btn-sm" id="odooConnectBtn" data-require-perm="manageOdoo">Connect to Odoo</button>
@@ -1176,6 +1183,7 @@
 <script src="js/odoo-service.js"></script>
 <script src="js/dashview-api.js"></script>
 <script src="js/odoo-live.js"></script>
+<script src="js/odoo-connectivity.js"></script>
 <script src="js/widget-builder.js"></script>
 <script src="js/shell.js"></script>
 <script src="js/ai-embed.js"></script>

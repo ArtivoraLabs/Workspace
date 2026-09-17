@@ -244,6 +244,18 @@ textarea#chatInput::placeholder{color:var(--text3)}
   .suggest-grid{grid-template-columns:1fr}
   .messages-inner{padding:20px 14px}
 }
+
+/* ── Match the People (HR) dashboard's glass-card look ──────────────────
+   Same idea as .hr-card in css/people.css: translucent surface + blur +
+   a touch more radius, instead of a flat opaque panel. Scoped to this
+   page's own tokens so it stays consistent with its existing dark/light
+   themes rather than importing new ones. */
+.sidebar{background:color-mix(in srgb, var(--surface) 82%, transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.suggest-card{background:color-mix(in srgb, var(--surface) 78%, transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:var(--r-xl)}
+.suggest-card:hover{background:color-mix(in srgb, var(--surface) 92%, transparent);border-color:var(--border-b);transform:translateY(-2px)}
+.composer-box{background:color-mix(in srgb, var(--surface) 84%, transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.modal-card{background:color-mix(in srgb, var(--elevated) 88%, transparent);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.msg-content pre{border-radius:var(--r-lg)}
 </style>
 </head>
 <body>

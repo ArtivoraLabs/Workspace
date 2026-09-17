@@ -28,6 +28,25 @@
   of a monetary/numeric field) and it renders live totals computed
   server-side via Odoo's `read_group` — the CEO/director-facing
   aggregate view, not raw rows. New endpoint: `POST /api/odoo/read-group`.
+- **Connectivity checkpoints panel** (`js/odoo-connectivity.js`) — the
+  points most likely to break a real Odoo connection are now surfaced
+  directly in the UI instead of failing silently, in two places:
+  - **Settings → Odoo integration** — the full checklist: three items
+    verified live in the browser (credentials saved, DashView API
+    backend reachable, signed-in session), plus a production/
+    director-scale checklist (API key vs. password, network path to
+    Odoo's `/jsonrpc` endpoint, per-model access rights, `CORS_ORIGIN`
+    locked down, server-side role gate on `/api/odoo/*`, read-only API
+    user, SQLite→Postgres scaling) that must be confirmed server-side —
+    each marked **critical / required / recommended**.
+  - **Live Odoo view** — a compact strip of the same three live checks
+    at the top of the page, with a "View full checklist" toggle to
+    expand the production checklist inline.
+  These can't all be verified from client-side JS (server config, Odoo
+  permissions, firewall rules), so rather than guessing, each item is
+  labelled with its severity and what to go confirm, and where it's
+  safe to check, it re-evaluates automatically whenever the Odoo config,
+  connection status, or DashView sign-in state changes.
 
 ## Run it locally
 
