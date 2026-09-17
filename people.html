@@ -1,29 +1,142 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8"/>
+<script>(function(){try{var t=localStorage.getItem('dashview-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>People — DashView</title>
 <meta name="description" content="DashView People — headcount, hiring pipeline, device inventory, app spend, payroll and reviews in one workspace."/>
-<meta name="theme-color" content="#F1DFA0"/>
+<meta name="theme-color" content="#f2f3ef"/>
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png"/>
 <link rel="manifest" href="manifest.json"/>
+<link rel="stylesheet" href="css/base.css"/>
+<link rel="stylesheet" href="css/components.css"/>
+<link rel="stylesheet" href="css/dashboard.css"/>
+<link rel="stylesheet" href="css/merged.css"/>
 <link rel="stylesheet" href="css/people.css"/>
 </head>
-<body class="hr-body">
+<body class="dash-body hr-body">
 
 <a class="hr-skip" href="#main">Skip to content</a>
 
-<div class="hr-stage">
-<div class="hr-shell">
+<div class="dash-shell" id="shell">
 
-  <!-- ════ Top bar ════════════════════════════════════════════════════ -->
-  <header class="hr-top">
-    <a class="hr-logo" href="index.html" id="orgMark">Crextio</a>
+  <!-- ══════════════════════ SIDEBAR ══════════════════════ -->
+  <aside class="dash-side" id="sidebar">
+    <a href="index.html" class="dash-side-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#e8a33d" stroke-width="1.6"/><path d="M7 13l3-5 2 3 2-4 3 6" stroke="#e8a33d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>DashView</span>
+      <button class="dash-side-collapse-btn" id="sidebarCollapseBtn" title="Collapse sidebar" aria-label="Collapse sidebar">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 4v16M15 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h10M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M15 4v16"/></svg>
+      </button>
+    </a>
+    <nav class="dash-nav">
+      <p class="dash-nav-label">Workspace</p>
+      <a href="dashboard.html#overview" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Overview</span>
+      </a>
+      <a href="dashboard.html#studio" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+        <span>Data Studio</span>
+      </a>
+      <a href="people.html" class="dash-nav-link active">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 20v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></svg>
+        <span>People</span>
+      </a>
+      <a href="dashboard.html#projects" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+        <span>Projects</span>
+      </a>
+      <a href="dashboard.html#agent-tasks" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
+        <span>Agent tasks</span>
+      </a>
+      <a href="dashboard.html#team" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.87"/></svg>
+        <span>Team</span>
+      </a>
+      <p class="dash-nav-label">Analytics</p>
+      <a href="dashboard.html#reports" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+        <span>Reports</span>
+      </a>
+      <a href="ai.html" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 2c-1.7 0-3 1.2-3 3v1H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2V5c0-1.8-1.3-3-3-3Z"/><circle cx="12" cy="13" r="2"/></svg>
+        <span>AI Assistant</span>
+      </a>
+      <a href="dashboard.html#widgets" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="8" height="5" rx="1"/><rect x="13" y="3" width="8" height="10" rx="1"/><rect x="3" y="10" width="8" height="11" rx="1"/><rect x="13" y="15" width="8" height="6" rx="1"/></svg>
+        <span>Widget Builder</span>
+      </a>
+      <a href="dashboard.html#odoo-live" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/><circle cx="19.5" cy="5" r="3" fill="#6fe3a5" stroke="none"/></svg>
+        <span>Odoo</span>
+      </a>
+      <a href="dashboard.html#audit-log" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+        <span>Audit log</span>
+      </a>
+      <p class="dash-nav-label">Settings</p>
+      <a href="#" id="sidebarSettingsLink" class="dash-nav-link">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 18a1.65 1.65 0 0 0-1.51 1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+        <span>Settings</span>
+      </a>
+    </nav>
+  </aside>
 
-    <div class="hr-navwrap">
-      <nav class="hr-nav" id="mainNav" role="tablist" aria-label="Workspace sections">
+  <!-- ══════════════════════ MAIN ══════════════════════ -->
+  <div class="dash-main">
+
+    <header class="dash-topbar">
+      <button class="dash-icon-btn dash-sidebar-toggle" id="mobileSideToggle" aria-label="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+
+      <div class="dash-top-actions" style="margin-left:auto;">
+        <button class="hr-iconbtn theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="Switch to dark theme" title="Switch theme">
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+        </button>
+
+        <button class="hr-iconbtn hr-iconbtn--wide" id="settingsBtn" aria-label="Open settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Setting</span>
+        </button>
+
+        <div class="hr-rel">
+          <button class="hr-iconbtn" id="bellBtn" aria-label="Notifications" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span class="hr-dot" id="bellDot" hidden></span>
+          </button>
+          <div class="hr-pop" id="notiPop" hidden role="dialog" aria-label="Notifications">
+            <div class="hr-pop-head">
+              <span class="hr-pop-title">Notifications</span>
+              <button class="hr-pop-link" id="markReadBtn">Mark all read</button>
+            </div>
+            <div id="notiList"></div>
+          </div>
+        </div>
+
+        <button class="hr-iconbtn hr-avatarbtn" id="meBtn" aria-label="Your profile"></button>
+      </div>
+    </header>
+
+    <div class="dash-content">
+    <div class="hr-stage">
+    <div class="hr-shell">
+
+    <a href="index.html" id="orgMark" class="visually-hidden">Crextio</a>
+
+    <nav class="hr-subnav">
+      <div class="hr-nav" id="mainNav" role="tablist" aria-label="Workspace sections">
         <button class="hr-nav-btn" role="tab" data-view="dashboard" aria-selected="true">Dashboard</button>
         <button class="hr-nav-btn" role="tab" data-view="people"    aria-selected="false">People</button>
         <button class="hr-nav-btn" role="tab" data-view="hiring"    aria-selected="false">Hiring</button>
@@ -32,38 +145,10 @@
         <button class="hr-nav-btn" role="tab" data-view="salary"    aria-selected="false">Salary</button>
         <button class="hr-nav-btn" role="tab" data-view="calendar"  aria-selected="false">Calendar</button>
         <button class="hr-nav-btn" role="tab" data-view="reviews"   aria-selected="false">Reviews</button>
-      </nav>
-
-      <button class="hr-iconbtn hr-iconbtn--wide" id="settingsBtn" aria-label="Open settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-        </svg>
-        <span>Setting</span>
-      </button>
-
-      <div class="hr-rel">
-        <button class="hr-iconbtn" id="bellBtn" aria-label="Notifications" aria-expanded="false">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
-          <span class="hr-dot" id="bellDot" hidden></span>
-        </button>
-        <div class="hr-pop" id="notiPop" hidden role="dialog" aria-label="Notifications">
-          <div class="hr-pop-head">
-            <span class="hr-pop-title">Notifications</span>
-            <button class="hr-pop-link" id="markReadBtn">Mark all read</button>
-          </div>
-          <div id="notiList"></div>
-        </div>
       </div>
+    </nav>
 
-      <button class="hr-iconbtn hr-avatarbtn" id="meBtn" aria-label="Your profile"></button>
-    </div>
-  </header>
-
-  <main id="main">
+    <main id="main">
 
   <!-- ════ Dashboard ══════════════════════════════════════════════════ -->
   <section class="hr-view" id="view-dashboard" role="tabpanel" aria-label="Dashboard">
@@ -196,8 +281,12 @@
   <section class="hr-view" id="view-reviews"  role="tabpanel" aria-label="Reviews"  hidden></section>
   <section class="hr-view" id="view-settings" role="tabpanel" aria-label="Settings" hidden></section>
 
-  </main>
-</div>
+    </main>
+
+    </div>
+    </div>
+    </div>
+  </div>
 </div>
 
 <!-- ════ Event modal ══════════════════════════════════════════════════ -->
@@ -250,6 +339,7 @@
 
 <div class="hr-toasts" id="toasts" aria-live="polite"></div>
 
+<script src="js/people-shell.js"></script>
 <script src="js/hr-store.js"></script>
 <script src="js/hr-icons.js"></script>
 <script src="js/hr-views.js"></script>
