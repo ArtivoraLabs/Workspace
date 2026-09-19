@@ -947,17 +947,22 @@
               <div class="settings-field-row"><label>Database</label><input type="text" class="pro-select" id="odooDb" placeholder="yourcompany-live" style="width:100%"/></div>
               <div class="settings-field-row"><label>Username / email</label><input type="text" class="pro-select" id="odooUser" placeholder="admin@yourcompany.com" style="width:100%"/></div>
               <div class="settings-field-row"><label>API key</label><input type="password" class="pro-select" id="odooKey" placeholder="Odoo API key (Settings → Account Security)" style="width:100%"/></div>
+              <div class="settings-field-row" style="grid-column:1/-1;">
+                <label style="display:flex;align-items:center;gap:6px;">Proxy URL <span style="font-size:10px;background:rgba(34,197,94,.12);color:#22c55e;padding:1px 6px;border-radius:99px;font-weight:600;">Free — Cloudflare Worker</span></label>
+                <input type="text" class="pro-select" id="odooProxyUrl" placeholder="https://dashview-proxy.YOUR-NAME.workers.dev" style="width:100%"/>
+                <small style="color:var(--ink-30,#9ba3b5);font-size:11px;margin-top:4px;display:block;">Deploy <code>cloudflare-worker.js</code> ke code ko workers.cloudflare.com pe (free, no card) → URL yahan paste karo for live Odoo data.</small>
+              </div>
             </div>
 
             <div class="odoo-security-note">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-              <p>Credentials stay in this browser only. This demo build simulates the handshake rather than calling a live Odoo server — see <code>js/odoo-service.js</code> for the production seam.</p>
+              <p>Credentials yahan browser mein hi rehte hain. <b>Proxy URL lagao</b> (Cloudflare Worker — free, no card) for live Odoo data. Bina Proxy URL ke demo mode mein sample records dikhenge. Dekho <code>DEPLOY.md</code>.</p>
             </div>
 
             <ol class="odoo-steps">
-              <li><span class="odoo-step-num">1</span><div><b>Generate an API key</b><p>In Odoo, go to <b>Settings → Users → API Keys</b>.</p></div></li>
-              <li><span class="odoo-step-num">2</span><div><b>Add your credentials above</b><p>Works with Odoo Online, Odoo.sh, or self-hosted — uses the standard <code>/jsonrpc</code> endpoint.</p></div></li>
-              <li><span class="odoo-step-num">3</span><div><b>Connect, then map your data</b><p>Recommended mapping: <code>Orders</code> ⇄ <code>sale.order</code>, <code>Products</code> ⇄ <code>product.template</code>.</p></div></li>
+              <li><span class="odoo-step-num">1</span><div><b>API key banao</b><p>Odoo → <b>Settings → Users → Account Security → New API Key</b>.</p></div></li>
+              <li><span class="odoo-step-num">2</span><div><b>Cloudflare Worker deploy karo (free)</b><p><b>workers.cloudflare.com</b> → Create Worker → <code>cloudflare-worker.js</code> code paste karo → Deploy → URL copy karo.</p></div></li>
+              <li><span class="odoo-step-num">3</span><div><b>Fields fill karo + Connect dabao</b><p>Proxy URL = Worker URL. Odoo Online, Odoo.sh, self-hosted sab ke saath kaam karta hai.</p></div></li>
             </ol>
 
             <!-- Odoo API connectivity checkpoints — tough/critical integration points, marked & explained -->
