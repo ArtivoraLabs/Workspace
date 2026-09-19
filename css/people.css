@@ -99,10 +99,22 @@ body.hr-body {
 
 .hr-navwrap { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
-/* Secondary tab bar — sits under the shared dash-topbar now that the
-   sidebar owns primary navigation, so it no longer needs hr-top's flex row
-   to position it. */
-.hr-subnav { display: flex; align-items: center; margin-bottom: 28px; }
+/* Secondary tab bar — its place is pinned directly under the shared
+   dash-topbar: `position: sticky` + `top: var(--nav-h)` locks it to that one
+   spot on the page (the exact height of the topbar above it, so the two
+   sit flush with no gap and no overlap) instead of scrolling away with the
+   page content like a piece of body copy. An opaque backdrop + hairline
+   border give it a real edge so content scrolling underneath never bleeds
+   through, and z-index seats it just below the topbar (20) so open popovers
+   from the topbar still draw on top of it. */
+.hr-subnav {
+  display: flex; align-items: center;
+  position: sticky; top: var(--nav-h); z-index: 15;
+  margin: 0 0 24px; padding: 16px 0;
+  background: var(--paper-alt);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+}
 
 .hr-nav {
   display: flex; align-items: center; gap: 2px;
@@ -634,7 +646,30 @@ select.hr-field { padding-right: 34px; cursor: pointer; }
 .hr-btn:active { transform: scale(.97); }
 .hr-btn--quiet { background: color-mix(in srgb, var(--paper) 72%, transparent); color: var(--ink); border-color: var(--card-line); }
 .hr-btn--quiet:hover { background: var(--paper); }
+.hr-btn--danger { color: var(--danger); }
+.hr-btn--danger:hover { background: color-mix(in srgb, var(--danger) 12%, var(--paper)); border-color: color-mix(in srgb, var(--danger) 40%, var(--card-line)); }
 .hr-btn svg { width: 15px; height: 15px; }
+
+/* ══ Settings page ═══════════════════════════════════════════════════════ */
+.hr-settings-grid { align-items: start; }
+.hr-settings-head { display: flex; align-items: center; gap: 13px; margin-bottom: 20px; }
+.hr-settings-icon {
+  width: 40px; height: 40px; border-radius: 12px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--butter) 15%, transparent); color: var(--butter);
+}
+.hr-settings-icon svg { width: 18px; height: 18px; }
+.hr-settings-icon--danger { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.hr-settings-head .hr-card-title { font-size: 18px; margin: 0; }
+.hr-settings-head .hr-viewsub { margin-top: 2px; font-size: 13px; }
+.hr-settings-actions { margin-top: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+.hr-settings-note { font-size: 13.5px; color: var(--ink-70); line-height: 1.55; margin: 0; }
+
+.hr-cap-row { display: flex; align-items: center; gap: 14px; padding: 9px 0; }
+.hr-cap-label { width: 120px; font-size: 14px; flex: none; }
+.hr-cap-range { flex: 1; accent-color: var(--butter); }
+.hr-cap-val { width: 46px; text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; flex: none; }
+.hr-cap-sum { margin-top: 14px; font-size: 13px; color: var(--ink-70); padding-top: 12px; border-top: 1px solid var(--hairline); }
 
 /* Tables */
 .hr-tablewrap { overflow-x: auto; border-radius: var(--r-tile); }
@@ -651,6 +686,44 @@ select.hr-field { padding-right: 34px; cursor: pointer; }
 .hr-person { display: flex; align-items: center; gap: 11px; }
 .hr-person-name { font-weight: 500; }
 .hr-person-sub { font-size: 12.5px; color: var(--muted); }
+
+/* View toggle — switches the People directory between a List (table) and
+   a Grid (card) view, the same "view" concept Odoo's own list/kanban
+   switcher uses. Sits in the toolbar next to the other directory tools. */
+.hr-viewtoggle {
+  display: inline-flex; align-items: center; gap: 2px; flex: none;
+  background: color-mix(in srgb, var(--paper) 66%, transparent);
+  border: 1px solid var(--card-line);
+  border-radius: var(--r-pill);
+  padding: 4px;
+}
+.hr-viewtoggle-btn {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: var(--r-full);
+  color: var(--ink-50); transition: color .16s ease, background-color .16s ease;
+}
+.hr-viewtoggle-btn svg { width: 16px; height: 16px; }
+.hr-viewtoggle-btn:hover { color: var(--ink); }
+.hr-viewtoggle-btn[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+/* Grid (card) view — an alternative to the table for the People directory */
+.hr-people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.hr-people-card {
+  background: var(--card); border: 1px solid var(--card-line); border-radius: var(--r-tile);
+  padding: 18px; display: flex; flex-direction: column; gap: 10px;
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  transition: box-shadow .16s ease, border-color .16s ease, transform .16s ease;
+}
+.hr-people-card:hover { box-shadow: var(--shadow-card); border-color: var(--butter-dim); transform: translateY(-1px); }
+.hr-people-card-top { display: flex; align-items: center; justify-content: space-between; }
+.hr-people-card-name { font-size: 15.5px; font-weight: 500; }
+.hr-people-card-role { font-size: 13px; color: var(--muted); margin-top: -8px; }
+.hr-people-card-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--ink-70); }
+.hr-people-card-meta span { background: color-mix(in srgb, var(--paper) 72%, transparent); border: 1px solid var(--hairline); border-radius: var(--r-pill); padding: 3px 10px; }
+.hr-people-card-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--hairline); }
+.hr-people-card-pay { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.hr-people-card-foot .hr-btn--quiet { height: 32px; padding: 0 14px; font-size: 12.5px; }
 
 .hr-tag {
   display: inline-flex; align-items: center; gap: 6px;

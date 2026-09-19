@@ -24,7 +24,7 @@
 
   /* Per-view UI state that shouldn't live in the persisted store. */
   var ui = {
-    peopleQuery: '', peopleDept: 'All', peopleSort: 'name',
+    peopleQuery: '', peopleDept: 'All', peopleSort: 'name', peopleView: 'list',
     deviceFilter: 'All',
     calMonth: null
   };
@@ -75,7 +75,13 @@
       return a.name.localeCompare(b.name);
     });
 
-    var tools =
+    var viewToggle =
+      '<div class="hr-viewtoggle" role="group" aria-label="Directory view">' +
+        '<button type="button" class="hr-viewtoggle-btn" id="pplViewList" data-pplview="list" aria-pressed="' + (ui.peopleView !== 'grid') + '" aria-label="List view" title="List view">' + I.svg('list') + '</button>' +
+        '<button type="button" class="hr-viewtoggle-btn" id="pplViewGrid" data-pplview="grid" aria-pressed="' + (ui.peopleView === 'grid') + '" aria-label="Grid view" title="Grid view">' + I.svg('grid') + '</button>' +
+      '</div>';
+
+    var tools = viewToggle +
       '<input class="hr-field" id="pplSearch" type="search" placeholder="Search name or role" value="' + esc(ui.peopleQuery) + '"/>' +
       '<select class="hr-field" id="pplDept" aria-label="Filter by department">' +
         depts.map(function (d) { return '<option' + (d === ui.peopleDept ? ' selected' : '') + '>' + esc(d) + '</option>'; }).join('') +
@@ -87,24 +93,42 @@
       '</select>' +
       '<button class="hr-btn hr-btn--quiet" id="pplExport">' + I.svg('download') + 'Export</button>';
 
-    var body = rows.length ? (
-      '<div class="hr-tablewrap"><table class="hr-table">' +
-      '<thead><tr><th>Name</th><th>Department</th><th>Contract</th><th>Status</th><th class="hr-num">Monthly</th><th></th></tr></thead><tbody>' +
-      rows.map(function (e) {
-        var tag = e.status === 'Active' ? 'hr-tag--ok' : e.status === 'On leave' ? 'hr-tag--warn' : '';
-        return '<tr>' +
-          '<td><span class="hr-person">' + av(e, 34) +
-            '<span><span class="hr-person-name">' + esc(e.name) + '</span>' +
-            '<span class="hr-person-sub">' + esc(e.role) + '</span></span></span></td>' +
-          '<td>' + esc(e.dept) + '</td>' +
-          '<td>' + esc(e.type) + '</td>' +
-          '<td><span class="hr-tag ' + tag + '">' + esc(e.status) + '</span></td>' +
-          '<td class="hr-num">' + U.money(e.pay) + '</td>' +
-          '<td class="hr-num"><button class="hr-btn hr-btn--quiet" data-spot="' + e.id + '">Spotlight</button></td>' +
-          '</tr>';
-      }).join('') + '</tbody></table></div>'
-    ) : '<div class="hr-empty"><div class="hr-empty-title">No one matches that search</div>' +
+    var empty = '<div class="hr-empty"><div class="hr-empty-title">No one matches that search</div>' +
         '<div class="hr-empty-note">Clear the filters to see the full directory.</div></div>';
+
+    var body;
+    if (!rows.length) {
+      body = empty;
+    } else if (ui.peopleView === 'grid') {
+      body = '<div class="hr-people-grid">' + rows.map(function (e) {
+        var tag = e.status === 'Active' ? 'hr-tag--ok' : e.status === 'On leave' ? 'hr-tag--warn' : '';
+        return '<div class="hr-people-card">' +
+          '<div class="hr-people-card-top">' + av(e, 44) + '<span class="hr-tag ' + tag + '">' + esc(e.status) + '</span></div>' +
+          '<div><div class="hr-people-card-name">' + esc(e.name) + '</div>' +
+          '<div class="hr-people-card-role">' + esc(e.role) + '</div></div>' +
+          '<div class="hr-people-card-meta"><span>' + esc(e.dept) + '</span><span>' + esc(e.type) + '</span></div>' +
+          '<div class="hr-people-card-foot"><span class="hr-people-card-pay">' + U.money(e.pay) + '</span>' +
+          '<button class="hr-btn hr-btn--quiet" data-spot="' + e.id + '">Spotlight</button></div>' +
+          '</div>';
+      }).join('') + '</div>';
+    } else {
+      body =
+        '<div class="hr-tablewrap"><table class="hr-table">' +
+        '<thead><tr><th>Name</th><th>Department</th><th>Contract</th><th>Status</th><th class="hr-num">Monthly</th><th></th></tr></thead><tbody>' +
+        rows.map(function (e) {
+          var tag = e.status === 'Active' ? 'hr-tag--ok' : e.status === 'On leave' ? 'hr-tag--warn' : '';
+          return '<tr>' +
+            '<td><span class="hr-person">' + av(e, 34) +
+              '<span><span class="hr-person-name">' + esc(e.name) + '</span>' +
+              '<span class="hr-person-sub">' + esc(e.role) + '</span></span></span></td>' +
+            '<td>' + esc(e.dept) + '</td>' +
+            '<td>' + esc(e.type) + '</td>' +
+            '<td><span class="hr-tag ' + tag + '">' + esc(e.status) + '</span></td>' +
+            '<td class="hr-num">' + U.money(e.pay) + '</td>' +
+            '<td class="hr-num"><button class="hr-btn hr-btn--quiet" data-spot="' + e.id + '">Spotlight</button></td>' +
+            '</tr>';
+        }).join('') + '</tbody></table></div>';
+    }
 
     var active = st.team.filter(function (e) { return e.status === 'Active'; }).length;
     var payroll = st.team.reduce(function (a, e) { return a + e.pay; }, 0);
@@ -130,6 +154,13 @@
     });
     on(byId('pplDept'), 'change', function (e) { ui.peopleDept = e.target.value; renderPeople(); });
     on(byId('pplSort'), 'change', function (e) { ui.peopleSort = e.target.value; renderPeople(); });
+    byId('view-people').querySelectorAll('[data-pplview]').forEach(function (b) {
+      on(b, 'click', function () {
+        if (ui.peopleView === b.dataset.pplview) return;
+        ui.peopleView = b.dataset.pplview;
+        renderPeople();
+      });
+    });
     on(byId('pplExport'), 'click', function () {
       downloadCSV('people.csv', [['Name', 'Role', 'Department', 'Contract', 'Status', 'Monthly', 'Started', 'Email']]
         .concat(rows.map(function (e) { return [e.name, e.role, e.dept, e.type, e.status, e.pay, e.start, e.email]; })));
@@ -483,18 +514,19 @@
     var st = S.get();
 
     var capRows = st.capacity.map(function (c) {
-      return '<div style="display:flex;align-items:center;gap:14px;padding:9px 0">' +
-        '<span style="width:120px;font-size:14px">' + esc(c.label) + '</span>' +
-        '<input type="range" min="0" max="100" value="' + c.pct + '" data-cap="' + c.id + '" style="flex:1" aria-label="' + esc(c.label) + ' percentage"/>' +
-        '<span style="width:46px;text-align:right;font-variant-numeric:tabular-nums;font-size:14px" data-capval="' + c.id + '">' + c.pct + '%</span>' +
+      return '<div class="hr-cap-row">' +
+        '<span class="hr-cap-label">' + esc(c.label) + '</span>' +
+        '<input type="range" min="0" max="100" value="' + c.pct + '" data-cap="' + c.id + '" class="hr-cap-range" aria-label="' + esc(c.label) + ' percentage"/>' +
+        '<span class="hr-cap-val" data-capval="' + c.id + '">' + c.pct + '%</span>' +
         '</div>';
     }).join('');
 
     byId('view-settings').innerHTML =
       head('Settings', 'Everything here saves to this browser') +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start" class="hr-salgrid">' +
+      '<div class="hr-salgrid hr-settings-grid">' +
       card(
-        '<h2 class="hr-card-title" style="margin:0 0 16px">Workspace</h2>' +
+        '<div class="hr-settings-head"><span class="hr-settings-icon">' + I.svg('box') + '</span>' +
+        '<div><h2 class="hr-card-title">Workspace</h2><p class="hr-viewsub">How your org shows up across the app</p></div></div>' +
         '<div class="hr-form">' +
           '<div><label class="hr-label" for="setOrg">Organisation name</label>' +
           '<input class="hr-field" id="setOrg" value="' + esc(st.profile.org) + '"/></div>' +
@@ -503,16 +535,22 @@
           '<div><label class="hr-label" for="setGoal">Working-day target (hours)</label>' +
           '<input class="hr-field" id="setGoal" type="number" min="1" max="16" step="0.5" value="' + st.profile.dayGoalHours + '"/></div>' +
         '</div>' +
-        '<div style="margin-top:20px;display:flex;gap:8px">' +
-          '<button class="hr-btn" id="setSave">Save changes</button>' +
-          '<button class="hr-btn hr-btn--quiet" id="setReset">Reset workspace</button>' +
-        '</div>'
+        '<div class="hr-settings-actions"><button class="hr-btn" id="setSave">' + I.svg('check') + 'Save changes</button></div>'
       ) +
       card(
-        '<h2 class="hr-card-title" style="margin:0 0 6px">Capacity split</h2>' +
-        '<p class="hr-viewsub" style="margin:0 0 12px">Sets the bar under the welcome line.</p>' +
+        '<div class="hr-settings-head"><span class="hr-settings-icon">' + I.svg('clock') + '</span>' +
+        '<div><h2 class="hr-card-title">Capacity split</h2><p class="hr-viewsub">Sets the bar under the welcome line</p></div></div>' +
         capRows +
-        '<div style="margin-top:12px;font-size:13px;color:var(--ink-70)" id="capSum"></div>'
+        '<div class="hr-cap-sum" id="capSum"></div>'
+      ) +
+      card(
+        '<div class="hr-settings-head"><span class="hr-settings-icon hr-settings-icon--danger">' + I.svg('folder') + '</span>' +
+        '<div><h2 class="hr-card-title">Data</h2><p class="hr-viewsub">The directory lives only in this browser</p></div></div>' +
+        '<p class="hr-settings-note">Export keeps a CSV backup you can reopen elsewhere. Resetting clears every change made here — hires, edits, salary and device assignments — and restores the sample directory.</p>' +
+        '<div class="hr-settings-actions">' +
+          '<button class="hr-btn hr-btn--quiet" id="setExport">' + I.svg('download') + 'Export directory (CSV)</button>' +
+          '<button class="hr-btn hr-btn--quiet hr-btn--danger" id="setReset">' + I.svg('trash') + 'Reset workspace</button>' +
+        '</div>'
       ) +
       '</div>';
 
@@ -532,6 +570,12 @@
         s.profile.dayGoalHours = (goal > 0 && goal <= 16) ? goal : 8;
       });
       toast('Settings saved');
+    });
+    on(byId('setExport'), 'click', function () {
+      var team = S.get().team;
+      downloadCSV('people.csv', [['Name', 'Role', 'Department', 'Contract', 'Status', 'Monthly', 'Started', 'Email']]
+        .concat(team.map(function (e) { return [e.name, e.role, e.dept, e.type, e.status, e.pay, e.start, e.email]; })));
+      toast('Directory exported');
     });
     on(byId('setReset'), 'click', function () {
       if (confirm('Reset every change back to the seeded workspace?')) { S.reset(); toast('Workspace reset'); }

@@ -13,10 +13,14 @@
 
   function byId(id) { return document.getElementById(id); }
   function loadJSON(key, fallback) { try { var v = JSON.parse(localStorage.getItem(key)); return v === null || v === undefined ? fallback : v; } catch (e) { return fallback; } }
+  function saveJSON(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {} }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   var CHAR_TYPES = { char: 1, text: 1, html: 1, selection: 1, many2one: 1 };
+  var DISPLAYABLE_TYPES = { char: 1, text: 1, selection: 1, many2one: 1, integer: 1, float: 1, monetary: 1, boolean: 1, date: 1, datetime: 1 };
   var PAGE_SIZE = 25;
+  var COLUMNS_KEY = 'dashview_odoo_columns';   // { [model]: string[] } — customized display columns, per model
+  var VIEWS_KEY = 'dashview_odoo_saved_views'; // [{ id, name, model, filters, groupBy, measure }]
 
   var state = {
     modules: [], activeModule: null,
@@ -24,7 +28,9 @@
     fields: {}, filters: [],
     page: 0, total: 0, records: [], columns: [],
     lastLatency: null, lastSynced: null,
-    autoRefreshTimer: null
+    autoRefreshTimer: null,
+    columnPrefs: loadJSON(COLUMNS_KEY, {}),
+    savedViews: loadJSON(VIEWS_KEY, [])
   };
 
   function getOdooCfg() {
@@ -137,20 +143,45 @@
   }
 
   /* ── Model + fields + filters ────────────────────────────────────────── */
-  function selectModel(model) {
-    state.activeModel = model;
-    state.filters = [];
-    state.page = 0;
-    byId('odooLiveModelSelect').value = model;
+  function ensureModelOption(model, label) {
+    var sel = byId('odooLiveModelSelect');
+    var known = Array.prototype.some.call(sel.options, function (o) { return o.value === model; });
+    if (!known) {
+      var opt = document.createElement('option');
+      opt.value = model; opt.textContent = label || model;
+      sel.appendChild(opt);
+    }
+  }
+
+  function closePops() {
+    if (byId('odooLiveColumnsPop')) byId('odooLiveColumnsPop').hidden = true;
+    if (byId('odooLiveViewsPop')) byId('odooLiveViewsPop').hidden = true;
+  }
+
+  /* Loads the field schema for state.activeModel and arms the controls that
+     depend on it. Split out from selectModel so applyView() can reuse the
+     exact same setup when a saved view points at a different model. */
+  function loadModelFields() {
     var cfg = getOdooCfg();
-    window.AL_API.odooFields(cfg, model).then(function (fields) {
+    return window.AL_API.odooFields(cfg, state.activeModel).then(function (fields) {
       state.fields = fields || {};
       populateFilterFieldSelect();
       byId('odooLiveFilterValue').disabled = false;
       byId('odooLiveAddFilterBtn').disabled = false;
       byId('odooLiveQuickSearch').disabled = false;
-      loadRecords();
-    }).catch(function (e) { failTable(e); });
+      if (byId('odooLiveColumnsBtn')) byId('odooLiveColumnsBtn').disabled = false;
+      if (byId('odooLiveViewsBtn')) byId('odooLiveViewsBtn').disabled = false;
+    });
+  }
+
+  function selectModel(model, label) {
+    state.activeModel = model;
+    state.filters = [];
+    state.page = 0;
+    ensureModelOption(model, label);
+    byId('odooLiveModelSelect').value = model;
+    closePops();
+    loadModelFields().then(loadRecords).catch(function (e) { failTable(e); });
   }
 
   function populateFilterFieldSelect() {
@@ -245,6 +276,138 @@
     });
   }
 
+  /* ── Column customization ─────────────────────────────────────────────
+     Odoo's own list views let you toggle "optional fields" on and off; this
+     is the same idea. getDisplayFields() prefers a saved per-model choice
+     over the auto-picked default, so a customization survives reloads and
+     reconnects. ─────────────────────────────────────────────────────── */
+  function getEligibleFields() {
+    return Object.keys(state.fields).filter(function (k) { return DISPLAYABLE_TYPES[state.fields[k].type]; });
+  }
+
+  function getDefaultFields() {
+    var def = getEligibleFields().slice(0, 7);
+    if (def.indexOf('display_name') === -1 && state.fields.display_name) def.unshift('display_name');
+    return def;
+  }
+
+  function getDisplayFields() {
+    var pref = state.activeModel && state.columnPrefs[state.activeModel];
+    if (pref && pref.length) {
+      var eligible = getEligibleFields();
+      var kept = pref.filter(function (f) { return eligible.indexOf(f) > -1; }); // schema may have moved on
+      if (kept.length) return kept;
+    }
+    return getDefaultFields();
+  }
+
+  function renderColumnsPopover() {
+    var list = byId('odooLiveColumnsList');
+    if (!list || !state.activeModel) return;
+    var eligible = getEligibleFields().sort(function (a, b) {
+      return (state.fields[a].string || a).localeCompare(state.fields[b].string || b);
+    });
+    if (!eligible.length) { list.innerHTML = '<div class="odoo-live-pop-empty">No fields on this model yet.</div>'; return; }
+    var active = state.columns.length ? state.columns : getDisplayFields();
+    list.innerHTML = eligible.map(function (f) {
+      var checked = active.indexOf(f) > -1;
+      return '<label class="odoo-live-col-row"><input type="checkbox" data-col="' + esc(f) + '"' + (checked ? ' checked' : '') + '/>' +
+        '<span title="' + esc(f) + '">' + esc(state.fields[f].string || f) + '</span></label>';
+    }).join('');
+    list.querySelectorAll('input[type=checkbox]').forEach(function (box) {
+      box.addEventListener('change', applyColumnSelection);
+    });
+  }
+
+  function applyColumnSelection() {
+    var list = byId('odooLiveColumnsList');
+    var chosen = Array.prototype.slice.call(list.querySelectorAll('input[type=checkbox]:checked'))
+      .map(function (b) { return b.getAttribute('data-col'); });
+    if (!chosen.length) return; // never let the table go to zero columns
+    state.columnPrefs[state.activeModel] = chosen;
+    saveJSON(COLUMNS_KEY, state.columnPrefs);
+    loadRecords();
+  }
+
+  function resetColumns() {
+    if (!state.activeModel) return;
+    delete state.columnPrefs[state.activeModel];
+    saveJSON(COLUMNS_KEY, state.columnPrefs);
+    renderColumnsPopover();
+    loadRecords();
+  }
+
+  /* ── Saved views ───────────────────────────────────────────────────────
+     A saved view bundles model + filter chips + group-by + measure — enough
+     to reproduce a specific slice of the live data (e.g. "Open leads by
+     salesperson") in one click, the way Odoo's own Favorites menu does. */
+  function renderViewsPopover() {
+    var list = byId('odooLiveViewsList');
+    if (!list) return;
+    if (!state.savedViews.length) {
+      list.innerHTML = '<div class="odoo-live-pop-empty">No saved views yet — set up filters, then "Save current".</div>';
+      return;
+    }
+    list.innerHTML = state.savedViews.map(function (v) {
+      return '<div class="odoo-live-view-row"><button type="button" class="apply" data-view-id="' + esc(v.id) + '">' + esc(v.name) + '</button>' +
+        '<span class="model-tag">' + esc(v.model) + '</span>' +
+        '<button type="button" class="remove" data-remove-id="' + esc(v.id) + '" title="Delete saved view" aria-label="Delete saved view">✕</button></div>';
+    }).join('');
+    list.querySelectorAll('[data-view-id]').forEach(function (b) {
+      b.addEventListener('click', function () { applyView(b.getAttribute('data-view-id')); });
+    });
+    list.querySelectorAll('[data-remove-id]').forEach(function (b) {
+      b.addEventListener('click', function (e) { e.stopPropagation(); removeView(b.getAttribute('data-remove-id')); });
+    });
+  }
+
+  function saveCurrentView() {
+    if (!state.activeModel) return;
+    var input = byId('odooLiveViewName');
+    var name = (input && input.value.trim()) || ((state.fields.display_name ? '' : '') + state.activeModel + ' view');
+    var view = {
+      id: 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: name, model: state.activeModel,
+      filters: state.filters.slice(),
+      groupBy: byId('odooLiveGroupBy') ? byId('odooLiveGroupBy').value : '',
+      measure: byId('odooLiveMeasure') ? byId('odooLiveMeasure').value : '__count'
+    };
+    state.savedViews.unshift(view);
+    saveJSON(VIEWS_KEY, state.savedViews);
+    if (input) input.value = '';
+    renderViewsPopover();
+    if (window.showToast) window.showToast('Saved view "' + name + '".');
+  }
+
+  function applyView(id) {
+    var view = state.savedViews.filter(function (v) { return v.id === id; })[0];
+    if (!view) return;
+    closePops();
+    var restore = function () {
+      state.filters = (view.filters || []).slice();
+      state.page = 0;
+      renderChips();
+      if (byId('odooLiveGroupBy') && view.groupBy) byId('odooLiveGroupBy').value = view.groupBy;
+      if (byId('odooLiveMeasure')) byId('odooLiveMeasure').value = view.measure || '__count';
+      loadRecords();
+      loadExecBreakdown();
+    };
+    if (state.activeModel === view.model) { restore(); return; }
+    var knownModel = state.models.filter(function (m) { return m.model === view.model; })[0];
+    state.activeModel = view.model;
+    state.filters = [];
+    state.page = 0;
+    ensureModelOption(view.model, knownModel && knownModel.label);
+    byId('odooLiveModelSelect').value = view.model;
+    loadModelFields().then(restore).catch(function (e) { failTable(e); });
+  }
+
+  function removeView(id) {
+    state.savedViews = state.savedViews.filter(function (v) { return v.id !== id; });
+    saveJSON(VIEWS_KEY, state.savedViews);
+    renderViewsPopover();
+  }
+
   /* ── Records + table ─────────────────────────────────────────────────── */
   function failTable(e) {
     setStatus('error', 'Error');
@@ -257,11 +420,7 @@
     if (!state.activeModel) return;
     var cfg = getOdooCfg();
     if (!cfg) { renderBanner(); return; }
-    var displayFields = Object.keys(state.fields).filter(function (k) {
-      var t = state.fields[k].type;
-      return ['char', 'text', 'selection', 'many2one', 'integer', 'float', 'monetary', 'boolean', 'date', 'datetime'].indexOf(t) > -1;
-    }).slice(0, 7);
-    if (displayFields.indexOf('display_name') === -1 && state.fields.display_name) displayFields.unshift('display_name');
+    var displayFields = getDisplayFields();
 
     var tbody = byId('odooLiveTable').querySelector('tbody');
     var thead = byId('odooLiveTable').querySelector('thead');
@@ -379,6 +538,30 @@
     });
 
     byId('odooLiveQuickSearch').addEventListener('input', debounce(function () { state.page = 0; loadRecords(); }, 400));
+
+    if (byId('odooLiveColumnsBtn')) {
+      byId('odooLiveColumnsBtn').addEventListener('click', function (e) {
+        e.stopPropagation();
+        var pop = byId('odooLiveColumnsPop');
+        var wasHidden = pop.hidden;
+        closePops();
+        if (wasHidden && !this.disabled) { renderColumnsPopover(); pop.hidden = false; }
+      });
+    }
+    if (byId('odooLiveColumnsReset')) byId('odooLiveColumnsReset').addEventListener('click', resetColumns);
+
+    if (byId('odooLiveViewsBtn')) {
+      byId('odooLiveViewsBtn').addEventListener('click', function (e) {
+        e.stopPropagation();
+        var pop = byId('odooLiveViewsPop');
+        var wasHidden = pop.hidden;
+        closePops();
+        if (wasHidden && !this.disabled) { renderViewsPopover(); pop.hidden = false; }
+      });
+    }
+    if (byId('odooLiveViewSaveBtn')) byId('odooLiveViewSaveBtn').addEventListener('click', saveCurrentView);
+    document.querySelectorAll('.odoo-live-pop').forEach(function (pop) { pop.addEventListener('click', function (e) { e.stopPropagation(); }); });
+    document.addEventListener('click', function (e) { if (!e.target.closest || !e.target.closest('.odoo-live-pop-wrap')) closePops(); });
 
     byId('odooLivePrevBtn').addEventListener('click', function () { if (state.page > 0) { state.page--; loadRecords(); } });
     byId('odooLiveNextBtn').addEventListener('click', function () { state.page++; loadRecords(); });

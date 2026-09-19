@@ -27,6 +27,8 @@
 
     var byId = function (id) { return document.getElementById(id); };
     var toast = function (msg) { if (window.showToast) window.showToast(msg); };
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); };
+    var can = function (perm) { return window.DVAuth ? window.DVAuth.can(perm) : true; };
 
     var state = { role: 'admin', region: '', board: 'sales', range: 30, live: false, liveTimer: null };
 
@@ -586,35 +588,52 @@
        Static, realistic content for the sidebar tabs that previously did nothing.
        Reuses REPO_DEFS-style names from the rest of the app for consistency. */
 
-    var LANG_COLORS = { TypeScript: '#3178c6', Python: '#3572A5', Go: '#00ADD8', Rust: '#dea584', Swift: '#F05138', HCL: '#844FBA' };
     var AVATAR_COLORS = ['#e8a33d', '#5b8fae', '#4fb477', '#f0c06a', '#e5654f', '#c76b3c', '#4a8c86', '#9a9552', '#8b5cf6'];
     function initials(name) { return name.split(' ').map(function (p) { return p[0]; }).join('').slice(0, 2).toUpperCase(); }
     function hashColor(name) { var h = 0; for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0; return AVATAR_COLORS[h % AVATAR_COLORS.length]; }
 
-    /* ── Projects ─────────────────────────────────────────────────────────── */
-    var PROJECTS = [
-      { name: 'platform-v2', desc: 'Core DashView platform — API, orchestration, model routing.', lang: 'TypeScript', status: 'active', progress: 78, updated: '2h ago' },
-      { name: 'ai-studio', desc: 'Image generation, code analysis and report export tools.', lang: 'TypeScript', status: 'active', progress: 64, updated: '5h ago' },
-      { name: 'auth-service', desc: 'Authentication, sessions and org/team permissions.', lang: 'Python', status: 'active', progress: 91, updated: '1h ago' },
-      { name: 'design-system', desc: 'Shared glass component library and design tokens.', lang: 'TypeScript', status: 'maintenance', progress: 100, updated: '3d ago' },
-      { name: 'mobile-app', desc: 'iOS/Android client built on the platform API.', lang: 'Swift', status: 'progress', progress: 42, updated: '1d ago' },
-      { name: 'api-gateway', desc: 'Edge routing, rate limiting and request signing.', lang: 'Go', status: 'active', progress: 85, updated: '30m ago' },
-      { name: 'data-pipeline', desc: 'ETL jobs for usage analytics and model telemetry.', lang: 'Python', status: 'risk', progress: 15, updated: '2d ago' },
-      { name: 'infra-terraform', desc: 'Infrastructure as code for all environments.', lang: 'HCL', status: 'active', progress: 70, updated: '6h ago' }
-    ];
+    /* ── Projects ─────────────────────────────────────────────────────────────
+       Persisted to localStorage (dv_projects) so "+ New project", editing and
+       deleting are real actions rather than demo toasts, and the toolbar's
+       Import/Export can round-trip the list as JSON, or hand it off as an
+       Excel workbook or a designed PDF report (via js/report-engine.js, the
+       same engine Data Studio uses for its board-ready exports). */
+    var PROJECTS_KEY = 'dv_projects';
+    function saveProjects(list) { try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(list)); } catch (e) { toast('Could not save — local storage may be full.'); } }
+    function seedProjects() {
+      var seed = [
+        { name: 'platform-v2', desc: 'Core DashView platform — API, orchestration, model routing.', tag: 'TypeScript', status: 'active', progress: 78, updated: '2h ago', client: '' },
+        { name: 'ai-studio', desc: 'Image generation, code analysis and report export tools.', tag: 'TypeScript', status: 'active', progress: 64, updated: '5h ago', client: '' },
+        { name: 'auth-service', desc: 'Authentication, sessions and org/team permissions.', tag: 'Python', status: 'active', progress: 91, updated: '1h ago', client: '' },
+        { name: 'design-system', desc: 'Shared glass component library and design tokens.', tag: 'TypeScript', status: 'maintenance', progress: 100, updated: '3d ago', client: '' },
+        { name: 'mobile-app', desc: 'iOS/Android client built on the platform API.', tag: 'Swift', status: 'progress', progress: 42, updated: '1d ago', client: '' },
+        { name: 'api-gateway', desc: 'Edge routing, rate limiting and request signing.', tag: 'Go', status: 'active', progress: 85, updated: '30m ago', client: '' },
+        { name: 'data-pipeline', desc: 'ETL jobs for usage analytics and model telemetry.', tag: 'Python', status: 'risk', progress: 15, updated: '2d ago', client: '' },
+        { name: 'infra-terraform', desc: 'Infrastructure as code for all environments.', tag: 'HCL', status: 'active', progress: 70, updated: '6h ago', client: '' }
+      ];
+      seed.forEach(function (p, i) { p.id = 'p_' + i + '_' + Date.now().toString(36); });
+      saveProjects(seed);
+      return seed;
+    }
+    function loadProjects() {
+      try { var raw = JSON.parse(localStorage.getItem(PROJECTS_KEY)); if (raw && raw.length) return raw; } catch (e) {}
+      return seedProjects();
+    }
+    var PROJECTS = loadProjects();
     var PROJECT_STATUS_LABEL = { active: 'Active', maintenance: 'Maintenance', progress: 'In progress', risk: 'At risk' };
     var PROJECT_STATUS_PILL = { active: 'active', maintenance: 'active', progress: 'review', risk: 'blocked' };
+    var editingProjectId = null;
 
     // Bug: these 4 KPI cards were hardcoded in dashboard.html (e.g. "Active
     // Projects: 6") and had drifted out of sync with the actual PROJECTS list
     // below (only 5 of the 8 entries have status:'active'). Computing them
     // from PROJECTS directly means the numbers are always correct, and stay
-    // correct if the project list ever changes.
+    // correct as projects are added, edited or removed.
     function renderProjectKPIs() {
       var activeCount = PROJECTS.filter(function (p) { return p.status === 'active'; }).length;
       var atRiskProjects = PROJECTS.filter(function (p) { return p.status === 'risk'; });
       var onTrackCount = PROJECTS.filter(function (p) { return p.status !== 'risk' && p.progress >= 50; }).length;
-      var avgProgress = Math.round(PROJECTS.reduce(function (s, p) { return s + p.progress; }, 0) / PROJECTS.length);
+      var avgProgress = PROJECTS.length ? Math.round(PROJECTS.reduce(function (s, p) { return s + p.progress; }, 0) / PROJECTS.length) : 0;
       if (byId('projKpiActive')) byId('projKpiActive').textContent = activeCount;
       if (byId('projKpiActiveSub')) byId('projKpiActiveSub').textContent = 'of ' + PROJECTS.length + ' total';
       if (byId('projKpiAvgProgress')) byId('projKpiAvgProgress').textContent = avgProgress + '%';
@@ -623,24 +642,167 @@
       if (byId('projKpiAtRiskSub')) byId('projKpiAtRiskSub').textContent = atRiskProjects.length
         ? atRiskProjects.map(function (p) { return p.name; }).join(', ') + ' slipping'
         : 'None right now';
+      if (byId('projectsSubhead')) byId('projectsSubhead').textContent = PROJECTS.length + ' project' + (PROJECTS.length === 1 ? '' : 's') + ' tracked';
     }
 
     function renderProjects(filterQ) {
       var q = (filterQ || '').toLowerCase();
-      var list = PROJECTS.filter(function (p) { return !q || p.name.toLowerCase().indexOf(q) > -1 || p.desc.toLowerCase().indexOf(q) > -1; });
+      var list = PROJECTS.filter(function (p) { return !q || p.name.toLowerCase().indexOf(q) > -1 || (p.desc || '').toLowerCase().indexOf(q) > -1; });
+      var canEdit = can('editProjects');
       byId('projectsGrid').innerHTML = list.map(function (p) {
         return '<div class="project-card">'
-          + '<div class="project-card-head"><h3>' + p.name + '</h3><span class="status-pill ' + PROJECT_STATUS_PILL[p.status] + '">' + PROJECT_STATUS_LABEL[p.status] + '</span></div>'
-          + '<p class="project-card-desc">' + p.desc + '</p>'
+          + '<div class="project-card-head"><h3>' + esc(p.name) + '</h3><span class="status-pill ' + PROJECT_STATUS_PILL[p.status] + '">' + PROJECT_STATUS_LABEL[p.status] + '</span></div>'
+          + '<p class="project-card-desc">' + esc(p.desc) + '</p>'
           + '<div class="project-progress-row"><div class="progress-track"><div class="progress-fill" style="width:' + p.progress + '%"></div></div><span class="project-progress-pct">' + p.progress + '%</span></div>'
-          + '<div class="project-card-foot"><span class="project-card-lang"><span class="project-card-lang-dot" style="background:' + (LANG_COLORS[p.lang] || '#999') + '"></span>' + p.lang + '</span><span style="font-size:11px;color:var(--ink-30);font-family:var(--f-mono)">' + p.updated + '</span></div>'
+          + '<div class="project-card-foot"><span class="project-card-lang"><span class="project-card-lang-dot" style="background:' + hashColor(p.tag || p.name) + '"></span>' + esc(p.tag || 'General') + (p.client ? ' · ' + esc(p.client) : '') + '</span>'
+          + (canEdit
+            ? '<span class="project-card-actions"><button type="button" class="dv-widget-icon-btn" data-edit-project="' + p.id + '" title="Edit" aria-label="Edit project"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><button type="button" class="dv-widget-icon-btn danger" data-delete-project="' + p.id + '" title="Delete" aria-label="Delete project"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></span>'
+            : '<span style="font-size:11px;color:var(--ink-30);font-family:var(--f-mono)">' + esc(p.updated || '') + '</span>')
+          + '</div>'
           + '</div>';
       }).join('') || '<p style="color:var(--ink-30);font-size:var(--fs-sm)">No projects match your search.</p>';
+      byId('projectsGrid').querySelectorAll('[data-edit-project]').forEach(function (b) {
+        b.addEventListener('click', function (e) { e.stopPropagation(); openProjectModal(PROJECTS.filter(function (p) { return p.id === b.getAttribute('data-edit-project'); })[0]); });
+      });
+      byId('projectsGrid').querySelectorAll('[data-delete-project]').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var p = PROJECTS.filter(function (x) { return x.id === b.getAttribute('data-delete-project'); })[0];
+          if (!p || !confirm('Delete "' + p.name + '"? This can\'t be undone.')) return;
+          PROJECTS = PROJECTS.filter(function (x) { return x.id !== p.id; });
+          saveProjects(PROJECTS);
+          renderProjects(byId('projectSearch') ? byId('projectSearch').value : '');
+          renderProjectKPIs();
+          toast('Project deleted.');
+        });
+      });
     }
     renderProjects('');
     renderProjectKPIs();
     if (byId('projectSearch')) byId('projectSearch').addEventListener('input', function (e) { renderProjects(e.target.value); });
-    if (byId('newProjectBtn')) byId('newProjectBtn').addEventListener('click', function () { toast('Project creation is a demo action in this static build.'); });
+
+    function openProjectModal(project) {
+      if (!can('editProjects')) { toast('You do not have permission to edit projects.'); return; }
+      editingProjectId = project ? project.id : null;
+      byId('projectModalTitle').textContent = project ? 'Edit project' : 'Add a project';
+      byId('projectNameInput').value = project ? project.name : '';
+      byId('projectDescInput').value = project ? project.desc : '';
+      byId('projectStatusSelect').value = project ? project.status : 'active';
+      byId('projectProgressInput').value = project ? project.progress : 0;
+      byId('projectClientInput').value = project && project.client ? project.client : '';
+      byId('projectTagInput').value = project && project.tag ? project.tag : '';
+      byId('projectModal').classList.add('open');
+    }
+    function closeProjectModal() { byId('projectModal').classList.remove('open'); }
+    function saveProjectFromModal() {
+      var name = byId('projectNameInput').value.trim();
+      if (!name) { toast('Give the project a name.'); return; }
+      var fields = {
+        name: name, desc: byId('projectDescInput').value.trim(),
+        status: byId('projectStatusSelect').value,
+        progress: Math.max(0, Math.min(100, parseInt(byId('projectProgressInput').value, 10) || 0)),
+        client: byId('projectClientInput').value.trim(), tag: byId('projectTagInput').value.trim() || 'General',
+        updated: 'just now'
+      };
+      if (editingProjectId) {
+        var idx = PROJECTS.findIndex(function (p) { return p.id === editingProjectId; });
+        if (idx > -1) Object.keys(fields).forEach(function (k) { PROJECTS[idx][k] = fields[k]; });
+      } else {
+        fields.id = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        PROJECTS.push(fields);
+      }
+      saveProjects(PROJECTS);
+      closeProjectModal();
+      renderProjects(byId('projectSearch') ? byId('projectSearch').value : '');
+      renderProjectKPIs();
+      toast(editingProjectId ? 'Project updated.' : 'Project added.');
+    }
+    if (byId('newProjectBtn')) byId('newProjectBtn').addEventListener('click', function () { openProjectModal(null); });
+    if (byId('projectSaveBtn')) byId('projectSaveBtn').addEventListener('click', saveProjectFromModal);
+    if (byId('projectModalClose')) byId('projectModalClose').addEventListener('click', closeProjectModal);
+    if (byId('projectModal')) byId('projectModal').addEventListener('click', function (e) { if (e.target === e.currentTarget) closeProjectModal(); });
+
+    /* Import / export */
+    function exportProjectsJSON() {
+      var blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), projects: PROJECTS }, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a'); a.href = url; a.download = 'dashview-projects-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
+      URL.revokeObjectURL(url);
+      toast('Projects exported.');
+    }
+    function importProjectsJSON(file) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var parsed = JSON.parse(reader.result);
+          var list = parsed.projects || parsed;
+          if (!Array.isArray(list)) throw new Error('bad shape');
+          list.forEach(function (p) { if (!p.id) p.id = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); });
+          PROJECTS = list;
+          saveProjects(PROJECTS);
+          renderProjects(''); renderProjectKPIs();
+          toast('Imported ' + list.length + ' projects.');
+        } catch (e) { toast('That file is not a valid projects export.'); }
+      };
+      reader.readAsText(file);
+    }
+    function exportProjectsXLSX() {
+      if (!window.XLSX) { toast('Excel export library did not load.'); return; }
+      var ws = XLSX.utils.json_to_sheet(PROJECTS.map(function (p) {
+        return { Name: p.name, Description: p.desc, Tag: p.tag, Client: p.client || '', Status: PROJECT_STATUS_LABEL[p.status] || p.status, 'Progress %': p.progress, Updated: p.updated };
+      }));
+      ws['!cols'] = [{ wch: 22 }, { wch: 42 }, { wch: 14 }, { wch: 18 }, { wch: 14 }, { wch: 11 }, { wch: 12 }];
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Projects');
+      XLSX.writeFile(wb, 'dashview-projects-' + new Date().toISOString().slice(0, 10) + '.xlsx');
+      toast('Excel workbook exported.');
+    }
+    function exportProjectsPDF() {
+      if (!window.DVReportEngine) { toast('Report engine did not load.'); return; }
+      toast('Building PDF report…');
+      var q = byId('projectSearch') ? byId('projectSearch').value.toLowerCase() : '';
+      var rows = PROJECTS.filter(function (p) { return !q || p.name.toLowerCase().indexOf(q) > -1; });
+      window.DVReportEngine.generatePdfReport({
+        title: 'Projects Report',
+        workbookName: 'DashView Projects',
+        sourceFileName: 'DashView workspace',
+        generatedAt: new Date(),
+        filteredRows: rows.length, totalRows: PROJECTS.length,
+        filtersSummary: q ? ['Search: "' + q + '"'] : [],
+        includeKpis: true,
+        kpis: [
+          { label: 'Total projects', value: String(PROJECTS.length) },
+          { label: 'Active', value: String(PROJECTS.filter(function (p) { return p.status === 'active'; }).length) },
+          { label: 'At risk', value: String(PROJECTS.filter(function (p) { return p.status === 'risk'; }).length) },
+          { label: 'Avg. progress', value: (PROJECTS.length ? Math.round(PROJECTS.reduce(function (s, p) { return s + p.progress; }, 0) / PROJECTS.length) : 0) + '%' }
+        ],
+        includeCharts: false,
+        includeData: true,
+        fields: [{ name: 'name', type: 'string' }, { name: 'tag', type: 'string' }, { name: 'client', type: 'string' }, { name: 'status', type: 'string' }, { name: 'progress', type: 'number' }, { name: 'updated', type: 'string' }],
+        rows: rows.map(function (p) { return { name: p.name, tag: p.tag, client: p.client || '—', status: PROJECT_STATUS_LABEL[p.status] || p.status, progress: p.progress, updated: p.updated }; }),
+        formatCell: function (v, type) { return type === 'number' ? String(v) + '%' : String(v == null ? '' : v); },
+        includePivot: false
+      }).then(function () { toast('PDF report downloaded.'); }).catch(function () { toast('Could not build the PDF report.'); });
+    }
+    if (byId('projectsImportBtn')) byId('projectsImportBtn').addEventListener('click', function () {
+      if (!can('importExport')) { toast('You do not have permission to import.'); return; }
+      byId('projectsImportFile').click();
+    });
+    if (byId('projectsImportFile')) byId('projectsImportFile').addEventListener('change', function (e) { if (e.target.files[0]) importProjectsJSON(e.target.files[0]); e.target.value = ''; });
+    if (byId('projectsExportBtn') && byId('projectsExportMenu')) {
+      byId('projectsExportBtn').addEventListener('click', function (e) { e.stopPropagation(); byId('projectsExportMenu').classList.toggle('open'); });
+      document.addEventListener('click', function (e) { if (!byId('projectsExportMenu').contains(e.target) && e.target !== byId('projectsExportBtn') && !byId('projectsExportBtn').contains(e.target)) byId('projectsExportMenu').classList.remove('open'); });
+      byId('projectsExportMenu').addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('button[data-export]') : null;
+        if (!btn) return;
+        if (!can('importExport')) { toast('You do not have permission to export.'); return; }
+        byId('projectsExportMenu').classList.remove('open');
+        var type = btn.getAttribute('data-export');
+        if (type === 'json') exportProjectsJSON();
+        else if (type === 'xlsx') exportProjectsXLSX();
+        else if (type === 'pdf') exportProjectsPDF();
+      });
+    }
 
     /* ── Agent tasks ──────────────────────────────────────────────────────── */
     var TASKS = [
@@ -676,24 +838,176 @@
     if (byId('taskSearch')) byId('taskSearch').addEventListener('input', function (e) { renderTasks(e.target.value, byId('taskStatusFilter').value); });
     if (byId('taskStatusFilter')) byId('taskStatusFilter').addEventListener('change', function (e) { renderTasks(byId('taskSearch').value, e.target.value); });
 
-    /* ── Team ─────────────────────────────────────────────────────────────── */
-    var TEAM = [
-      { name: 'Amara Khan', role: 'Founder & Admin', status: 'online', projects: 8 },
-      { name: 'Daniyal Raza', role: 'Engineering Lead', status: 'online', projects: 5 },
-      { name: 'Sara Ahmed', role: 'Product Manager', status: 'away', projects: 4 },
-      { name: 'Bilal Hussain', role: 'DevOps Engineer', status: 'online', projects: 3 },
-      { name: 'Zara Farooq', role: 'UI/UX Designer', status: 'offline', projects: 2 },
-      { name: 'Hamza Tariq', role: 'Data Engineer', status: 'online', projects: 3 },
-      { name: 'Mahnoor Iqbal', role: 'QA Engineer', status: 'away', projects: 4 },
-      { name: 'Omer Sheikh', role: 'Customer Success', status: 'online', projects: 1 }
-    ];
-    byId('teamGrid').innerHTML = TEAM.map(function (m) {
-      return '<div class="team-card">'
-        + '<div class="team-avatar-wrap"><div class="team-avatar" style="background:' + hashColor(m.name) + '">' + initials(m.name) + '</div><span class="team-status-dot ' + m.status + '"></span></div>'
-        + '<div><p class="team-card-name">' + m.name + '</p><p class="team-card-role">' + m.role + '</p><p class="team-card-meta">' + m.projects + ' project' + (m.projects === 1 ? '' : 's') + '</p></div>'
-        + '</div>';
-    }).join('');
-    if (byId('inviteTeamBtn')) byId('inviteTeamBtn').addEventListener('click', function () { toast('Invite flow is a demo action in this static build.'); });
+    /* ── Team ─────────────────────────────────────────────────────────────────
+       Same treatment as Projects: persisted to localStorage (dv_team), real
+       CRUD instead of a demo toast, and matching import/export. */
+    var TEAM_KEY = 'dv_team';
+    function saveTeam(list) { try { localStorage.setItem(TEAM_KEY, JSON.stringify(list)); } catch (e) { toast('Could not save — local storage may be full.'); } }
+    function seedTeam() {
+      var seed = [
+        { name: 'Amara Khan', role: 'Founder & Admin', status: 'online', projects: 8, email: '' },
+        { name: 'Daniyal Raza', role: 'Engineering Lead', status: 'online', projects: 5, email: '' },
+        { name: 'Sara Ahmed', role: 'Product Manager', status: 'away', projects: 4, email: '' },
+        { name: 'Bilal Hussain', role: 'DevOps Engineer', status: 'online', projects: 3, email: '' },
+        { name: 'Zara Farooq', role: 'UI/UX Designer', status: 'offline', projects: 2, email: '' },
+        { name: 'Hamza Tariq', role: 'Data Engineer', status: 'online', projects: 3, email: '' },
+        { name: 'Mahnoor Iqbal', role: 'QA Engineer', status: 'away', projects: 4, email: '' },
+        { name: 'Omer Sheikh', role: 'Customer Success', status: 'online', projects: 1, email: '' }
+      ];
+      seed.forEach(function (m, i) { m.id = 't_' + i + '_' + Date.now().toString(36); });
+      saveTeam(seed);
+      return seed;
+    }
+    function loadTeam() {
+      try { var raw = JSON.parse(localStorage.getItem(TEAM_KEY)); if (raw && raw.length) return raw; } catch (e) {}
+      return seedTeam();
+    }
+    var TEAM = loadTeam();
+    var editingTeamId = null;
+
+    function renderTeam() {
+      var canEdit = can('manageTeam');
+      byId('teamGrid').innerHTML = TEAM.map(function (m) {
+        return '<div class="team-card">'
+          + '<div class="team-avatar-wrap"><div class="team-avatar" style="background:' + hashColor(m.name) + '">' + initials(m.name) + '</div><span class="team-status-dot ' + m.status + '"></span></div>'
+          + '<div style="flex:1;min-width:0;"><p class="team-card-name">' + esc(m.name) + '</p><p class="team-card-role">' + esc(m.role) + '</p><p class="team-card-meta">' + m.projects + ' project' + (m.projects === 1 ? '' : 's') + '</p></div>'
+          + (canEdit ? '<span class="project-card-actions"><button type="button" class="dv-widget-icon-btn" data-edit-team="' + m.id + '" title="Edit" aria-label="Edit team member"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><button type="button" class="dv-widget-icon-btn danger" data-delete-team="' + m.id + '" title="Remove" aria-label="Remove team member"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></span>' : '')
+          + '</div>';
+      }).join('');
+      if (byId('teamSubhead')) byId('teamSubhead').textContent = TEAM.length + ' member' + (TEAM.length === 1 ? '' : 's') + ' in acme-corp';
+      byId('teamGrid').querySelectorAll('[data-edit-team]').forEach(function (b) {
+        b.addEventListener('click', function (e) { e.stopPropagation(); openTeamModal(TEAM.filter(function (m) { return m.id === b.getAttribute('data-edit-team'); })[0]); });
+      });
+      byId('teamGrid').querySelectorAll('[data-delete-team]').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var m = TEAM.filter(function (x) { return x.id === b.getAttribute('data-delete-team'); })[0];
+          if (!m || !confirm('Remove "' + m.name + '" from the team?')) return;
+          TEAM = TEAM.filter(function (x) { return x.id !== m.id; });
+          saveTeam(TEAM);
+          renderTeam();
+          toast('Team member removed.');
+        });
+      });
+    }
+    renderTeam();
+
+    function openTeamModal(member) {
+      if (!can('manageTeam')) { toast('You do not have permission to manage the team.'); return; }
+      editingTeamId = member ? member.id : null;
+      byId('teamModalTitle').textContent = member ? 'Edit member' : 'Invite a member';
+      byId('teamNameInput').value = member ? member.name : '';
+      byId('teamRoleInput').value = member ? member.role : '';
+      byId('teamStatusSelect').value = member ? member.status : 'online';
+      byId('teamProjectsInput').value = member ? member.projects : 0;
+      byId('teamEmailInput').value = member && member.email ? member.email : '';
+      byId('teamModal').classList.add('open');
+    }
+    function closeTeamModal() { byId('teamModal').classList.remove('open'); }
+    function saveTeamFromModal() {
+      var name = byId('teamNameInput').value.trim();
+      if (!name) { toast('Give the member a name.'); return; }
+      var fields = {
+        name: name, role: byId('teamRoleInput').value.trim() || 'Team member',
+        status: byId('teamStatusSelect').value,
+        projects: Math.max(0, parseInt(byId('teamProjectsInput').value, 10) || 0),
+        email: byId('teamEmailInput').value.trim()
+      };
+      if (editingTeamId) {
+        var idx = TEAM.findIndex(function (m) { return m.id === editingTeamId; });
+        if (idx > -1) Object.keys(fields).forEach(function (k) { TEAM[idx][k] = fields[k]; });
+      } else {
+        fields.id = 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        TEAM.push(fields);
+      }
+      saveTeam(TEAM);
+      closeTeamModal();
+      renderTeam();
+      toast(editingTeamId ? 'Member updated.' : 'Member added.');
+    }
+    if (byId('inviteTeamBtn')) byId('inviteTeamBtn').addEventListener('click', function () { openTeamModal(null); });
+    if (byId('teamSaveBtn')) byId('teamSaveBtn').addEventListener('click', saveTeamFromModal);
+    if (byId('teamModalClose')) byId('teamModalClose').addEventListener('click', closeTeamModal);
+    if (byId('teamModal')) byId('teamModal').addEventListener('click', function (e) { if (e.target === e.currentTarget) closeTeamModal(); });
+
+    /* Import / export */
+    function exportTeamJSON() {
+      var blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), team: TEAM }, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a'); a.href = url; a.download = 'dashview-team-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
+      URL.revokeObjectURL(url);
+      toast('Team exported.');
+    }
+    function importTeamJSON(file) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var parsed = JSON.parse(reader.result);
+          var list = parsed.team || parsed;
+          if (!Array.isArray(list)) throw new Error('bad shape');
+          list.forEach(function (m) { if (!m.id) m.id = 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); });
+          TEAM = list;
+          saveTeam(TEAM);
+          renderTeam();
+          toast('Imported ' + list.length + ' team members.');
+        } catch (e) { toast('That file is not a valid team export.'); }
+      };
+      reader.readAsText(file);
+    }
+    function exportTeamXLSX() {
+      if (!window.XLSX) { toast('Excel export library did not load.'); return; }
+      var ws = XLSX.utils.json_to_sheet(TEAM.map(function (m) {
+        return { Name: m.name, Role: m.role, Status: m.status, Projects: m.projects, Email: m.email || '' };
+      }));
+      ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 12 }, { wch: 10 }, { wch: 26 }];
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Team');
+      XLSX.writeFile(wb, 'dashview-team-' + new Date().toISOString().slice(0, 10) + '.xlsx');
+      toast('Excel workbook exported.');
+    }
+    function exportTeamPDF() {
+      if (!window.DVReportEngine) { toast('Report engine did not load.'); return; }
+      toast('Building PDF report…');
+      window.DVReportEngine.generatePdfReport({
+        title: 'Team Report',
+        workbookName: 'DashView Team',
+        sourceFileName: 'DashView workspace',
+        generatedAt: new Date(),
+        filteredRows: TEAM.length, totalRows: TEAM.length,
+        filtersSummary: [],
+        includeKpis: true,
+        kpis: [
+          { label: 'Team size', value: String(TEAM.length) },
+          { label: 'Online now', value: String(TEAM.filter(function (m) { return m.status === 'online'; }).length) },
+          { label: 'Total projects staffed', value: String(TEAM.reduce(function (s, m) { return s + (m.projects || 0); }, 0)) }
+        ],
+        includeCharts: false,
+        includeData: true,
+        fields: [{ name: 'name', type: 'string' }, { name: 'role', type: 'string' }, { name: 'status', type: 'string' }, { name: 'projects', type: 'number' }, { name: 'email', type: 'string' }],
+        rows: TEAM.map(function (m) { return { name: m.name, role: m.role, status: m.status, projects: m.projects, email: m.email || '—' }; }),
+        formatCell: function (v) { return String(v == null ? '' : v); },
+        includePivot: false
+      }).then(function () { toast('PDF report downloaded.'); }).catch(function () { toast('Could not build the PDF report.'); });
+    }
+    if (byId('teamImportBtn')) byId('teamImportBtn').addEventListener('click', function () {
+      if (!can('importExport')) { toast('You do not have permission to import.'); return; }
+      byId('teamImportFile').click();
+    });
+    if (byId('teamImportFile')) byId('teamImportFile').addEventListener('change', function (e) { if (e.target.files[0]) importTeamJSON(e.target.files[0]); e.target.value = ''; });
+    if (byId('teamExportBtn') && byId('teamExportMenu')) {
+      byId('teamExportBtn').addEventListener('click', function (e) { e.stopPropagation(); byId('teamExportMenu').classList.toggle('open'); });
+      document.addEventListener('click', function (e) { if (!byId('teamExportMenu').contains(e.target) && e.target !== byId('teamExportBtn') && !byId('teamExportBtn').contains(e.target)) byId('teamExportMenu').classList.remove('open'); });
+      byId('teamExportMenu').addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('button[data-export]') : null;
+        if (!btn) return;
+        if (!can('importExport')) { toast('You do not have permission to export.'); return; }
+        byId('teamExportMenu').classList.remove('open');
+        var type = btn.getAttribute('data-export');
+        if (type === 'json') exportTeamJSON();
+        else if (type === 'xlsx') exportTeamXLSX();
+        else if (type === 'pdf') exportTeamPDF();
+      });
+    }
 
     /* ── Reports ──────────────────────────────────────────────────────────── */
     var REPORTS = [

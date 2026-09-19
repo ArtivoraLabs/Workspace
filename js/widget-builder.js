@@ -65,15 +65,15 @@
     var orders = ov.ORDERS;
     if (metric === 'revenue_total') {
       var total = orders.reduce(function (s, o) { return s + o.revenue; }, 0);
-      return { kind: 'kpi', value: '$' + total.toLocaleString(undefined, { maximumFractionDigits: 0 }), sub: orders.length + ' orders' };
+      return { kind: 'kpi', value: '$' + total.toLocaleString(undefined, { maximumFractionDigits: 0 }), sub: orders.length + ' orders', raw: total };
     }
     if (metric === 'orders_count') {
-      return { kind: 'kpi', value: orders.length.toLocaleString(), sub: 'Across all channels' };
+      return { kind: 'kpi', value: orders.length.toLocaleString(), sub: 'Across all channels', raw: orders.length };
     }
     if (metric === 'avg_order_value') {
       var t = orders.reduce(function (s, o) { return s + o.revenue; }, 0);
       var avg = orders.length ? t / orders.length : 0;
-      return { kind: 'kpi', value: '$' + avg.toFixed(2), sub: 'Per order' };
+      return { kind: 'kpi', value: '$' + avg.toFixed(2), sub: 'Per order', raw: avg };
     }
     if (metric === 'category_breakdown') {
       var byCategory = {};
@@ -107,11 +107,49 @@
     return { fields: fields, rows: rows };
   }
 
+  /* ── Table → chart aggregation (CSV / Odoo rows) ───────────────────────
+     Groups arbitrary {fields, rows} data by one column and sums (or counts)
+     another, so imported spreadsheets and Odoo records can drive a chart
+     the same way the built-in demo metrics do. */
+  function computeTableChart(fields, rows, catField, valField, chartType) {
+    var ci = fields.indexOf(catField);
+    if (ci === -1) return { kind: 'chart', chartType: chartType || 'bar', labels: [], values: [] };
+    var vi = valField ? fields.indexOf(valField) : -1;
+    var totals = {}, order = [];
+    rows.forEach(function (r) {
+      var key = r[ci] === undefined || r[ci] === '' ? '(blank)' : String(r[ci]);
+      if (!(key in totals)) { totals[key] = 0; order.push(key); }
+      totals[key] += vi > -1 ? (parseFloat(String(r[vi]).replace(/[^0-9.-]/g, '')) || 0) : 1;
+    });
+    // Keep the chart legible: top 12 groups by size.
+    order.sort(function (a, b) { return totals[b] - totals[a]; });
+    var labels = order.slice(0, 12);
+    return { kind: 'chart', chartType: chartType || 'bar', labels: labels, values: labels.map(function (l) { return Math.round(totals[l] * 100) / 100; }) };
+  }
+
   /* ── Rendering ───────────────────────────────────────────────────────── */
   function renderKpiBody(container, data) {
     container.innerHTML = '<div class="dv-widget-kpi-value">' + esc(data.value) + '</div><div class="dv-widget-kpi-sub">' + esc(data.sub || '') + '</div>';
   }
 
+  function renderProgressBody(container, raw, label, sub, target) {
+    if (raw == null || !target || target <= 0) {
+      container.innerHTML = '<p class="dv-widget-empty">' + (target ? 'No data yet.' : 'Edit this widget to set a target value.') + '</p>';
+      return;
+    }
+    var pct = Math.max(0, Math.min(100, Math.round((raw / target) * 100)));
+    container.innerHTML =
+      '<div class="dv-widget-progress">' +
+        '<div class="dv-widget-progress-top"><span class="dv-widget-progress-val">' + esc(label) + '</span><span class="dv-widget-progress-pct' + (pct >= 100 ? ' is-done' : '') + '">' + pct + '%</span></div>' +
+        '<div class="dv-widget-progress-track"><div class="dv-widget-progress-fill" style="width:' + pct + '%"></div></div>' +
+        '<div class="dv-widget-progress-sub">' + esc(sub || '') + (sub ? ' · ' : '') + 'Target ' + esc(target.toLocaleString()) + '</div>' +
+      '</div>';
+  }
+
+  // Chart.js needs a different dataset/scale shape for radar than for the
+  // bar/line/doughnut family, and "area" is really a filled line — this
+  // keeps that branching in one place rather than scattered through callers.
+  var RADIAL_CHARTS = { doughnut: 1, pie: 1, radar: 1 };
   function renderChartBody(container, data, canvasId) {
     container.innerHTML = '<div class="dv-widget-chart-wrap"><canvas id="' + canvasId + '"></canvas></div>';
     if (!window.Chart || !data.labels || !data.labels.length) {
@@ -126,26 +164,34 @@
     var ctx = canvasEl.getContext('2d');
     if (chartInstances[canvasId]) { try { chartInstances[canvasId].destroy(); } catch (e) {} }
     var palette = ['#e8a33d', '#5b8fae', '#8b5cf6', '#4fb477', '#d98f27', '#e5654f'];
+    var style = data.chartType || 'bar';
+    var isLine = style === 'line' || style === 'area';
+    var chartJsType = style === 'area' ? 'line' : style;
+    var axisTint = 'rgba(231,237,231,0.4)';
     var cfg = {
-      type: data.chartType || 'bar',
+      type: chartJsType,
       data: {
         labels: data.labels,
         datasets: [{
           data: data.values,
-          backgroundColor: data.chartType === 'line' ? 'rgba(232,163,61,0.18)' : data.labels.map(function (_, i) { return palette[i % palette.length]; }),
-          borderColor: data.chartType === 'line' ? '#e8a33d' : 'transparent',
-          borderWidth: data.chartType === 'line' ? 2 : 0,
-          fill: data.chartType === 'line',
+          backgroundColor: isLine ? (style === 'area' ? 'rgba(232,163,61,0.18)' : 'rgba(232,163,61,0.12)') : data.labels.map(function (_, i) { return palette[i % palette.length]; }),
+          borderColor: isLine ? '#e8a33d' : (style === 'radar' ? '#e8a33d' : 'transparent'),
+          borderWidth: isLine ? 2 : (style === 'radar' ? 2 : 0),
+          fill: style === 'area',
           tension: 0.35,
-          borderRadius: data.chartType === 'bar' ? 6 : 0
+          borderRadius: style === 'bar' ? 6 : 0,
+          pointRadius: isLine ? 2 : (style === 'radar' ? 3 : 0),
+          pointBackgroundColor: '#e8a33d'
         }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: data.chartType === 'doughnut', labels: { color: 'rgba(231,237,231,0.6)', boxWidth: 10, font: { size: 10 } } } },
-        scales: data.chartType === 'doughnut' ? {} : {
-          x: { ticks: { color: 'rgba(231,237,231,0.4)', font: { size: 10 } }, grid: { display: false } },
-          y: { ticks: { color: 'rgba(231,237,231,0.4)', font: { size: 10 } }, grid: { color: 'rgba(232,163,61,0.08)' } }
+        plugins: { legend: { display: RADIAL_CHARTS[style] ? true : false, labels: { color: 'rgba(231,237,231,0.6)', boxWidth: 10, font: { size: 10 } } } },
+        scales: style === 'doughnut' || style === 'pie' ? {} : style === 'radar' ? {
+          r: { ticks: { display: false, backdropColor: 'transparent' }, grid: { color: 'rgba(232,163,61,0.1)' }, angleLines: { color: 'rgba(232,163,61,0.12)' }, pointLabels: { color: axisTint, font: { size: 10 } } }
+        } : {
+          x: { ticks: { color: axisTint, font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: axisTint, font: { size: 10 } }, grid: { color: 'rgba(232,163,61,0.08)' } }
         }
       }
     };
@@ -164,34 +210,48 @@
     if (src.kind === 'demo') {
       var data = computeDemo(src.metric);
       if (!data) { container.innerHTML = '<p class="dv-widget-empty">Demo data isn\'t loaded on this view yet.</p>'; return; }
+      if (widget.type === 'progress') { renderProgressBody(container, data.raw != null ? data.raw : null, data.value || '', data.sub, widget.target); return; }
+      if (widget.type === 'chart' && data.labels) { renderChartBody(container, { chartType: widget.chartType || data.chartType, labels: data.labels, values: data.values }, canvasIdPrefix + '_' + widget.id); return; }
       if (data.kind === 'kpi') renderKpiBody(container, data);
-      else if (data.kind === 'chart') renderChartBody(container, data, canvasIdPrefix + '_' + widget.id);
+      else if (data.kind === 'chart') renderChartBody(container, { chartType: widget.chartType || data.chartType, labels: data.labels, values: data.values }, canvasIdPrefix + '_' + widget.id);
       else renderTableBody(container, data);
       return;
     }
     if (src.kind === 'odoo') {
       container.innerHTML = '<p class="dv-widget-loading">Fetching from Odoo…</p>';
       if (!window.DVOdoo) { container.innerHTML = '<p class="dv-widget-empty">Odoo service unavailable.</p>'; return; }
-      window.DVOdoo.fetchModel(src.model, { limit: widget.type === 'kpi' ? undefined : 6 }).then(function (res) {
-        if (widget.type === 'kpi') renderKpiBody(container, { value: res.total.toLocaleString(), sub: (window.DVOdoo.MODELS[src.model] || {}).label || src.model });
-        else renderTableBody(container, { fields: res.fields, rows: res.rows });
+      var modelLabel = (window.DVOdoo.MODELS[src.model] || {}).label || src.model;
+      window.DVOdoo.fetchModel(src.model, { limit: widget.type === 'table' ? 6 : undefined }).then(function (res) {
+        if (widget.type === 'progress') { renderProgressBody(container, res.total, res.total.toLocaleString(), modelLabel, widget.target); return; }
+        if (widget.type === 'kpi') { renderKpiBody(container, { value: res.total.toLocaleString(), sub: modelLabel }); return; }
+        renderTableBody(container, { fields: res.fields, rows: res.rows });
       });
       return;
     }
     if (src.kind === 'csv') {
       var cached = src.data;
       if (!cached || !cached.rows.length) { container.innerHTML = '<p class="dv-widget-empty">No file imported into this widget yet — edit it to add one.</p>'; return; }
-      if (widget.type === 'kpi') {
-        var colIdx = cached.fields.indexOf(src.numericField);
-        if (colIdx > -1) {
-          var sum = cached.rows.reduce(function (s, r) { return s + (parseFloat(String(r[colIdx]).replace(/[^0-9.-]/g, '')) || 0); }, 0);
-          renderKpiBody(container, { value: sum.toLocaleString(undefined, { maximumFractionDigits: 2 }), sub: 'Sum of ' + src.numericField + ' · ' + cached.rows.length + ' rows' });
-        } else {
-          renderKpiBody(container, { value: cached.rows.length.toLocaleString(), sub: 'Rows in ' + (src.fileName || 'imported file') });
-        }
-      } else {
-        renderTableBody(container, { fields: cached.fields, rows: cached.rows.slice(0, 6) });
+      if (widget.type === 'chart') {
+        renderChartBody(container, computeTableChart(cached.fields, cached.rows, src.catField, src.valField, widget.chartType), canvasIdPrefix + '_' + widget.id);
+        return;
       }
+      if (widget.type === 'kpi' || widget.type === 'progress') {
+        var colIdx = cached.fields.indexOf(src.numericField);
+        var raw, label, sub;
+        if (colIdx > -1) {
+          raw = cached.rows.reduce(function (s, r) { return s + (parseFloat(String(r[colIdx]).replace(/[^0-9.-]/g, '')) || 0); }, 0);
+          label = raw.toLocaleString(undefined, { maximumFractionDigits: 2 });
+          sub = 'Sum of ' + src.numericField + ' · ' + cached.rows.length + ' rows';
+        } else {
+          raw = cached.rows.length;
+          label = raw.toLocaleString();
+          sub = 'Rows in ' + (src.fileName || 'imported file');
+        }
+        if (widget.type === 'progress') renderProgressBody(container, raw, label, sub, widget.target);
+        else renderKpiBody(container, { value: label, sub: sub });
+        return;
+      }
+      renderTableBody(container, { fields: cached.fields, rows: cached.rows.slice(0, 6) });
       return;
     }
     container.innerHTML = '<p class="dv-widget-empty">Unknown data source.</p>';
@@ -210,7 +270,7 @@
     var tv = !!opts.tv;
     var readOnly = !!opts.readOnly;
     var card = document.createElement('div');
-    card.className = tv ? 'dv-tv-widget' : 'dv-widget-card';
+    card.className = tv ? 'dv-tv-widget' : 'dv-widget-card dv-widget-card--' + (widget.size || 'md');
     if (!tv) { card.draggable = !readOnly && can('editWidgets'); card.dataset.id = widget.id; }
     var canEdit = !readOnly && can('editWidgets');
     card.innerHTML =
@@ -330,15 +390,17 @@
       '<optgroup label="Imported file"><option value="csv:">CSV / Excel file…</option></optgroup>';
   }
 
-  function updateModalForSource() {
+  function updateModalForSource(skipAutoType) {
     var val = byId('dvWidgetSourceSelect').value;
     var kind = val.split(':')[0];
     byId('dvWidgetCsvRow').style.display = kind === 'csv' ? 'block' : 'none';
-    byId('dvWidgetNumericFieldRow').style.display = 'none';
     var typeChips = document.querySelectorAll('#dvWidgetTypeChips .chip-select');
     typeChips.forEach(function (chip) {
       var type = chip.dataset.type;
-      var allowed = kind === 'demo' ? true : (type === 'kpi' || type === 'table');
+      // Chart needs a known field schema up front (CSV columns are read
+      // synchronously; Odoo's aren't in this modal), so it's the one type
+      // not offered for a mock-Odoo source. Everything else works anywhere.
+      var allowed = type === 'chart' ? kind !== 'odoo' : true;
       chip.style.display = allowed ? '' : 'none';
       if (!allowed) chip.classList.remove('active');
     });
@@ -346,18 +408,52 @@
       var firstVisible = document.querySelector('#dvWidgetTypeChips .chip-select:not([style*="display: none"])');
       if (firstVisible) firstVisible.classList.add('active');
     }
-    if (kind === 'demo') {
+    if (kind === 'demo' && !skipAutoType) {
       var metric = val.split(':')[1];
       var meta = DEMO_METRICS[metric];
       if (meta) {
         document.querySelectorAll('#dvWidgetTypeChips .chip-select').forEach(function (c) { c.classList.toggle('active', c.dataset.type === meta.type); });
       }
     }
+    updateModalRows();
+  }
+
+  // Shows/hides the type-specific detail rows (chart style, target, and the
+  // three CSV field pickers) for whatever source + type is selected right now.
+  function updateModalRows() {
+    var kind = byId('dvWidgetSourceSelect').value.split(':')[0];
+    var type = selectedType();
+    if (byId('dvWidgetChartTypeRow')) byId('dvWidgetChartTypeRow').style.display = type === 'chart' ? 'block' : 'none';
+    if (byId('dvWidgetTargetRow')) byId('dvWidgetTargetRow').style.display = type === 'progress' ? 'block' : 'none';
+    var hasCsv = kind === 'csv' && pendingCsv;
+    if (byId('dvWidgetNumericFieldRow')) byId('dvWidgetNumericFieldRow').style.display = (hasCsv && (type === 'kpi' || type === 'progress')) ? 'block' : 'none';
+    if (byId('dvWidgetCatFieldRow')) byId('dvWidgetCatFieldRow').style.display = (hasCsv && type === 'chart') ? 'block' : 'none';
+    if (byId('dvWidgetValFieldRow')) byId('dvWidgetValFieldRow').style.display = (hasCsv && type === 'chart') ? 'block' : 'none';
   }
 
   function selectedType() {
     var active = document.querySelector('#dvWidgetTypeChips .chip-select.active');
     return active ? active.dataset.type : 'kpi';
+  }
+
+  // Fills the three CSV-driven <select>s from a parsed file, restoring a
+  // previous choice when editing an existing widget (existingSource).
+  function populateCsvFieldSelects(parsed, existingSource) {
+    var numSelect = byId('dvWidgetNumericFieldSelect');
+    if (numSelect) {
+      numSelect.innerHTML = '<option value="">— row count only —</option>' + parsed.fields.map(function (f) { return '<option value="' + esc(f) + '">' + esc(f) + '</option>'; }).join('');
+      if (existingSource && existingSource.numericField) numSelect.value = existingSource.numericField;
+    }
+    var catSelect = byId('dvWidgetCatFieldSelect');
+    if (catSelect) {
+      catSelect.innerHTML = parsed.fields.map(function (f) { return '<option value="' + esc(f) + '">' + esc(f) + '</option>'; }).join('');
+      if (existingSource && existingSource.catField) catSelect.value = existingSource.catField;
+    }
+    var valSelect = byId('dvWidgetValFieldSelect');
+    if (valSelect) {
+      valSelect.innerHTML = '<option value="">— count rows —</option>' + parsed.fields.map(function (f) { return '<option value="' + esc(f) + '">' + esc(f) + '</option>'; }).join('');
+      if (existingSource && existingSource.valField) valSelect.value = existingSource.valField;
+    }
   }
 
   function openModal(widget) {
@@ -372,8 +468,12 @@
     document.querySelectorAll('#dvWidgetTypeChips .chip-select').forEach(function (c) { c.classList.toggle('active', c.dataset.type === (widget ? widget.type : 'kpi')); });
     byId('dvWidgetLiveCheck').checked = widget ? !!widget.live : false;
     byId('dvWidgetIntervalSelect').value = widget && widget.intervalSec ? String(widget.intervalSec) : '15';
+    if (byId('dvWidgetSizeSelect')) byId('dvWidgetSizeSelect').value = widget && widget.size ? widget.size : 'md';
+    if (byId('dvWidgetChartTypeSelect')) byId('dvWidgetChartTypeSelect').value = widget && widget.chartType ? widget.chartType : 'bar';
+    if (byId('dvWidgetTargetInput')) byId('dvWidgetTargetInput').value = widget && widget.target != null ? widget.target : '';
     byId('dvWidgetCsvStatus').textContent = pendingCsv ? (pendingCsv.rows.length + ' rows loaded') : 'No file loaded yet.';
-    updateModalForSource();
+    if (pendingCsv) populateCsvFieldSelects(pendingCsv, widget && widget.source);
+    updateModalForSource(true);
     byId('dvWidgetModal').classList.add('open');
   }
 
@@ -401,21 +501,29 @@
     else if (kind === 'odoo') source = { kind: 'odoo', model: sourceVal.split(':')[1] };
     else {
       if (!pendingCsv) { toast('Import a CSV/Excel file for this widget first.'); return; }
-      source = { kind: 'csv', data: pendingCsv, fileName: pendingCsv.fileName, numericField: byId('dvWidgetNumericFieldSelect') ? byId('dvWidgetNumericFieldSelect').value : '' };
+      source = {
+        kind: 'csv', data: pendingCsv, fileName: pendingCsv.fileName,
+        numericField: byId('dvWidgetNumericFieldSelect') ? byId('dvWidgetNumericFieldSelect').value : '',
+        catField: byId('dvWidgetCatFieldSelect') ? byId('dvWidgetCatFieldSelect').value : '',
+        valField: byId('dvWidgetValFieldSelect') ? byId('dvWidgetValFieldSelect').value : ''
+      };
     }
+    if (type === 'chart' && kind === 'csv' && !source.catField) { toast('Choose a column to group by for the chart.'); return; }
+    var fields = {
+      title: title, type: type, source: source,
+      live: byId('dvWidgetLiveCheck').checked, intervalSec: parseInt(byId('dvWidgetIntervalSelect').value, 10) || 15,
+      size: byId('dvWidgetSizeSelect') ? byId('dvWidgetSizeSelect').value : 'md',
+      chartType: byId('dvWidgetChartTypeSelect') ? byId('dvWidgetChartTypeSelect').value : 'bar',
+      target: (byId('dvWidgetTargetInput') && byId('dvWidgetTargetInput').value !== '') ? parseFloat(byId('dvWidgetTargetInput').value) : null
+    };
     var widgets = loadWidgets();
     if (editingId) {
       var idx = widgets.findIndex(function (w) { return w.id === editingId; });
-      if (idx > -1) {
-        widgets[idx].title = title; widgets[idx].type = type; widgets[idx].source = source;
-        widgets[idx].live = byId('dvWidgetLiveCheck').checked; widgets[idx].intervalSec = parseInt(byId('dvWidgetIntervalSelect').value, 10) || 15;
-      }
+      if (idx > -1) Object.keys(fields).forEach(function (k) { widgets[idx][k] = fields[k]; });
     } else {
-      widgets.push({
-        id: uid(), title: title, type: type, source: source,
-        live: byId('dvWidgetLiveCheck').checked, intervalSec: parseInt(byId('dvWidgetIntervalSelect').value, 10) || 15,
-        order: widgets.length
-      });
+      fields.id = uid();
+      fields.order = widgets.length;
+      widgets.push(fields);
     }
     saveWidgets(widgets);
     closeModal();
@@ -443,11 +551,8 @@
         parsed.fileName = file.name;
         pendingCsv = parsed;
         byId('dvWidgetCsvStatus').textContent = parsed.rows.length + ' rows loaded from ' + file.name;
-        var numSelect = byId('dvWidgetNumericFieldSelect');
-        if (numSelect) {
-          numSelect.innerHTML = '<option value="">— row count only —</option>' + parsed.fields.map(function (f) { return '<option value="' + esc(f) + '">' + esc(f) + '</option>'; }).join('');
-          byId('dvWidgetNumericFieldRow').style.display = selectedType() === 'kpi' ? 'block' : 'none';
-        }
+        populateCsvFieldSelects(parsed, null);
+        updateModalRows();
       } catch (e) { toast('Could not read that file.'); }
     };
     if (isExcel) reader.readAsBinaryString(file); else reader.readAsText(file);
@@ -540,7 +645,7 @@
       chip.addEventListener('click', function () {
         document.querySelectorAll('#dvWidgetTypeChips .chip-select').forEach(function (c) { c.classList.remove('active'); });
         chip.classList.add('active');
-        if (byId('dvWidgetNumericFieldRow')) byId('dvWidgetNumericFieldRow').style.display = (chip.dataset.type === 'kpi' && pendingCsv) ? 'block' : 'none';
+        updateModalRows();
       });
     });
     if (byId('dvWidgetCsvDrop')) byId('dvWidgetCsvDrop').addEventListener('click', function () { byId('dvWidgetCsvInput').click(); });

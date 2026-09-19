@@ -43,6 +43,8 @@
     tvMode: ['admin', 'editor', 'viewer'],
     manageOdoo: ['admin'],
     browseOdoo: ['admin', 'editor'],
+    editProjects: ['admin', 'editor'],
+    manageTeam: ['admin', 'editor'],
     manageUsers: ['admin']
   };
 

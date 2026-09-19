@@ -119,6 +119,7 @@
 .project-card-foot { display: flex; align-items: center; justify-content: space-between; margin-top: var(--sp-3); }
 .project-card-lang { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--ink-50); }
 .project-card-lang-dot { width: 8px; height: 8px; border-radius: 50%; }
+.project-card-actions { display: flex; align-items: center; gap: 2px; }
 .project-progress-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .project-progress-row .progress-track { flex: 1; width: auto; }
 .project-progress-pct { font-size: 11px; font-family: var(--f-mono); color: var(--ink-50); min-width: 32px; text-align: right; }
