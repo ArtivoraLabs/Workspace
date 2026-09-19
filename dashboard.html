@@ -714,6 +714,33 @@
                 <select class="pro-select" id="odooLiveFilterField"><option value="">Filter field…</option></select>
                 <input type="text" class="pro-select" id="odooLiveFilterValue" placeholder="contains…" style="width:160px" disabled/>
                 <button class="btn btn-outline btn-sm" id="odooLiveAddFilterBtn" disabled>+ Add filter</button>
+                <div class="odoo-live-pop-wrap">
+                  <button class="btn btn-outline btn-sm" id="odooLiveColumnsBtn" disabled title="Choose which fields to show">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.6" fill="currentColor" stroke="none"/></svg>
+                    Columns
+                  </button>
+                  <div class="odoo-live-pop" id="odooLiveColumnsPop" hidden>
+                    <div class="odoo-live-pop-head">Show fields<span>Custom column set, saved per model</span></div>
+                    <div class="odoo-live-pop-list" id="odooLiveColumnsList"></div>
+                    <div class="odoo-live-pop-foot">
+                      <button class="btn btn-ghost btn-sm" id="odooLiveColumnsReset" type="button">Reset to default</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="odoo-live-pop-wrap">
+                  <button class="btn btn-outline btn-sm" id="odooLiveViewsBtn" disabled title="Save or recall a filtered view">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>
+                    Views
+                  </button>
+                  <div class="odoo-live-pop odoo-live-pop--wide" id="odooLiveViewsPop" hidden>
+                    <div class="odoo-live-pop-head">Saved views<span>Model, filters &amp; grouping — recalled in one click</span></div>
+                    <div class="odoo-live-pop-list" id="odooLiveViewsList"></div>
+                    <div class="odoo-live-pop-foot odoo-live-pop-foot--save">
+                      <input type="text" id="odooLiveViewName" placeholder="Name this view…" maxlength="40"/>
+                      <button class="btn btn-primary btn-sm" id="odooLiveViewSaveBtn" type="button">Save current</button>
+                    </div>
+                  </div>
+                </div>
                 <div class="data-search dv-odoo-search" style="margin-left:auto;">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
                   <input type="text" placeholder="Quick search…" id="odooLiveQuickSearch" disabled/>
@@ -738,10 +765,22 @@
       <!-- ══════════════════════ PROJECTS ══════════════════════ -->
       <section class="view-panel" id="view-projects">
         <div class="ov-head">
-          <div><h1>Projects</h1><p>8 active repositories across acme-corp</p></div>
+          <div><h1>Projects</h1><p id="projectsSubhead">8 active repositories across acme-corp</p></div>
           <div class="ov-head-actions">
             <div class="data-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Search projects…" id="projectSearch"/></div>
-            <button class="btn btn-signal btn-sm" id="newProjectBtn">+ New project</button>
+            <input type="file" id="projectsImportFile" accept=".json" style="display:none"/>
+            <button class="btn btn-outline btn-sm" id="projectsImportBtn" data-require-perm="importExport" title="Import projects from a JSON backup">Import</button>
+            <div class="export-menu-wrap">
+              <button class="btn btn-outline btn-sm" id="projectsExportBtn">
+                Export <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-left:2px"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="export-menu" id="projectsExportMenu">
+                <button data-export="json" data-require-perm="importExport">JSON (full backup)</button>
+                <button data-export="xlsx" data-require-perm="importExport">Excel workbook (.xlsx)</button>
+                <button data-export="pdf" data-require-perm="importExport">Designed PDF report</button>
+              </div>
+            </div>
+            <button class="btn btn-signal btn-sm" id="newProjectBtn" data-require-perm="editProjects">+ New project</button>
           </div>
         </div>
         <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:var(--sp-5);">
@@ -780,9 +819,21 @@
       <!-- ══════════════════════ TEAM ══════════════════════ -->
       <section class="view-panel" id="view-team">
         <div class="ov-head">
-          <div><h1>Team</h1><p>8 members in acme-corp</p></div>
+          <div><h1>Team</h1><p id="teamSubhead">8 members in acme-corp</p></div>
           <div class="ov-head-actions">
-            <button class="btn btn-signal btn-sm" id="inviteTeamBtn">+ Invite member</button>
+            <input type="file" id="teamImportFile" accept=".json" style="display:none"/>
+            <button class="btn btn-outline btn-sm" id="teamImportBtn" data-require-perm="importExport" title="Import team from a JSON backup">Import</button>
+            <div class="export-menu-wrap">
+              <button class="btn btn-outline btn-sm" id="teamExportBtn">
+                Export <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-left:2px"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="export-menu" id="teamExportMenu">
+                <button data-export="json" data-require-perm="importExport">JSON (full backup)</button>
+                <button data-export="xlsx" data-require-perm="importExport">Excel workbook (.xlsx)</button>
+                <button data-export="pdf" data-require-perm="importExport">Designed PDF report</button>
+              </div>
+            </div>
+            <button class="btn btn-signal btn-sm" id="inviteTeamBtn" data-require-perm="manageTeam">+ Invite member</button>
           </div>
         </div>
         <div class="team-grid" id="teamGrid"></div>
@@ -828,7 +879,13 @@
 
           <!-- Workspace profile -->
           <div class="panel settings-panel">
-            <div class="panel-head"><h3>Workspace profile</h3><span class="tag">acme-corp</span></div>
+            <div class="panel-head odoo-panel-head">
+              <div class="settings-panel-title">
+                <span class="settings-icon-badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>
+                <div><h3>Workspace profile</h3><p class="settings-panel-sub">Who you are and how the workspace greets you</p></div>
+              </div>
+              <span class="tag">acme-corp</span>
+            </div>
             <div class="settings-field-row"><label>Workspace name</label><input type="text" class="pro-select" id="setWorkspaceName" value="acme-corp" style="width:100%"/></div>
             <div class="settings-field-row"><label>Display name</label><input type="text" class="pro-select" id="setDisplayName" value="Amara Khan" style="width:100%"/></div>
             <div class="settings-field-row"><label>Theme</label>
@@ -842,7 +899,13 @@
 
           <!-- Data & backup: local persistence -->
           <div class="panel settings-panel">
-            <div class="panel-head"><h3>Data &amp; backup</h3><span class="tag" id="storageUsageTag">—</span></div>
+            <div class="panel-head odoo-panel-head">
+              <div class="settings-panel-title">
+                <span class="settings-icon-badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span>
+                <div><h3>Data &amp; backup</h3><p class="settings-panel-sub">Where everything is actually stored</p></div>
+              </div>
+              <span class="tag" id="storageUsageTag">—</span>
+            </div>
             <p class="settings-note">This is a static, no-backend app — everything (workbooks, filters, chat history, preferences) is saved in <b>this browser's local storage</b>, not on a server. Use the points below to keep your data safe.</p>
             <ul class="settings-point-list">
               <li><b>Auto-save</b> — every change in Data Studio and Settings is saved to local storage the moment you make it. No "Save" button needed day-to-day.</li>
@@ -910,7 +973,13 @@
 
           <!-- AI Assistant API -->
           <div class="panel settings-panel">
-            <div class="panel-head"><h3>AI Assistant API</h3><span class="tag" id="aiKeyStatusTag">—</span></div>
+            <div class="panel-head odoo-panel-head">
+              <div class="settings-panel-title">
+                <span class="settings-icon-badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m13 2-8 12h6l-1 8 8-12h-6l1-8z"/></svg></span>
+                <div><h3>AI Assistant API</h3><p class="settings-panel-sub">Swap the offline demo engine for a real model</p></div>
+              </div>
+              <span class="tag" id="aiKeyStatusTag">—</span>
+            </div>
             <p class="settings-note">The AI Assistant runs a local offline engine by default. To have it call a real model instead, add your key to one dedicated file: <code>js/ai-api-config.js</code> — nothing else needs editing.</p>
             <ul class="settings-point-list">
               <li>Open <code>js/ai-api-config.js</code> and paste your key into <code>apiKey</code>.</li>
@@ -1110,15 +1179,39 @@
       <button class="chip-select active" data-type="kpi" type="button">KPI</button>
       <button class="chip-select" data-type="chart" type="button">Chart</button>
       <button class="chip-select" data-type="table" type="button">Table</button>
+      <button class="chip-select" data-type="progress" type="button">Progress</button>
     </div>
     <p class="dv-source-group-label">Data source</p>
     <select class="pro-select" id="dvWidgetSourceSelect" style="width:100%;"></select>
+    <div id="dvWidgetChartTypeRow" style="display:none;margin-top:var(--sp-3);">
+      <label style="font-size:var(--fs-xs);color:var(--ink-50);font-weight:600;display:block;margin-bottom:5px;">Chart style</label>
+      <select class="pro-select" id="dvWidgetChartTypeSelect" style="width:100%;">
+        <option value="bar">Bar</option>
+        <option value="line">Line</option>
+        <option value="area">Area</option>
+        <option value="pie">Pie</option>
+        <option value="doughnut">Doughnut</option>
+        <option value="radar">Radar</option>
+      </select>
+    </div>
+    <div id="dvWidgetTargetRow" style="display:none;margin-top:var(--sp-3);">
+      <label style="font-size:var(--fs-xs);color:var(--ink-50);font-weight:600;display:block;margin-bottom:5px;">Target value</label>
+      <input type="number" class="pro-select" id="dvWidgetTargetInput" placeholder="e.g. 50000" style="width:100%;"/>
+    </div>
     <div id="dvWidgetCsvRow" style="display:none;margin-top:var(--sp-3);">
       <div class="dv-widget-csv-drop" id="dvWidgetCsvDrop">⬆ Click to choose a CSV or Excel file<br/><span id="dvWidgetCsvStatus" style="display:block;margin-top:4px;color:var(--ink-30);">No file loaded yet.</span></div>
       <input type="file" id="dvWidgetCsvInput" accept=".csv,.xlsx,.xls" style="display:none"/>
       <div id="dvWidgetNumericFieldRow" style="display:none;margin-top:var(--sp-3);">
-        <label style="font-size:var(--fs-xs);color:var(--ink-50);font-weight:600;display:block;margin-bottom:5px;">Sum this column for the KPI</label>
+        <label style="font-size:var(--fs-xs);color:var(--ink-50);font-weight:600;display:block;margin-bottom:5px;">Sum this column</label>
         <select class="pro-select" id="dvWidgetNumericFieldSelect" style="width:100%;"></select>
+      </div>
+      <div id="dvWidgetCatFieldRow" style="display:none;margin-top:var(--sp-3);">
+        <label style="font-size:var(--fs-xs);color:var(--ink-50);font-weight:600;display:block;margin-bottom:5px;">Group by column (chart labels)</label>
+        <select class="pro-select" id="dvWidgetCatFieldSelect" style="width:100%;"></select>
+      </div>
+      <div id="dvWidgetValFieldRow" style="display:none;margin-top:var(--sp-3);">
+        <label style="font-size:var(--fs-xs);color:var(--ink-50);font-weight:600;display:block;margin-bottom:5px;">Sum this column for each bar/slice (optional — counts rows if left blank)</label>
+        <select class="pro-select" id="dvWidgetValFieldSelect" style="width:100%;"></select>
       </div>
     </div>
     <div class="dv-widget-live-row">
@@ -1131,7 +1224,65 @@
         <option value="60">Every 60s</option>
       </select>
     </div>
+    <div class="dv-widget-live-row">
+      <label style="font-size:var(--fs-xs);color:var(--ink-70);">Card size</label>
+      <select class="pro-select" id="dvWidgetSizeSelect" style="width:auto;">
+        <option value="sm">Small</option>
+        <option value="md" selected>Medium</option>
+        <option value="lg">Large</option>
+      </select>
+    </div>
     <button class="btn btn-primary btn-block btn-lg" id="dvWidgetSaveBtn" type="button" style="margin-top:var(--sp-5);">Save widget</button>
+  </div>
+</div>
+
+<!-- ══════════════════════ PROJECT MODAL (Projects) ══════════════════════ -->
+<div class="modal-overlay" id="projectModal">
+  <div class="modal-card">
+    <button class="modal-close" id="projectModalClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);">Projects</p>
+    <h3 id="projectModalTitle">Add a project</h3>
+    <div class="field"><label for="projectNameInput">Name</label><input type="text" id="projectNameInput" placeholder="e.g. Checkout redesign"/></div>
+    <div class="field"><label for="projectDescInput">Description</label><textarea class="pro-select" id="projectDescInput" rows="2" style="width:100%;resize:vertical;"></textarea></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3);">
+      <div class="field"><label for="projectStatusSelect">Status</label>
+        <select class="pro-select" id="projectStatusSelect" style="width:100%;">
+          <option value="active">Active</option>
+          <option value="progress">In progress</option>
+          <option value="maintenance">Maintenance</option>
+          <option value="risk">At risk</option>
+        </select>
+      </div>
+      <div class="field"><label for="projectProgressInput">Progress (%)</label><input type="number" class="pro-select" id="projectProgressInput" min="0" max="100" value="0" style="width:100%;"/></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3);">
+      <div class="field"><label for="projectClientInput">Client (optional)</label><input type="text" class="pro-select" id="projectClientInput" style="width:100%;"/></div>
+      <div class="field"><label for="projectTagInput">Tag</label><input type="text" class="pro-select" id="projectTagInput" placeholder="e.g. Design, Infra" style="width:100%;"/></div>
+    </div>
+    <button class="btn btn-primary btn-block btn-lg" id="projectSaveBtn" type="button" style="margin-top:var(--sp-5);">Save project</button>
+  </div>
+</div>
+
+<!-- ══════════════════════ TEAM MEMBER MODAL (Team) ══════════════════════ -->
+<div class="modal-overlay" id="teamModal">
+  <div class="modal-card">
+    <button class="modal-close" id="teamModalClose" type="button" aria-label="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <p class="eyebrow" style="margin-bottom:var(--sp-2);">Team</p>
+    <h3 id="teamModalTitle">Invite a member</h3>
+    <div class="field"><label for="teamNameInput">Name</label><input type="text" id="teamNameInput" placeholder="e.g. Amara Khan"/></div>
+    <div class="field"><label for="teamRoleInput">Role</label><input type="text" class="pro-select" id="teamRoleInput" placeholder="e.g. Product Manager" style="width:100%;"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3);">
+      <div class="field"><label for="teamStatusSelect">Status</label>
+        <select class="pro-select" id="teamStatusSelect" style="width:100%;">
+          <option value="online">Online</option>
+          <option value="away">Away</option>
+          <option value="offline">Offline</option>
+        </select>
+      </div>
+      <div class="field"><label for="teamProjectsInput">Projects assigned</label><input type="number" class="pro-select" id="teamProjectsInput" min="0" value="0" style="width:100%;"/></div>
+    </div>
+    <div class="field"><label for="teamEmailInput">Email (optional)</label><input type="email" class="pro-select" id="teamEmailInput" style="width:100%;"/></div>
+    <button class="btn btn-primary btn-block btn-lg" id="teamSaveBtn" type="button" style="margin-top:var(--sp-5);">Save member</button>
   </div>
 </div>
 

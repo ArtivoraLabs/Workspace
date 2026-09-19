@@ -1,6 +1,65 @@
 # Changelog
 
-## People workspace - 2026-09-15
+## People tab bar, Odoo customization, richer widgets, real Projects/Team, settings polish - 2026-09-18
+
+A pass across six areas raised as gaps in the existing build: the People
+sub-nav's on-scroll behaviour, Odoo Live customization, Widget Builder's
+range of widgets, Projects/Team being read-only demo data, and both
+Settings pages' visual polish.
+
+- **People tab bar now stays put.** `.hr-subnav` was `position: static`, so
+  it scrolled away under the sticky `.dash-topbar` above it instead of
+  reading as a fixed section of chrome. It's now `position: sticky; top:
+  var(--nav-h)`, with an opaque backdrop and the same border/shadow
+  treatment as the topbar, so the two read as one continuous strip.
+- **People directory gets a List/Grid view switcher** (`.hr-viewtoggle`),
+  the same "view" concept as Odoo's own list/kanban toggle. Grid renders
+  each person as a card (`.hr-people-card`) instead of a table row —
+  avatar, status tag, department/type chips, pay, Spotlight action.
+- **Odoo Live: column customization + saved views.** A "Columns" popover
+  lets you show/hide any eligible field per model (previously hardcoded to
+  the first 7 fields returned) — the chosen set persists per model in
+  `localStorage`. A "Views" popover saves the current model + filter chips
+  + group-by + measure under a name and reapplies it in one click, matching
+  Odoo's own Favorites pattern. Both are additive — `getDisplayFields()`
+  falls back to the old auto-picked default when there's no saved
+  preference, and `selectModel`/`applyView` share a `loadModelFields()` so
+  a saved view can jump to a model outside the currently-open module rail.
+- **Widget Builder: a fourth widget type (Progress) and three more chart
+  styles.** Progress pairs a numeric value against a target with a percent
+  bar — works against Demo, Odoo (mock) and CSV sources alike. Chart
+  widgets gain Area, Pie and Radar alongside the existing Bar/Line/
+  Doughnut. CSV-imported data can now drive a Chart widget at all (it was
+  previously KPI/Table only) via a group-by column + optional value column
+  (`computeTableChart`). Widgets also take a Small/Medium/Large size,
+  spanning more of the grid instead of a single fixed card width.
+- **Projects and Team are real data now, not a demo fixture.** Both were
+  hardcoded arrays in `dashboard-pro.js`; "+ New project" and "+ Invite
+  member" just toasted "demo action" and discarded input. They're now
+  backed by `localStorage` (`dv_projects` / `dv_team`) with full add/edit/
+  delete through a modal, gated behind two new permissions (`editProjects`,
+  `manageTeam` — added to `auth-service.js`'s role matrix alongside the
+  existing `editWidgets`/`importExport`). Both get an Import/Export
+  toolbar: JSON for a full round-trippable backup, an Excel workbook via
+  the SheetJS instance already loaded on the page, and a designed PDF
+  report — reusing `DVReportEngine.generatePdfReport()` (the same engine
+  Data Studio's exports use) for a branded cover, KPI summary and formatted
+  table rather than a bare `window.print()`. The Project KPI tiles
+  (Active/On track/At risk/Avg. progress) now compute from the live list
+  instead of being separately hand-typed numbers that could drift out of
+  sync with it.
+- **Settings, both pages.** People's Settings (`hr-views.js`) moved off
+  hand-rolled inline `style=` grids onto proper classes — icon-badged
+  section headers, a real `.hr-form`, and a new "Data" card that surfaces
+  a working directory CSV export next to the existing reset action, instead
+  of the reset button sitting slightly oddly under "Workspace." The
+  Dashboard's Settings tab already had a well-built Odoo panel with an
+  icon badge + subtitle header; the other three panels (Workspace profile,
+  Data & backup, AI Assistant API) get the same treatment via new generic
+  `.settings-icon-badge` / `.settings-panel-title` classes, so the tab
+  reads as one consistent design rather than one panel standing out.
+
+
 
 A new `people.html` — an HR/operations workspace built to a supplied visual
 brief, with a working feature set rather than a static mockup.
