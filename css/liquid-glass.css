@@ -1,0 +1,319 @@
+/* ==========================================================================
+   DashView — Liquid Glass material system  (v2 — fixed)
+   --------------------------------------------------------------------------
+   FIXES IN THIS VERSION
+   ① Text glitch: specular ::before overlay no longer uses mix-blend-mode
+     (blend mode was fighting with backdrop-filter stacking contexts and
+      washing out -webkit-text-fill-color: transparent gradient text).
+   ② Text fix: glass content children get isolation + z-index so they
+     paint above the specular layer cleanly.
+   ③ Smooth animation: GPU compositing on every glass surface via
+     transform:translateZ(0) + backface-visibility:hidden.
+   ④ Hover transitions added (were missing): spring easing for lift effect.
+   ⑤ will-change declared right on the elements that animate on hover.
+   ========================================================================== */
+
+:root {
+  /* Warm glass tint (dark) */
+  --lg-blur: blur(28px) saturate(180%) brightness(1.05);
+  --lg-blur-heavy: blur(34px) saturate(190%) brightness(1.06);
+  --lg-blur-soft: blur(16px) saturate(150%);
+
+  --lg-surface: rgba(24, 20, 14, 0.50);
+  --lg-surface-strong: rgba(20, 17, 12, 0.66);
+  --lg-surface-hover: rgba(30, 25, 17, 0.62);
+  --lg-surface-sunken: rgba(6, 7, 6, 0.42);
+
+  /* FIX ①: reduced opacity so text is never washed out */
+  --lg-specular: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.13) 0%,
+    rgba(255, 255, 255, 0.03) 28%,
+    rgba(255, 255, 255, 0.00) 50%
+  );
+  --lg-rim:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+  --lg-shadow: 0 22px 54px -20px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.28);
+  --lg-shadow-lift: 0 30px 68px -20px rgba(0, 0, 0, 0.60), 0 4px 14px rgba(0, 0, 0, 0.30);
+
+  /* FIX ④: spring easing for glass hover */
+  --lg-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --lg-ease: cubic-bezier(0.16, 1, 0.30, 1);
+}
+
+html[data-theme="light"] {
+  --lg-surface: rgba(255, 255, 255, 0.50);
+  --lg-surface-strong: rgba(255, 255, 255, 0.68);
+  --lg-surface-hover: rgba(255, 255, 255, 0.76);
+  --lg-surface-sunken: rgba(20, 24, 19, 0.045);
+
+  /* Light specular: white highlight, no mix-blend-mode needed */
+  --lg-specular: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.60) 0%,
+    rgba(255, 255, 255, 0.15) 28%,
+    rgba(255, 255, 255, 0.00) 50%
+  );
+  --lg-rim:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.40),
+    inset 0 -1px 0 rgba(20, 24, 19, 0.05);
+  --lg-shadow: 0 18px 44px -18px rgba(20, 24, 19, 0.18), 0 2px 8px rgba(20, 24, 19, 0.08);
+  --lg-shadow-lift: 0 26px 56px -18px rgba(20, 24, 19, 0.24), 0 4px 12px rgba(20, 24, 19, 0.10);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kpi-card, .panel, .project-card, .saved-dash-card, .btn,
+  .slicer-btn, .role-preset-btn { transition: none !important; }
+}
+
+/* ── Elevated glass panes ───────────────────────────────────────────────── */
+.kpi-card, .panel, .chart-card, .project-card, .team-card, .report-card,
+.widget-card, .modal-card, .cmd-box, .toast,
+.saved-dash-card, .role-option, .studio-slicer-bar, .pivot-well,
+.hierarchy-tree-wrap, .notfound-card,
+html[data-theme="dark"] .chart-card, html[data-theme="dark"] .widget-card {
+  position: relative;
+  background: var(--lg-surface);
+  backdrop-filter: var(--lg-blur);
+  -webkit-backdrop-filter: var(--lg-blur);
+  border-color: transparent;
+  box-shadow: var(--lg-rim), var(--lg-shadow);
+  border-radius: max(var(--r-md, 12px), 16px);
+  overflow: hidden;
+
+  /* FIX ③: promote to own GPU compositing layer */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+
+  /* FIX ④: smooth hover transitions (were completely missing before) */
+  transition:
+    background 0.28s var(--lg-ease),
+    box-shadow 0.28s var(--lg-ease),
+    transform  0.32s var(--lg-spring);
+}
+
+/* FIX ⑤: declare will-change only when hover is likely */
+.kpi-card:hover, .panel:hover, .project-card:hover, .saved-dash-card:hover {
+  will-change: transform, box-shadow, background;
+}
+
+/* Sticky chrome — backdrop only, no overflow touch */
+.dash-side, .dash-topbar, .footer, .notif-panel, .studio-topbar, .studio-fields-rail,
+html[data-theme="dark"] .studio-topbar {
+  background: var(--lg-surface);
+  backdrop-filter: var(--lg-blur);
+  -webkit-backdrop-filter: var(--lg-blur);
+  border-color: transparent;
+  box-shadow: var(--lg-rim), var(--lg-shadow);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* ── Specular highlight layer ───────────────────────────────────────────
+   FIX ①+②: NO mix-blend-mode here. The gradient is already semi-
+   transparent white so it looks like a specular edge highlight without
+   blending into text.  Children are isolated above this layer via the
+   z-index rule below. */
+.kpi-card::before, .panel::before, .chart-card::before, .project-card::before,
+.team-card::before, .report-card::before, .widget-card::before,
+.modal-card::before, .cmd-box::before, .notif-panel::before,
+.saved-dash-card::before, .studio-slicer-bar::before, .pivot-well::before,
+.notfound-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;            /* sits at bottom of card's stacking context */
+  background: var(--lg-specular);
+  pointer-events: none;
+  /* NO mix-blend-mode — that's what was causing text to glitch */
+}
+
+/* FIX ②: all direct content children sit above the specular layer */
+.kpi-card > *:not(::before):not(::after),
+.panel > *:not(::before):not(::after),
+.chart-card > *:not(::before):not(::after),
+.project-card > *:not(::before):not(::after),
+.team-card > *:not(::before):not(::after),
+.report-card > *:not(::before):not(::after),
+.widget-card > *:not(::before):not(::after),
+.modal-card > *:not(::before):not(::after),
+.cmd-box > *:not(::before):not(::after),
+.saved-dash-card > *:not(::before):not(::after),
+.studio-slicer-bar > *:not(::before):not(::after),
+.pivot-well > *:not(::before):not(::after) {
+  position: relative;
+  z-index: 1;
+  isolation: isolate; /* protect gradient/clip-text from ancestor blending */
+}
+
+/* ── Hover: lift + brighten ─────────────────────────────────────────────── */
+.kpi-card:hover, .panel:hover, .project-card:hover, .saved-dash-card:hover {
+  background: var(--lg-surface-hover);
+  box-shadow: var(--lg-rim), var(--lg-shadow-lift);
+  transform: translateY(-2px) translateZ(0);
+}
+
+/* ── Specific radius overrides ──────────────────────────────────────────── */
+.dash-topbar { border-radius: 0; backdrop-filter: var(--lg-blur-heavy); -webkit-backdrop-filter: var(--lg-blur-heavy); }
+.dash-side   { border-radius: 0; }
+.footer      { border-radius: 0; }
+.modal-overlay .modal-card { border-radius: var(--r-lg, 16px); }
+.toast { border-radius: var(--r-md, 12px); }
+
+/* ── Sunken glass (search fields, inputs, dropzones) ────────────────────── */
+.dash-search, .data-search, .fields-rail-head input, .field input,
+.form-input, .studio-dropzone, .board-tabs {
+  background: var(--lg-surface-sunken) !important;
+  backdrop-filter: var(--lg-blur-soft);
+  -webkit-backdrop-filter: var(--lg-blur-soft);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  border-color: transparent !important;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+html[data-theme="light"] .dash-search, html[data-theme="light"] .data-search,
+html[data-theme="light"] .fields-rail-head input, html[data-theme="light"] .field input,
+html[data-theme="light"] .studio-dropzone {
+  box-shadow: inset 0 1px 3px rgba(20, 24, 19, 0.08), inset 0 0 0 1px rgba(20, 24, 19, 0.04);
+}
+
+/* ── Floating menus ─────────────────────────────────────────────────────── */
+.studio-dropdown, .col-menu-popover, .slicer-dropdown, .grid-scroll,
+.pivot-table-wrap {
+  background: var(--lg-surface-strong) !important;
+  backdrop-filter: var(--lg-blur);
+  -webkit-backdrop-filter: var(--lg-blur);
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* ── AI assistant chat surfaces ─────────────────────────────────────────── */
+.ai-embed-bubble, .ai-embed-suggest-card {
+  background: var(--lg-surface) !important;
+  backdrop-filter: var(--lg-blur-soft);
+  -webkit-backdrop-filter: var(--lg-blur-soft);
+  border-color: transparent !important;
+  box-shadow: var(--lg-rim);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+.ai-embed-msg.user .ai-embed-bubble {
+  background: rgba(232, 163, 61, 0.16) !important;
+  border-color: rgba(232, 163, 61, 0.30) !important;
+}
+.ai-embed-composer, .ai-composer {
+  background: var(--lg-surface-strong) !important;
+  backdrop-filter: var(--lg-blur);
+  -webkit-backdrop-filter: var(--lg-blur);
+  border-color: transparent !important;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+.ai-embed-composer textarea {
+  background: var(--lg-surface-sunken) !important;
+  border-color: transparent !important;
+}
+
+/* ── Pill buttons & tags ─────────────────────────────────────────────────── */
+.btn, .slicer-btn, .role-preset-btn, .status-pill, .tag, .source-badge {
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: var(--lg-blur-soft);
+  -webkit-backdrop-filter: var(--lg-blur-soft);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition:
+    transform  0.20s var(--lg-spring),
+    box-shadow 0.20s var(--lg-ease),
+    background 0.18s ease,
+    filter     0.18s ease;
+}
+
+.btn { background: var(--lg-surface-strong); box-shadow: var(--lg-rim), 0 10px 24px -12px rgba(0, 0, 0, 0.45); }
+.btn-primary { background: var(--ink); box-shadow: var(--lg-rim), 0 10px 26px -12px rgba(0, 0, 0, 0.50); }
+.btn-signal   { background: var(--signal); box-shadow: var(--lg-rim), 0 14px 30px -12px rgba(232, 163, 61, 0.45); }
+.btn-outline  { background: var(--lg-surface); }
+
+.btn:hover:not(.btn-ghost) {
+  transform: translateY(-2px) translateZ(0);
+  filter: brightness(1.06);
+}
+.btn:active, .slicer-btn:active, .role-preset-btn:active {
+  transform: scale(0.96) translateZ(0);
+  transition-duration: 0.10s;
+}
+
+/* FIX ②: text inside buttons above any internal blend layers */
+.btn > *, .slicer-btn > *, .role-preset-btn > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Nav/topbar ─────────────────────────────────────────────────────────── */
+.nav {
+  backdrop-filter: var(--lg-blur-heavy);
+  -webkit-backdrop-filter: var(--lg-blur-heavy);
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* ── Gradient text — explicit fix for backdrop-filter context ───────────
+   FIX ②: ensure .grad-text and .text-gradient always paint cleanly above
+   glass surfaces.  translateZ(0) puts them on a separate compositing
+   layer; isolation:isolate prevents ancestor blend-modes from touching
+   the transparent-fill paint. */
+.grad-text,
+.t-display .grad-text,
+span.grad-text,
+.text-gradient {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  /* Ensure paint area isn't clipped by overflow:hidden on parent */
+  display: inline-block;
+}
+
+/* ── Ambient backdrop ───────────────────────────────────────────────────── */
+body.dash-body {
+  background:
+    radial-gradient(900px 560px at 12% -8%,  rgba(232, 163, 61, 0.14), transparent 60%),
+    radial-gradient(760px 520px at 100% 4%,  rgba(91, 143, 174, 0.11), transparent 55%),
+    radial-gradient(820px 620px at 35% 115%, rgba(217, 143, 39, 0.10), transparent 60%),
+    var(--paper-alt);
+  background-attachment: fixed;
+}
+body:not(.dash-body):not(.ai-body) {
+  background:
+    radial-gradient(900px 560px at 12% -10%, rgba(232, 163, 61, 0.13), transparent 60%),
+    radial-gradient(760px 520px at 100%  6%, rgba(91, 143, 174, 0.09), transparent 55%),
+    var(--paper);
+  background-attachment: fixed;
+}
+
+/* ── Refined scrollbar ──────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(232, 163, 61, 0.28);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(232, 163, 61, 0.48);
+  background-clip: padding-box;
+}

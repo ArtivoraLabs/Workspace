@@ -1,0 +1,55 @@
+/* ==========================================================================
+   DashView — People page polish (loaded after people.css)
+   Fixes stacking of name/role, tightens the directory table and cards,
+   and makes the toolbar, tiles and onboarding list feel consistent.
+   ========================================================================== */
+
+/* Name + role used to run together ("Amara OkonkwoProduct Manager") */
+.hr-person { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.hr-person > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.hr-person-name, .hr-person-sub { display: block; }
+.hr-person-name { font-weight: 600; font-size: 14.5px; line-height: 1.25; letter-spacing: -.005em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hr-person-sub { margin-top: 2px; font-size: 12.5px; line-height: 1.3; }
+.hr-mono { box-shadow: 0 0 0 2px var(--card-solid, #fff), 0 0 0 3px var(--hairline, rgba(0,0,0,.08)); flex: none; }
+
+/* View header + toolbar */
+.hr-viewhead { padding-bottom: 4px; }
+.hr-viewtitle { font-weight: 500; }
+.hr-toolbar { gap: 10px; }
+.hr-toolbar .hr-field { height: 42px; border-radius: 999px; padding-inline: 16px; transition: border-color .15s ease, box-shadow .15s ease; }
+.hr-toolbar input.hr-field { min-width: 220px; }
+.hr-toolbar .hr-field:hover { border-color: var(--butter-dim, rgba(0,0,0,.25)); }
+.hr-toolbar .hr-field:focus, .hr-toolbar .hr-field:focus-visible { outline: none; border-color: var(--butter, #e8a33d); box-shadow: 0 0 0 3px var(--butter-15, rgba(232,163,61,.2)); }
+
+/* KPI tiles: accent edge + lift */
+.hr-tile { position: relative; overflow: hidden; transition: transform .18s ease, box-shadow .18s ease; }
+.hr-tile::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--butter, #e8a33d); }
+.hr-tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-card, 0 10px 30px rgba(0,0,0,.08)); }
+.hr-tile-val { line-height: 1.1; }
+
+/* Directory table */
+.hr-table th { position: sticky; top: 0; z-index: 1; padding: 12px 14px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-align: left; }
+.hr-table td { padding: 14px; }
+.hr-table tbody tr:hover { background: rgba(0,0,0,.03); }
+.hr-table .hr-btn--quiet { height: 34px; padding: 0 16px; font-size: 13px; }
+
+/* Grid cards */
+.hr-people-grid { gap: 16px; }
+.hr-people-card { position: relative; overflow: hidden; }
+.hr-people-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, var(--butter, #e8a33d), transparent 70%); opacity: .8; }
+.hr-people-card-name { font-weight: 600; }
+.hr-people-card-role { margin-top: -6px; }
+
+/* Empty state */
+.hr-empty { padding: 56px 20px; text-align: center; }
+
+/* Onboarding list: label and time were inline and collided */
+.hr-task-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; text-align: left; }
+.hr-task-label, .hr-task-when { display: block; }
+.hr-task-label { font-weight: 600; line-height: 1.3; }
+.hr-task-when { font-size: 12px; opacity: .65; }
+
+@media (max-width: 760px) {
+  .hr-toolbar input.hr-field { min-width: 0; flex: 1 1 100%; }
+  .hr-table td { padding: 11px 10px; }
+}

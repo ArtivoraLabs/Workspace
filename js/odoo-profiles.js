@@ -1,0 +1,204 @@
+/* ==========================================================================
+   DashView — Odoo module profiles (window.DVOdooProfiles)
+   What "good visualisation for this module" means, per Odoo app:
+   the primary models to offer in the dropdown, 3–4 headline KPIs and 2–4
+   charts. Anything without a profile gets a generic one built from the
+   selected model's own fields, so every module still gets a useful view.
+   Date tokens in domains: $now, $d30, $d365 (resolved at run time).
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  var CONF = [['state', 'in', ['sale', 'done']]];
+  var P = {
+    sale: {
+      title: 'Sales', models: ['sale.order', 'sale.order.line', 'res.partner', 'product.template'],
+      kpis: [
+        { label: 'Confirmed revenue', model: 'sale.order', domain: CONF, measure: 'amount_total', kind: 'money', sub: 'All confirmed orders' },
+        { label: 'Open quotations', model: 'sale.order', domain: [['state', 'in', ['draft', 'sent']]], measure: 'amount_total', kind: 'count', sub: 'Waiting to be confirmed' },
+        { label: 'Orders (30 days)', model: 'sale.order', domain: CONF.concat([['date_order', '>=', '$d30']]), kind: 'count', sub: 'Confirmed in the last 30 days' }
+      ],
+      charts: [
+        { title: 'Revenue by month', model: 'sale.order', domain: CONF, groupby: 'date_order:month', measure: 'amount_total', type: 'bar', last: 12 },
+        { title: 'Orders by stage', model: 'sale.order', groupby: 'state', type: 'doughnut' },
+        { title: 'Top salespeople', model: 'sale.order', domain: CONF, groupby: 'user_id', measure: 'amount_total', type: 'hbar', limit: 8 },
+        { title: 'Top customers', model: 'sale.order', domain: CONF, groupby: 'partner_id', measure: 'amount_total', type: 'hbar', limit: 8 }
+      ]
+    },
+    crm: {
+      title: 'CRM', models: ['crm.lead', 'crm.team', 'crm.stage'],
+      kpis: [
+        { label: 'Open pipeline', model: 'crm.lead', domain: [['type', '=', 'opportunity'], ['probability', '<', 100]], measure: 'expected_revenue', kind: 'money', sub: 'Expected revenue, open opportunities' },
+        { label: 'Won (all time)', model: 'crm.lead', domain: [['probability', '=', 100]], measure: 'expected_revenue', kind: 'money', sub: 'Closed-won revenue' },
+        { label: 'New leads (30 days)', model: 'crm.lead', domain: [['create_date', '>=', '$d30']], kind: 'count', sub: 'Created in the last 30 days' }
+      ],
+      charts: [
+        { title: 'Pipeline by stage', model: 'crm.lead', domain: [['type', '=', 'opportunity']], groupby: 'stage_id', measure: 'expected_revenue', type: 'bar' },
+        { title: 'Leads by source', model: 'crm.lead', groupby: 'source_id', type: 'doughnut' },
+        { title: 'Pipeline by salesperson', model: 'crm.lead', domain: [['type', '=', 'opportunity'], ['probability', '<', 100]], groupby: 'user_id', measure: 'expected_revenue', type: 'hbar', limit: 8 },
+        { title: 'New leads per month', model: 'crm.lead', groupby: 'create_date:month', type: 'line', last: 12 }
+      ]
+    },
+    account: {
+      title: 'Accounting', models: ['account.move', 'account.move.line', 'account.payment', 'account.journal'],
+      kpis: [
+        { label: 'Invoiced (posted)', model: 'account.move', domain: [['move_type', '=', 'out_invoice'], ['state', '=', 'posted']], measure: 'amount_total', kind: 'money', sub: 'Customer invoices' },
+        { label: 'Receivable outstanding', model: 'account.move', domain: [['move_type', '=', 'out_invoice'], ['state', '=', 'posted'], ['payment_state', 'in', ['not_paid', 'partial']]], measure: 'amount_residual', kind: 'money', sub: 'Unpaid customer invoices' },
+        { label: 'Vendor bills (posted)', model: 'account.move', domain: [['move_type', '=', 'in_invoice'], ['state', '=', 'posted']], measure: 'amount_total', kind: 'money', sub: 'Supplier bills' }
+      ],
+      charts: [
+        { title: 'Invoiced by month', model: 'account.move', domain: [['move_type', '=', 'out_invoice'], ['state', '=', 'posted']], groupby: 'invoice_date:month', measure: 'amount_total', type: 'bar', last: 12 },
+        { title: 'Invoices by payment status', model: 'account.move', domain: [['move_type', '=', 'out_invoice'], ['state', '=', 'posted']], groupby: 'payment_state', type: 'doughnut' },
+        { title: 'Entries by type', model: 'account.move', groupby: 'move_type', type: 'hbar' }
+      ]
+    },
+    purchase: {
+      title: 'Purchase', models: ['purchase.order', 'purchase.order.line', 'res.partner'],
+      kpis: [
+        { label: 'Confirmed spend', model: 'purchase.order', domain: [['state', 'in', ['purchase', 'done']]], measure: 'amount_total', kind: 'money', sub: 'Confirmed purchase orders' },
+        { label: 'RFQs open', model: 'purchase.order', domain: [['state', 'in', ['draft', 'sent']]], kind: 'count', sub: 'Requests for quotation' }
+      ],
+      charts: [
+        { title: 'Spend by month', model: 'purchase.order', domain: [['state', 'in', ['purchase', 'done']]], groupby: 'date_order:month', measure: 'amount_total', type: 'bar', last: 12 },
+        { title: 'Orders by status', model: 'purchase.order', groupby: 'state', type: 'doughnut' },
+        { title: 'Top vendors', model: 'purchase.order', domain: [['state', 'in', ['purchase', 'done']]], groupby: 'partner_id', measure: 'amount_total', type: 'hbar', limit: 8 }
+      ]
+    },
+    stock: {
+      title: 'Inventory', models: ['stock.picking', 'stock.move', 'stock.quant', 'stock.warehouse', 'product.product'],
+      kpis: [
+        { label: 'Ready to process', model: 'stock.picking', domain: [['state', '=', 'assigned']], kind: 'count', sub: 'Transfers ready' },
+        { label: 'Waiting', model: 'stock.picking', domain: [['state', 'in', ['confirmed', 'waiting']]], kind: 'count', sub: 'Waiting on stock/another operation' },
+        { label: 'Late', model: 'stock.picking', domain: [['state', 'not in', ['done', 'cancel']], ['scheduled_date', '<', '$now']], kind: 'count', sub: 'Past scheduled date' }
+      ],
+      charts: [
+        { title: 'Transfers by status', model: 'stock.picking', groupby: 'state', type: 'doughnut' },
+        { title: 'Transfers by type', model: 'stock.picking', groupby: 'picking_type_id', type: 'hbar', limit: 8 },
+        { title: 'Transfers per month', model: 'stock.picking', groupby: 'scheduled_date:month', type: 'line', last: 12 }
+      ]
+    },
+    hr: {
+      title: 'Employees', models: ['hr.employee', 'hr.department', 'hr.job'],
+      kpis: [
+        { label: 'Employees', model: 'hr.employee', kind: 'count', sub: 'Active employees' },
+        { label: 'Hired (365 days)', model: 'hr.employee', domain: [['create_date', '>=', '$d365']], kind: 'count', sub: 'Added in the last year' }
+      ],
+      charts: [
+        { title: 'Headcount by department', model: 'hr.employee', groupby: 'department_id', type: 'hbar', limit: 10 },
+        { title: 'Employees by job', model: 'hr.employee', groupby: 'job_id', type: 'doughnut' },
+        { title: 'Employees by company', model: 'hr.employee', groupby: 'company_id', type: 'hbar', limit: 8 }
+      ]
+    },
+    hr_holidays: {
+      title: 'Time Off', models: ['hr.leave', 'hr.leave.allocation', 'hr.leave.type'],
+      kpis: [
+        { label: 'To approve', model: 'hr.leave', domain: [['state', 'in', ['confirm', 'validate1']]], kind: 'count', sub: 'Waiting for a decision' },
+        { label: 'Approved', model: 'hr.leave', domain: [['state', '=', 'validate']], kind: 'count', sub: 'Approved requests' }
+      ],
+      charts: [
+        { title: 'Requests by status', model: 'hr.leave', groupby: 'state', type: 'doughnut' },
+        { title: 'Requests by type', model: 'hr.leave', groupby: 'holiday_status_id', type: 'hbar', limit: 8 },
+        { title: 'Requests by department', model: 'hr.leave', groupby: 'department_id', type: 'hbar', limit: 8 }
+      ]
+    },
+    hr_expense: {
+      title: 'Expenses', models: ['hr.expense', 'hr.expense.sheet'],
+      kpis: [{ label: 'Total expenses', model: 'hr.expense', measure: 'total_amount', kind: 'money', sub: 'All expense lines' }],
+      charts: [
+        { title: 'Expenses by status', model: 'hr.expense', groupby: 'state', measure: 'total_amount', type: 'doughnut' },
+        { title: 'Expenses by employee', model: 'hr.expense', groupby: 'employee_id', measure: 'total_amount', type: 'hbar', limit: 8 },
+        { title: 'Expenses by month', model: 'hr.expense', groupby: 'date:month', measure: 'total_amount', type: 'bar', last: 12 }
+      ]
+    },
+    project: {
+      title: 'Project', models: ['project.task', 'project.project', 'account.analytic.line'],
+      kpis: [
+        { label: 'Projects', model: 'project.project', kind: 'count', sub: 'Active projects' },
+        { label: 'Open tasks', model: 'project.task', kind: 'count', sub: 'Tasks in progress' }
+      ],
+      charts: [
+        { title: 'Tasks by stage', model: 'project.task', groupby: 'stage_id', type: 'bar' },
+        { title: 'Tasks by project', model: 'project.task', groupby: 'project_id', type: 'hbar', limit: 8 },
+        { title: 'Tasks created per month', model: 'project.task', groupby: 'create_date:month', type: 'line', last: 12 }
+      ]
+    },
+    mrp: {
+      title: 'Manufacturing', models: ['mrp.production', 'mrp.bom', 'mrp.workorder', 'mrp.workcenter'],
+      kpis: [
+        { label: 'In progress', model: 'mrp.production', domain: [['state', '=', 'progress']], kind: 'count', sub: 'Manufacturing orders' },
+        { label: 'Confirmed', model: 'mrp.production', domain: [['state', '=', 'confirmed']], kind: 'count', sub: 'Waiting to start' }
+      ],
+      charts: [
+        { title: 'Orders by status', model: 'mrp.production', groupby: 'state', type: 'doughnut' },
+        { title: 'Orders by product', model: 'mrp.production', groupby: 'product_id', type: 'hbar', limit: 8 },
+        { title: 'Orders per month', model: 'mrp.production', groupby: 'date_start:month', type: 'line', last: 12 }
+      ]
+    },
+    point_of_sale: {
+      title: 'Point of Sale', models: ['pos.order', 'pos.session', 'pos.config', 'pos.payment'],
+      kpis: [{ label: 'POS revenue', model: 'pos.order', domain: [['state', 'in', ['paid', 'done', 'invoiced']]], measure: 'amount_total', kind: 'money', sub: 'Paid orders' }],
+      charts: [
+        { title: 'POS revenue by month', model: 'pos.order', domain: [['state', 'in', ['paid', 'done', 'invoiced']]], groupby: 'date_order:month', measure: 'amount_total', type: 'bar', last: 12 },
+        { title: 'Orders by status', model: 'pos.order', groupby: 'state', type: 'doughnut' },
+        { title: 'Revenue by cashier', model: 'pos.order', groupby: 'user_id', measure: 'amount_total', type: 'hbar', limit: 8 }
+      ]
+    },
+    contacts: {
+      title: 'Contacts', models: ['res.partner', 'res.partner.category', 'res.country'],
+      kpis: [
+        { label: 'Contacts', model: 'res.partner', kind: 'count', sub: 'All active contacts' },
+        { label: 'Customers', model: 'res.partner', domain: [['customer_rank', '>', 0]], kind: 'count', sub: 'With at least one sale' },
+        { label: 'Vendors', model: 'res.partner', domain: [['supplier_rank', '>', 0]], kind: 'count', sub: 'With at least one purchase' }
+      ],
+      charts: [
+        { title: 'Contacts by country', model: 'res.partner', groupby: 'country_id', type: 'hbar', limit: 10 },
+        { title: 'New contacts per month', model: 'res.partner', groupby: 'create_date:month', type: 'line', last: 12 }
+      ]
+    },
+    helpdesk: {
+      title: 'Helpdesk', models: ['helpdesk.ticket', 'helpdesk.team'],
+      kpis: [{ label: 'Tickets', model: 'helpdesk.ticket', kind: 'count', sub: 'All tickets' }],
+      charts: [
+        { title: 'Tickets by stage', model: 'helpdesk.ticket', groupby: 'stage_id', type: 'bar' },
+        { title: 'Tickets by priority', model: 'helpdesk.ticket', groupby: 'priority', type: 'doughnut' },
+        { title: 'Tickets by team', model: 'helpdesk.ticket', groupby: 'team_id', type: 'hbar', limit: 8 }
+      ]
+    },
+    fleet: {
+      title: 'Fleet', models: ['fleet.vehicle', 'fleet.vehicle.log.services', 'fleet.vehicle.log.contract'],
+      kpis: [{ label: 'Vehicles', model: 'fleet.vehicle', kind: 'count', sub: 'In the fleet' }],
+      charts: [
+        { title: 'Vehicles by status', model: 'fleet.vehicle', groupby: 'state_id', type: 'doughnut' },
+        { title: 'Vehicles by driver', model: 'fleet.vehicle', groupby: 'driver_id', type: 'hbar', limit: 8 }
+      ]
+    }
+  };
+  var ALIAS = { sale_management: 'sale', website_sale: 'sale', sale_stock: 'sale', sale_crm: 'crm', account_accountant: 'account', l10n_generic_coa: 'account', purchase_stock: 'purchase', hr_recruitment: 'hr', hr_contract: 'hr', hr_attendance: 'hr', base: 'contacts', hr_timesheet: 'project', point_of_sale_restaurant: 'point_of_sale' };
+
+  function get(mod) { return P[mod] || P[ALIAS[mod]] || null; }
+
+  function tokens(domain) {
+    var now = Date.now(), f = function (d) { return new Date(now - d * 864e5).toISOString().slice(0, 19).replace('T', ' '); };
+    var map = { $now: f(0), $d30: f(30), $d365: f(365) };
+    return (domain || []).map(function (t) { return Array.isArray(t) ? [t[0], t[1], typeof t[2] === 'string' && map[t[2]] ? map[t[2]] : t[2]] : t; });
+  }
+
+  /* Generic profile from a model's own fields. */
+  function build(model, fields) {
+    var has = function (n) { return !!fields[n]; };
+    var pick = function (list, skip) { for (var i = 0; i < list.length; i++) if (has(list[i]) && list[i] !== skip) return list[i]; return null; };
+    var money = pick(['amount_total', 'amount_untaxed', 'price_total', 'expected_revenue', 'total_amount', 'amount', 'list_price', 'standard_price']);
+    var kpis = [{ label: 'Total records', model: model, kind: 'count', sub: 'All records you can access' }];
+    if (has('create_date')) kpis.push({ label: 'Created (30 days)', model: model, domain: [['create_date', '>=', '$d30']], kind: 'count', sub: 'New in the last 30 days' });
+    if (money) kpis.push({ label: 'Sum of ' + (fields[money].string || money), model: model, measure: money, kind: fields[money].type === 'monetary' ? 'money' : 'num', sub: 'Across all records' });
+    var status = pick(['state', 'stage_id', 'status', 'type', 'move_type', 'priority']) || Object.keys(fields).filter(function (k) { return fields[k].type === 'selection'; })[0] || null;
+    var who = pick(['user_id', 'partner_id', 'team_id', 'department_id', 'categ_id', 'company_id', 'stage_id'], status);
+    var charts = [];
+    if (status) charts.push({ title: (fields[status].string || status) + ' split', model: model, groupby: status, type: 'doughnut' });
+    if (who) charts.push({ title: 'By ' + (fields[who].string || who), model: model, groupby: who, measure: money, type: 'hbar', limit: 8 });
+    if (has('create_date')) charts.push({ title: 'Created per month', model: model, groupby: 'create_date:month', type: 'line', last: 12 });
+    return { title: model, generic: true, models: [model], kpis: kpis, charts: charts };
+  }
+
+  window.DVOdooProfiles = { get: get, build: build, tokens: tokens, has: function (m) { return !!get(m); } };
+})();
