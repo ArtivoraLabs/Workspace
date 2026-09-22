@@ -1,0 +1,15 @@
+{
+  "name": "dashview",
+  "version": "2.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "DashView \u2014 static, installable, offline-capable web app for laptop and mobile.",
+  "scripts": {
+    "start": "npx serve .",
+    "test": "cd test && npm test",
+    "build:www": "node -e \"const fs=require('fs');fs.rmSync('www',{recursive:true,force:true});fs.mkdirSync('www');['manifest.json','sw.js','assets','css','js'].concat(fs.readdirSync('.').filter(f=>f.endsWith('.html'))).forEach(f=>fs.cpSync(f,'www/'+f,{recursive:true}))\"",
+    "cf:login": "npx wrangler login",
+    "cf:dev": "npx wrangler dev",
+    "cf:deploy": "npx wrangler deploy"
+  }
+}

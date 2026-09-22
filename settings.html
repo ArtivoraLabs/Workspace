@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<script>(function(){try{var t=localStorage.getItem('dashview-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="color-scheme" content="dark light"/>
+<meta name="theme-color" content="#0a0c0b"/>
+<title>Settings — DashView</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml"/>
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png"/>
+<link rel="manifest" href="manifest.json"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="DashView"/>
+<script src="js/config.js"></script>
+<style>
+:root{--bg:#0a0c0b;--surface:#131715;--line:#262b28;--text:#e9ece9;--muted:#8d968f;--signal:#e8a33d;--on:#1a1206}
+html[data-theme=light]{--bg:#f2f3ef;--surface:#fff;--line:#dcdfd8;--text:#161a17;--muted:#5d665f;--signal:#b87316;--on:#fff}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.bar{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+.bar h1{font-size:18px;margin:0}
+.back{text-decoration:none;color:var(--muted);padding:8px 10px;margin:-8px 0 -8px -10px;border-radius:8px}
+.back:hover{color:var(--text)}
+.wrap{max-width:900px;margin:0 auto;padding:24px 20px 80px;display:grid;grid-template-columns:180px 1fr;gap:40px}
+.side{position:sticky;top:76px;align-self:start;display:flex;flex-direction:column;gap:2px}
+.side a{text-decoration:none;color:var(--muted);padding:8px 12px;border-radius:8px}
+.side a:hover{background:var(--surface);color:var(--text)}
+section{margin-bottom:36px;scroll-margin-top:76px}
+h2{font-size:17px;margin:0 0 12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 18px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.txt{min-width:0}.txt b{display:block;font-weight:600}.txt span{color:var(--muted);font-size:13.5px}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.seg{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.seg label,.sw{position:relative;cursor:pointer}
+.seg input,.sw input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:block;padding:7px 14px;border-radius:7px;white-space:nowrap}
+.seg input:checked+span{background:var(--surface);box-shadow:0 0 0 1px var(--line);font-weight:600}
+.seg input:focus-visible+span,.sw input:focus-visible+span{outline:2px solid var(--signal);outline-offset:2px}
+.sw{width:34px;height:34px}
+.sw span{display:block;width:100%;height:100%;border-radius:50%;background:var(--c);box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.sw input:checked+span{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--c)}
+button,.btn{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 14px;cursor:pointer}
+button:hover,.btn:hover{border-color:var(--muted)}
+button.primary{background:var(--signal);border-color:var(--signal);color:var(--on);font-weight:600}
+button.danger{color:#e5484d}
+[hidden]{display:none!important}
+.msg{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translate(-50%,20px);background:var(--text);color:var(--bg);padding:10px 18px;border-radius:10px;opacity:0;pointer-events:none;transition:.2s}
+.msg.on{opacity:1;transform:translate(-50%,0)}
+@media (pointer:coarse){.seg span{padding:11px 16px}button,.btn{padding:12px 16px}.sw{width:40px;height:40px}}
+@media (max-width:760px){.wrap{grid-template-columns:1fr;gap:0;padding-top:16px}.side{display:none}.row{flex-direction:column;align-items:stretch;gap:12px}.ctl{justify-content:flex-start}}
+</style>
+</head>
+<body>
+<header class="bar"><a class="back" id="back" href="dashboard.html">← Back</a><h1>Settings</h1></header>
+<div class="wrap">
+<nav class="side" aria-label="Settings sections"><a href="#appearance">Appearance</a><a href="#accessibility">Accessibility</a><a href="#app">App and offline</a><a href="#backup">Backup and reset</a><a href="#about">About</a></nav>
+<main>
+<section id="appearance"><h2>Appearance</h2><div class="card">
+ <div class="row"><div class="txt"><b>Theme</b><span>System follows your device and switches automatically.</span></div>
+  <div class="ctl"><div class="seg" role="radiogroup" aria-label="Theme"><label><input type="radio" name="theme" value="system"><span>System</span></label><label><input type="radio" name="theme" value="light"><span>Light</span></label><label><input type="radio" name="theme" value="dark"><span>Dark</span></label></div></div></div>
+ <div class="row"><div class="txt"><b>Accent color</b><span>Used for buttons, highlights and charts across every page.</span></div>
+  <div class="ctl" role="radiogroup" aria-label="Accent color">
+   <label class="sw"><input type="radio" name="accent" value="amber"><span style="--c:#e0962a"></span><i class="vh">Amber</i></label>
+   <label class="sw"><input type="radio" name="accent" value="teal"><span style="--c:#1aa98a"></span><i class="vh">Teal</i></label>
+   <label class="sw"><input type="radio" name="accent" value="blue"><span style="--c:#3b82f6"></span><i class="vh">Blue</i></label>
+   <label class="sw"><input type="radio" name="accent" value="violet"><span style="--c:#8b5cf6"></span><i class="vh">Violet</i></label>
+   <label class="sw"><input type="radio" name="accent" value="rose"><span style="--c:#e8375f"></span><i class="vh">Rose</i></label></div></div>
+</div></section>
+
+<section id="accessibility"><h2>Accessibility</h2><div class="card">
+ <div class="row"><div class="txt"><b>Motion</b><span>Reduce turns off animations and smooth scrolling everywhere.</span></div>
+  <div class="ctl"><div class="seg" role="radiogroup" aria-label="Motion"><label><input type="radio" name="motion" value="system"><span>System</span></label><label><input type="radio" name="motion" value="reduce"><span>Reduce</span></label><label><input type="radio" name="motion" value="full"><span>Full</span></label></div></div></div>
+</div></section>
+
+<section id="app"><h2>App and offline</h2><div class="card">
+ <div class="row"><div class="txt"><b>Install DashView</b><span id="installHelp"></span></div><div class="ctl"><button class="primary" id="installBtn" hidden>Install app</button></div></div>
+ <div class="row"><div class="txt"><b>Offline access</b><span id="offlineState"></span></div></div>
+ <div class="row"><div class="txt"><b>Updates</b><span>New versions install quietly. Reload to start using them.</span></div><div class="ctl"><button id="checkBtn">Check for updates</button><button class="primary" id="applyBtn" hidden>Reload to update</button></div></div>
+ <div class="row"><div class="txt"><b>Saved files</b><span id="usage"></span></div><div class="ctl"><button id="clearBtn">Clear saved files</button></div></div>
+</div></section>
+
+<section id="backup"><h2>Backup and reset</h2><div class="card">
+ <div class="row"><div class="txt"><b>Move your settings</b><span>Export a file, then import it on another laptop or phone.</span></div><div class="ctl"><button id="exportBtn">Export settings</button><label class="btn" tabindex="0" id="importLbl">Import settings<input class="vh" type="file" id="importFile" accept="application/json,.json"></label></div></div>
+ <div class="row"><div class="txt"><b>Reset settings</b><span>Puts theme, accent and motion back to their defaults. Your data stays.</span></div><div class="ctl"><button class="danger" id="resetBtn">Reset settings</button></div></div>
+</div></section>
+
+<section id="about"><h2>About</h2><div class="card">
+ <div class="row"><div class="txt"><b>DashView 2.0</b><span>Open settings from any page with Ctrl + , (⌘ + , on Mac).</span></div>
+  <div class="ctl"><a class="btn" href="dashboard.html">Dashboard</a><a class="btn" href="people.html">People</a><a class="btn" href="ai.html">AI Assistant</a></div></div>
+</div></section>
+</main>
+</div>
+<p class="msg" id="msg" role="status" aria-live="polite"></p>
+<script>
+(function(){
+  var $=function(s){return document.querySelector(s)}, t;
+  function say(m){var e=$('#msg');e.textContent=m;e.className='msg on';clearTimeout(t);t=setTimeout(function(){e.className='msg'},3500)}
+  function sync(c){c=c||DV.get();['theme','accent','motion'].forEach(function(k){var i=document.querySelector('input[name='+k+'][value='+c[k]+']');if(i)i.checked=true})}
+  [].forEach.call(document.querySelectorAll('input[type=radio]'),function(i){i.addEventListener('change',function(){DV.set(i.name,i.value);say('Saved')})});
+  DV.on(sync);sync();
+  function fmt(b){return b>1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB'}
+  function refresh(){
+    var s=DV.status();
+    $('#installBtn').hidden=s.installed||!s.canInstall;
+    $('#installHelp').textContent=s.installed?'You are using the installed app.':s.canInstall?'Add DashView to your desktop or home screen. It opens in its own window.':s.ios?'On iPhone or iPad, tap Share, then Add to Home Screen.':'Your browser has not offered installation yet. Open its menu and choose Install app.';
+    $('#offlineState').textContent=s.offlineReady?'On. Pages you have opened work without internet.':location.protocol==='file:'?'Off. Open DashView from a web address to turn this on.':'Getting ready. Reload once to finish.';
+    $('#applyBtn').hidden=!s.updateReady;
+    DV.usage().then(function(b){$('#usage').textContent=b?fmt(b)+' stored on this device':'Nothing stored yet'});
+  }
+  $('#installBtn').onclick=function(){DV.install().then(function(o){say(o==='accepted'?'Installing DashView':'Installation cancelled');refresh()})};
+  $('#checkBtn').onclick=function(){DV.checkUpdate().then(function(u){say(u?'Update ready. Reload to apply it.':'You have the latest version');refresh()})};
+  $('#applyBtn').onclick=DV.applyUpdate;
+  $('#clearBtn').onclick=function(){if(confirm('Remove saved files? DashView downloads them again the next time you are online.'))DV.clearCache().then(function(){say('Saved files removed');refresh()})};
+  $('#exportBtn').onclick=function(){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([DV.exportJSON()],{type:'application/json'}));a.download='dashview-settings.json';a.click();setTimeout(function(){URL.revokeObjectURL(a.href)},1000);say('Settings exported')};
+  $('#importLbl').onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();$('#importFile').click()}};
+  $('#importFile').onchange=function(e){var f=e.target.files[0];if(!f)return;f.text().then(function(x){DV.importJSON(x);say('Settings imported')}).catch(function(){say('That file could not be used. Choose a DashView settings file.')});e.target.value=''};
+  $('#resetBtn').onclick=function(){if(confirm('Reset theme, accent and motion to their defaults?')){DV.reset();say('Settings reset')}};
+  $('#back').onclick=function(e){if(history.length>1){e.preventDefault();history.back()}};
+  ['dv:installable','dv:installed','dv:update','dv:offline-ready'].forEach(function(n){addEventListener(n,refresh)});
+  if(navigator.serviceWorker)navigator.serviceWorker.ready.then(refresh);
+  refresh();
+})();
+</script>
+</body>
+</html>

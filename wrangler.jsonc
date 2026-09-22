@@ -1,0 +1,14 @@
+{
+  // Deploy:  npx wrangler login   then   npx wrangler deploy
+  "name": "dashview-proxy",
+  "main": "cloudflare-worker.js",
+  "compatibility_date": "2025-09-01",
+  "workers_dev": true,
+  "vars": {
+    // Comma-separated. Empty = no restriction (fine for a first test; lock down before real use).
+    // ALLOWED_ORIGINS example: "https://YOUR-USER.github.io"
+    // ALLOWED_ODOO_HOSTS example: "yourcompany.odoo.com"
+    "ALLOWED_ORIGINS": "",
+    "ALLOWED_ODOO_HOSTS": ""
+  }
+}
