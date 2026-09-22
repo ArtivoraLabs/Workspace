@@ -39,15 +39,45 @@
     return parts.join('\n\n');
   }
 
-  function summarizeRows(label, res) {
+  // Pulls the first number out of a formatted field like "$12,430.00" or
+  // "PKR 4,200" so small totals/averages can be computed client-side —
+  // more reliable than asking the model to add up formatted strings itself.
+  function parseNumber(v) {
+    if (v == null || v === '—') return null;
+    var n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+    return isNaN(n) ? null : n;
+  }
+
+  function fmtMoney(n) {
+    return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  function summarizeRows(label, res, sumField) {
     if (!res || !res.rows || !res.rows.length) return label + ': none found.';
     var fields = res.fields || [];
+    var total = res.total != null ? res.total : res.rows.length;
+
+    var aggLine = '';
+    if (sumField) {
+      var idx = fields.indexOf(sumField);
+      if (idx > -1) {
+        var sum = 0, counted = 0;
+        res.rows.forEach(function (row) {
+          var n = parseNumber(row[idx]);
+          if (n != null) { sum += n; counted++; }
+        });
+        if (counted) aggLine = '  Computed from the ' + counted + ' shown: sum of ' + sumField + ' = ' + fmtMoney(sum) + ', average = ' + fmtMoney(sum / counted) + '.\n';
+      }
+    }
+
     var lines = res.rows.slice(0, 8).map(function (row) {
       return '  - ' + fields.map(function (f, i) { return f + ': ' + row[i]; }).join(', ');
     });
-    var totalNote = (res.total != null && res.total > res.rows.length) ? ' (showing ' + res.rows.length + ' of ' + res.total + ')' : '';
-    return label + totalNote + ':\n' + lines.join('\n');
+    var totalNote = total > res.rows.length ? ' (' + total + ' total, showing ' + res.rows.length + ')' : ' (' + total + ' total)';
+    return label + totalNote + ':\n' + aggLine + lines.join('\n');
   }
+
+  var SUM_FIELD = { 'sale.order': 'Total', 'crm.lead': 'Expected Revenue' };
 
   function odooContext() {
     if (!window.DVOdoo || !window.DVOdoo.isConnected()) return Promise.resolve('');
@@ -58,8 +88,8 @@
       { model: 'crm.lead', label: 'CRM leads' }
     ];
     var jobs = fetchers.map(function (f) {
-      return window.DVOdoo.fetchModel(f.model, { limit: 8 })
-        .then(function (r) { return summarizeRows(f.label, r); })
+      return window.DVOdoo.fetchModel(f.model, { limit: 15 })
+        .then(function (r) { return summarizeRows(f.label, r, SUM_FIELD[f.model]); })
         .catch(function () { return ''; });
     });
     return Promise.all(jobs).then(function (blocks) {
@@ -77,9 +107,11 @@
     }
     return odooContext().then(function (odoo) {
       var parts = [dashboardContext(), odoo].filter(Boolean);
-      var text = parts.length
-        ? 'Company / workspace context (background only — use this to answer questions about the user\'s company, projects and Odoo data; only mention specifics when the question calls for them, and don\'t assume data that isn\'t listed here):\n\n' + parts.join('\n\n')
-        : '';
+      if (!parts.length) { cache = { text: '', at: Date.now() }; return ''; }
+      var instructions = odoo
+        ? 'When the user asks about their company, sales, products, customers or leads, answer like a short analyst report, not a data dump: open with the headline number(s) they care about, note the computed sums/averages above where relevant, call out anything notable (a top customer, a stalled lead, a low-margin product), and end with one concrete next step or recommendation. Use the exact figures given — never invent numbers that aren\'t in this context — and say plainly if something wasn\'t in the sample shown.'
+        : 'Background only — mention specifics from it only if the question calls for them.';
+      var text = 'Company / workspace context:\n\n' + parts.join('\n\n') + '\n\n' + instructions;
       cache = { text: text, at: Date.now() };
       return text;
     });

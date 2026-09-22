@@ -93,6 +93,43 @@
 
   function toRole(r) { return (r === 'ai' || r === 'assistant') ? 'assistant' : 'user'; }
 
+  // If the Odoo Cloudflare Worker (Settings → Odoo → Proxy URL) is set up,
+  // route Grok through it instead of calling api.x.ai straight from the
+  // browser — xAI's API doesn't send CORS headers for browser callers, so a
+  // direct fetch() to it fails with a network error. Routing through the
+  // Worker (server-to-server, no CORS involved) fixes that. Anthropic keeps
+  // calling directly since its API explicitly supports browser calls.
+  function odooProxyUrl() {
+    try {
+      if (window.DVOdoo) {
+        var cfg = window.DVOdoo.getConfig();
+        if (cfg && cfg.proxyUrl) return String(cfg.proxyUrl).replace(/\/+$/, '');
+      }
+    } catch (e) {}
+    return '';
+  }
+
+  function callViaProxy(proxy, messages, systemPrompt, cfg) {
+    var chatMessages = messages.map(function (m) { return { role: toRole(m.role), content: m.content }; });
+    return fetch(proxy, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: 'ai-chat',
+        provider: cfg.provider,
+        apiKey: cfg.apiKey,
+        model: activeModel(cfg),
+        system: systemPrompt || '',
+        messages: chatMessages
+      })
+    }).then(readJsonSafe).then(function (r) {
+      if (!r.res.ok || !r.json || r.json.ok === false) {
+        throw new Error((r.json && r.json.error) || ('Proxy request failed with status ' + r.res.status));
+      }
+      return r.json.text || '(No text in response.)';
+    });
+  }
+
   function parseAnthropic(json) {
     var block = (json.content || []).find(function (b) { return b.type === 'text'; });
     return block ? block.text : '(No text in response.)';
@@ -148,7 +185,19 @@
   function callAI(messages, systemPrompt) {
     var cfg = get();
     if (!isConfigured()) return Promise.reject(new Error('No AI provider is configured yet. Add a key in Settings → AI Assistant.'));
-    if (cfg.provider === 'grok') return callGrok(messages, systemPrompt, cfg);
+
+    var proxy = odooProxyUrl();
+
+    if (cfg.provider === 'grok') {
+      if (!proxy) return callGrok(messages, systemPrompt, cfg);
+      // Prefer the proxy (fixes the CORS block). If the deployed Worker is
+      // an older version that doesn't know the "ai-chat" endpoint yet, fall
+      // back to a direct call rather than hard-failing.
+      return callViaProxy(proxy, messages, systemPrompt, cfg).catch(function (err) {
+        if (/unknown endpoint/i.test(err.message || '')) return callGrok(messages, systemPrompt, cfg);
+        throw err;
+      });
+    }
     if (cfg.provider === 'anthropic') return callAnthropic(messages, systemPrompt, cfg);
     return Promise.reject(new Error('Unknown AI provider "' + cfg.provider + '".'));
   }
