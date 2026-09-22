@@ -56,7 +56,20 @@ export default {
     catch { return reply({ ok: false, error: 'Invalid JSON body' }, 400); }
     if (!body || typeof body !== 'object') return reply({ ok: false, error: 'Invalid JSON body' }, 400);
 
-    const { url, db, username, apiKey, endpoint } = body;
+    const action = (body.endpoint || 'test').replace(/^\/+/, '');
+
+    /* ── AI chat relay (Grok / Claude) ──────────────────────────────────────
+       Browsers can't call api.x.ai directly (no CORS allow-origin on that
+       API), so the AI Assistant sends its request here instead — same
+       "hide it behind the Worker" pattern already used for Odoo below. */
+    if (action === 'ai-chat') {
+      const bad = checkAiArgs(body);
+      if (bad) return reply({ ok: false, error: bad }, 400);
+      try { return reply(await aiChat(body)); }
+      catch (err) { return reply({ ok: false, error: err.message || 'AI request failed' }, 502); }
+    }
+
+    const { url, db, username, apiKey } = body;
 
     /* ── Validate required fields ── */
     const missing = ['url', 'db', 'username', 'apiKey'].filter((k) => !body[k]);
@@ -71,7 +84,6 @@ export default {
     if (hosts.length && !hosts.includes(host)) {
       return reply({ ok: false, error: 'Odoo host not allowed by this Worker: ' + host }, 403);
     }
-    const action = (endpoint || 'test').replace(/^\/+/, '');
     const bad = checkArgs(body);
     if (bad) return reply({ ok: false, error: bad }, 400);
 
@@ -88,6 +100,51 @@ export default {
     }
   }
 };
+
+/* ─── AI chat relay (Grok / Claude) ───────────────────────────────────────── */
+function checkAiArgs(b) {
+  if (!['grok', 'anthropic'].includes(b.provider)) return 'provider must be "grok" or "anthropic"';
+  if (typeof b.apiKey !== 'string' || !b.apiKey) return 'apiKey is required';
+  if (typeof b.model !== 'string' || !b.model) return 'model is required';
+  if (!Array.isArray(b.messages) || !b.messages.length) return 'messages must be a non-empty array';
+  if (b.messages.some((m) => typeof m.content !== 'string')) return 'every message needs string content';
+  return '';
+}
+
+async function aiChat(body) {
+  const { provider, apiKey, model, system, messages } = body;
+  const fn = provider === 'grok' ? aiChatGrok : aiChatAnthropic;
+  const text = await fn(apiKey, model, system || '', messages);
+  return { ok: true, text };
+}
+
+async function aiChatGrok(apiKey, model, system, messages) {
+  const chatMessages = messages.map((m) => ({ role: m.role === 'ai' ? 'assistant' : m.role, content: m.content }));
+  if (system) chatMessages.unshift({ role: 'system', content: system });
+  const res = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify({ model, messages: chatMessages }),
+    signal: AbortSignal.timeout(60000)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data.error && (data.error.message || data.error)) || ('Grok error ' + res.status));
+  return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '(No text in response.)';
+}
+
+async function aiChatAnthropic(apiKey, model, system, messages) {
+  const chatMessages = messages.map((m) => ({ role: m.role === 'ai' ? 'assistant' : m.role, content: m.content }));
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model, max_tokens: 2048, system: system || undefined, messages: chatMessages }),
+    signal: AbortSignal.timeout(60000)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data.error && data.error.message) || ('Claude error ' + res.status));
+  const block = (data.content || []).find((b) => b.type === 'text');
+  return block ? block.text : '(No text in response.)';
+}
 
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 /* --- Input validation (read-only proxy: only these shapes are ever forwarded) --- */
