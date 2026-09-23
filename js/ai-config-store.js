@@ -40,6 +40,13 @@
       apiUrl: 'https://api.anthropic.com/v1/messages',
       defaultModel: 'claude-sonnet-4-5',
       models: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5']
+    },
+    groq: {
+      label: 'Groq',
+      needsKey: true,
+      apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
+      defaultModel: 'llama-3.3-70b-versatile',
+      models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it']
     }
   };
 
@@ -142,6 +149,27 @@
     return res.json().catch(function () { return {}; }).then(function (json) { return { res: res, json: json }; });
   }
 
+  // 429 = rate limited. Respect Retry-After when the provider sends it, wait
+  // once, then retry a single time — most rate limits clear within a few
+  // seconds. If it 429s again, surface a clear message instead of a raw
+  // "Request failed with status 429".
+  function retryDelayMs(res) {
+    var h = res.headers && res.headers.get && res.headers.get('retry-after');
+    var n = h ? parseFloat(h) : NaN;
+    return (!isNaN(n) && n > 0) ? Math.min(n * 1000, 15000) : 3000;
+  }
+  function fetchWithRetry429(url, opts) {
+    return fetch(url, opts).then(function (res) {
+      if (res.status !== 429) return res;
+      var delay = retryDelayMs(res);
+      return new Promise(function (resolve) { setTimeout(resolve, delay); })
+        .then(function () { return fetch(url, opts); });
+    });
+  }
+  function friendly429(providerLabel) {
+    return new Error(providerLabel + ' is rate-limiting requests (HTTP 429) — you are sending requests faster than your plan allows, or a shared/free-tier key is temporarily throttled. Wait a bit and try again, or check the provider\'s dashboard for your current rate limit / quota.');
+  }
+
   function callAnthropic(messages, systemPrompt, cfg) {
     var body = {
       model: activeModel(cfg),
@@ -150,7 +178,7 @@
     };
     if (systemPrompt) body.system = systemPrompt;
 
-    return fetch(PROVIDERS.anthropic.apiUrl, {
+    return fetchWithRetry429(PROVIDERS.anthropic.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -160,6 +188,7 @@
       },
       body: JSON.stringify(body)
     }).then(readJsonSafe).then(function (r) {
+      if (r.res.status === 429) throw friendly429('Anthropic');
       if (!r.res.ok) throw new Error((r.json && r.json.error && r.json.error.message) || ('Request failed with status ' + r.res.status));
       return parseAnthropic(r.json);
     });
@@ -169,7 +198,7 @@
     var chatMessages = messages.map(function (m) { return { role: toRole(m.role), content: m.content }; });
     if (systemPrompt) chatMessages.unshift({ role: 'system', content: systemPrompt });
 
-    return fetch(PROVIDERS.grok.apiUrl, {
+    return fetchWithRetry429(PROVIDERS.grok.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -177,6 +206,25 @@
       },
       body: JSON.stringify({ model: activeModel(cfg), messages: chatMessages })
     }).then(readJsonSafe).then(function (r) {
+      if (r.res.status === 429) throw friendly429('Grok');
+      if (!r.res.ok) throw new Error((r.json && r.json.error && (r.json.error.message || r.json.error)) || ('Request failed with status ' + r.res.status));
+      return parseOpenAiLike(r.json);
+    });
+  }
+
+  function callGroq(messages, systemPrompt, cfg) {
+    var chatMessages = messages.map(function (m) { return { role: toRole(m.role), content: m.content }; });
+    if (systemPrompt) chatMessages.unshift({ role: 'system', content: systemPrompt });
+
+    return fetchWithRetry429(PROVIDERS.groq.apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + cfg.apiKey
+      },
+      body: JSON.stringify({ model: activeModel(cfg), messages: chatMessages })
+    }).then(readJsonSafe).then(function (r) {
+      if (r.res.status === 429) throw friendly429('Groq');
       if (!r.res.ok) throw new Error((r.json && r.json.error && (r.json.error.message || r.json.error)) || ('Request failed with status ' + r.res.status));
       return parseOpenAiLike(r.json);
     });
@@ -188,13 +236,15 @@
 
     var proxy = odooProxyUrl();
 
-    if (cfg.provider === 'grok') {
-      if (!proxy) return callGrok(messages, systemPrompt, cfg);
-      // Prefer the proxy (fixes the CORS block). If the deployed Worker is
-      // an older version that doesn't know the "ai-chat" endpoint yet, fall
-      // back to a direct call rather than hard-failing.
+    if (cfg.provider === 'grok' || cfg.provider === 'groq') {
+      var directFn = cfg.provider === 'grok' ? callGrok : callGroq;
+      if (!proxy) return directFn(messages, systemPrompt, cfg);
+      // Prefer the proxy (fixes the CORS block some of these APIs have for
+      // direct browser calls). If the deployed Worker is an older version
+      // that doesn't know the "ai-chat" endpoint (or this provider) yet,
+      // fall back to a direct call rather than hard-failing.
       return callViaProxy(proxy, messages, systemPrompt, cfg).catch(function (err) {
-        if (/unknown endpoint/i.test(err.message || '')) return callGrok(messages, systemPrompt, cfg);
+        if (/unknown endpoint|provider must be/i.test(err.message || '')) return directFn(messages, systemPrompt, cfg);
         throw err;
       });
     }

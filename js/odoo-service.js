@@ -184,12 +184,31 @@
     return Promise.reject(new Error('Odoo is not connected. Add your Worker URL in Settings → Odoo.'));
   }
 
+  /* Aggregate totals via Odoo's read_group — for reporting/analytics-style
+     questions ("sales by stage", "revenue by salesperson this month") without
+     pulling every raw row. Routes through the same Worker as fetchModel. */
+  function fetchReadGroup(modelName, opts) {
+    opts = opts || {};
+    var cfg = getConfig();
+    if (!cfg.proxyUrl) return Promise.reject(new Error('Odoo is not connected. Add your Worker URL in Settings → Odoo.'));
+    return proxyPost(cfg.proxyUrl, 'read-group', {
+      model: modelName,
+      domain: opts.domain || [],
+      fields: opts.fields || ['__count'],
+      groupby: opts.groupby || [],
+      orderby: opts.orderby,
+      limit: opts.limit
+    }).then(function (res) {
+      return { ok: true, model: modelName, groups: res.groups || [], live: true };
+    });
+  }
+
   /* -- Expose globally ────────────────────────────────────────────────────── */
   window.DVOdoo = {
     MODELS: MODELS,
     isConnected: isConnected, getConfig: getConfig,
     connect: connect, disconnect: disconnect,
-    testConnection: testConnection, fetchModel: fetchModel
+    testConnection: testConnection, fetchModel: fetchModel, fetchReadGroup: fetchReadGroup
   };
 
   /* ── Wire existing Settings panel ──────────────────────────────────────── */

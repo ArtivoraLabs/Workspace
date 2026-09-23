@@ -51,6 +51,7 @@
       var help = byId('aiKeyHelp');
       if (provider === 'grok') help.textContent = 'From console.x.ai — Settings → API Keys. If Odoo is connected, requests auto-route through your Odoo Worker proxy (avoids browser CORS issues with api.x.ai).';
       else if (provider === 'anthropic') help.textContent = 'From console.anthropic.com — Settings → API Keys.';
+      else if (provider === 'groq') help.textContent = 'From console.groq.com/keys. If Odoo is connected, requests auto-route through your Odoo Worker proxy.';
       else help.textContent = '';
     }
 
