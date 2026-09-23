@@ -103,7 +103,7 @@ export default {
 
 /* ─── AI chat relay (Grok / Claude) ───────────────────────────────────────── */
 function checkAiArgs(b) {
-  if (!['grok', 'anthropic'].includes(b.provider)) return 'provider must be "grok" or "anthropic"';
+  if (!['grok', 'anthropic', 'groq'].includes(b.provider)) return 'provider must be "grok", "anthropic" or "groq"';
   if (typeof b.apiKey !== 'string' || !b.apiKey) return 'apiKey is required';
   if (typeof b.model !== 'string' || !b.model) return 'model is required';
   if (!Array.isArray(b.messages) || !b.messages.length) return 'messages must be a non-empty array';
@@ -113,33 +113,69 @@ function checkAiArgs(b) {
 
 async function aiChat(body) {
   const { provider, apiKey, model, system, messages } = body;
-  const fn = provider === 'grok' ? aiChatGrok : aiChatAnthropic;
+  const fn = provider === 'grok' ? aiChatGrok : provider === 'groq' ? aiChatGroq : aiChatAnthropic;
   const text = await fn(apiKey, model, system || '', messages);
   return { ok: true, text };
+}
+
+/* 429 = rate limited. Retry once, honoring Retry-After when the provider
+   sends it, before giving up — most bursts clear within a few seconds.
+   `label` names the provider in the final error so the user knows which
+   key/plan to check. */
+async function fetchWithRetry429(url, opts, label) {
+  let res = await fetch(url, opts);
+  if (res.status === 429) {
+    const ra = parseFloat(res.headers.get('retry-after'));
+    const delayMs = Number.isFinite(ra) && ra > 0 ? Math.min(ra * 1000, 15000) : 3000;
+    await new Promise((r) => setTimeout(r, delayMs));
+    res = await fetch(url, opts);
+  }
+  if (res.status === 429) {
+    const err = new Error(label + ' is rate-limiting requests (HTTP 429) — you\'re sending requests faster than your plan/key allows. Wait a bit and try again, or check your quota on the provider\'s dashboard.');
+    err.status = 429;
+    throw err;
+  }
+  return res;
 }
 
 async function aiChatGrok(apiKey, model, system, messages) {
   const chatMessages = messages.map((m) => ({ role: m.role === 'ai' ? 'assistant' : m.role, content: m.content }));
   if (system) chatMessages.unshift({ role: 'system', content: system });
-  const res = await fetch('https://api.x.ai/v1/chat/completions', {
+  const res = await fetchWithRetry429('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
     body: JSON.stringify({ model, messages: chatMessages }),
     signal: AbortSignal.timeout(60000)
-  });
+  }, 'Grok');
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data.error && (data.error.message || data.error)) || ('Grok error ' + res.status));
   return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '(No text in response.)';
 }
 
+/* Groq's Chat Completions API is OpenAI-compatible — same request/response
+   shape as Grok, just a different base URL and model catalog. */
+async function aiChatGroq(apiKey, model, system, messages) {
+  const chatMessages = messages.map((m) => ({ role: m.role === 'ai' ? 'assistant' : m.role, content: m.content }));
+  if (system) chatMessages.unshift({ role: 'system', content: system });
+  const res = await fetchWithRetry429('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify({ model, messages: chatMessages }),
+    signal: AbortSignal.timeout(60000)
+  }, 'Groq');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data.error && (data.error.message || data.error)) || ('Groq error ' + res.status));
+  return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '(No text in response.)';
+}
+
 async function aiChatAnthropic(apiKey, model, system, messages) {
   const chatMessages = messages.map((m) => ({ role: m.role === 'ai' ? 'assistant' : m.role, content: m.content }));
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetchWithRetry429('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({ model, max_tokens: 2048, system: system || undefined, messages: chatMessages }),
     signal: AbortSignal.timeout(60000)
-  });
+  }, 'Claude');
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data.error && data.error.message) || ('Claude error ' + res.status));
   const block = (data.content || []).find((b) => b.type === 'text');
