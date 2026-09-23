@@ -45,8 +45,8 @@
       label: 'Groq',
       needsKey: true,
       apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
-      defaultModel: 'llama-3.3-70b-versatile',
-      models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it']
+      defaultModel: 'openai/gpt-oss-120b',
+      models: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b']
     }
   };
 
