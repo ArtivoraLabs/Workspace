@@ -38,15 +38,15 @@
       label: 'Claude (Anthropic)',
       needsKey: true,
       apiUrl: 'https://api.anthropic.com/v1/messages',
-      defaultModel: 'claude-sonnet-4-5',
-      models: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-haiku-4-5']
+      defaultModel: 'claude-sonnet-5',
+      models: ['claude-sonnet-5', 'claude-opus-5-5', 'claude-haiku-4-5-20251001']
     },
     groq: {
       label: 'Groq',
       needsKey: true,
       apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
       defaultModel: 'llama-3.3-70b-versatile',
-      models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it']
+      models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it']
     }
   };
 
@@ -118,7 +118,8 @@
 
   function callViaProxy(proxy, messages, systemPrompt, cfg) {
     var chatMessages = messages.map(function (m) { return { role: toRole(m.role), content: m.content }; });
-    return fetch(proxy, {
+    var providerLabel = (PROVIDERS[cfg.provider] || {}).label || cfg.provider;
+    return timeoutAware(fetch(proxy, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -128,13 +129,14 @@
         model: activeModel(cfg),
         system: systemPrompt || '',
         messages: chatMessages
-      })
+      }),
+      signal: AbortSignal.timeout(65000) // a hair longer than the Worker's own 60s timeout
     }).then(readJsonSafe).then(function (r) {
       if (!r.res.ok || !r.json || r.json.ok === false) {
         throw new Error((r.json && r.json.error) || ('Proxy request failed with status ' + r.res.status));
       }
       return r.json.text || '(No text in response.)';
-    });
+    }), providerLabel);
   }
 
   function parseAnthropic(json) {
@@ -170,6 +172,22 @@
     return new Error(providerLabel + ' is rate-limiting requests (HTTP 429) — you are sending requests faster than your plan allows, or a shared/free-tier key is temporarily throttled. Wait a bit and try again, or check the provider\'s dashboard for your current rate limit / quota.');
   }
 
+  // 60s client-side timeout on every direct provider call, mirroring the
+  // Worker's own AbortSignal.timeout(60000) — without this, a stalled
+  // connection (bad wifi, provider hang) spins the "typing…" indicator
+  // forever instead of surfacing a clear error.
+  function withTimeout(opts) {
+    return Object.assign({}, opts, { signal: AbortSignal.timeout(60000) });
+  }
+  function timeoutAware(promise, providerLabel) {
+    return promise.catch(function (err) {
+      if (err && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+        throw new Error(providerLabel + ' did not respond within 60 seconds. Check your connection and try again.');
+      }
+      throw err;
+    });
+  }
+
   function callAnthropic(messages, systemPrompt, cfg) {
     var body = {
       model: activeModel(cfg),
@@ -178,7 +196,7 @@
     };
     if (systemPrompt) body.system = systemPrompt;
 
-    return fetchWithRetry429(PROVIDERS.anthropic.apiUrl, {
+    return timeoutAware(fetchWithRetry429(PROVIDERS.anthropic.apiUrl, withTimeout({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -187,47 +205,47 @@
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify(body)
-    }).then(readJsonSafe).then(function (r) {
+    })).then(readJsonSafe).then(function (r) {
       if (r.res.status === 429) throw friendly429('Anthropic');
       if (!r.res.ok) throw new Error((r.json && r.json.error && r.json.error.message) || ('Request failed with status ' + r.res.status));
       return parseAnthropic(r.json);
-    });
+    }), 'Anthropic');
   }
 
   function callGrok(messages, systemPrompt, cfg) {
     var chatMessages = messages.map(function (m) { return { role: toRole(m.role), content: m.content }; });
     if (systemPrompt) chatMessages.unshift({ role: 'system', content: systemPrompt });
 
-    return fetchWithRetry429(PROVIDERS.grok.apiUrl, {
+    return timeoutAware(fetchWithRetry429(PROVIDERS.grok.apiUrl, withTimeout({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + cfg.apiKey
       },
       body: JSON.stringify({ model: activeModel(cfg), messages: chatMessages })
-    }).then(readJsonSafe).then(function (r) {
+    })).then(readJsonSafe).then(function (r) {
       if (r.res.status === 429) throw friendly429('Grok');
       if (!r.res.ok) throw new Error((r.json && r.json.error && (r.json.error.message || r.json.error)) || ('Request failed with status ' + r.res.status));
       return parseOpenAiLike(r.json);
-    });
+    }), 'Grok');
   }
 
   function callGroq(messages, systemPrompt, cfg) {
     var chatMessages = messages.map(function (m) { return { role: toRole(m.role), content: m.content }; });
     if (systemPrompt) chatMessages.unshift({ role: 'system', content: systemPrompt });
 
-    return fetchWithRetry429(PROVIDERS.groq.apiUrl, {
+    return timeoutAware(fetchWithRetry429(PROVIDERS.groq.apiUrl, withTimeout({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + cfg.apiKey
       },
       body: JSON.stringify({ model: activeModel(cfg), messages: chatMessages })
-    }).then(readJsonSafe).then(function (r) {
+    })).then(readJsonSafe).then(function (r) {
       if (r.res.status === 429) throw friendly429('Groq');
       if (!r.res.ok) throw new Error((r.json && r.json.error && (r.json.error.message || r.json.error)) || ('Request failed with status ' + r.res.status));
       return parseOpenAiLike(r.json);
-    });
+    }), 'Groq');
   }
 
   function callAI(messages, systemPrompt) {

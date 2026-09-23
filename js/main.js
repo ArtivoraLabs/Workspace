@@ -185,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ------------------------------------------------------------
    Hero AI Command Bar - rotating placeholders, submits into
-   the AI Assistant page (ai.html?q=..., read by js/assistant.js)
+   the AI Assistant page (ai.html?q=..., read inline by ai.html's own script)
 ------------------------------------------------------------ */
 const PROMPTS = [
   'Build a React application',

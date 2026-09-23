@@ -30,7 +30,7 @@ window.DASHVIEW_AI_CONFIG = {
   // different provider or a proxy of your own.
   apiUrl: 'https://api.anthropic.com/v1/messages',
   anthropicVersion: '2023-06-01',
-  model: 'claude-sonnet-4-5',
+  model: 'claude-sonnet-5',
   maxTokens: 1024,
 
   // System prompt sent with every real-API conversation.
