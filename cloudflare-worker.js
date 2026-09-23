@@ -191,7 +191,7 @@ function checkArgs(b) {
   if (b.model !== undefined && !(typeof b.model === 'string' && b.model.length <= 80 && MODEL_RE.test(b.model))) return 'Invalid model name';
   if (b.module !== undefined && !(typeof b.module === 'string' && /^[a-z0-9_]{1,80}$/.test(b.module))) return 'Invalid module name';
   if (b.domain !== undefined && !Array.isArray(b.domain)) return 'domain must be an array';
-  if (b.fields !== undefined && !names(b.fields, 80)) return 'fields must be a list of field names';
+  if (b.fields !== undefined && b.fields !== null && !names(b.fields, 80)) return 'fields must be a list of field names';
   if (b.groupby !== undefined && !names(b.groupby, 3)) return 'groupby must be a list of up to 3 field names';
   for (const k of ['order', 'orderby']) if (b[k] !== undefined && b[k] !== '' && !(typeof b[k] === 'string' && ORDER_RE.test(b[k]))) return 'Invalid ' + k;
   if (b.limit !== undefined && !(Number.isInteger(b.limit) && b.limit >= 1 && b.limit <= 500)) return 'limit must be between 1 and 500';
