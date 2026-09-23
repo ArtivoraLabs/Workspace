@@ -29,6 +29,11 @@ const CORS = {
   'Content-Type': 'application/json',
 };
 
+// Same ceiling as js/ai-config-store.js's MAX_REPLY_TOKENS — a full
+// multi-module report (KPIs + table + chart + insights + next steps, per
+// business area) needs more room than a single short chat reply does.
+const AI_MAX_REPLY_TOKENS = 4096;
+
 /* LOCK-DOWN (optional, recommended before real credentials flow through).
    Set as Worker variables (wrangler.jsonc "vars", or Dashboard → Settings → Variables):
      ALLOWED_ORIGINS     comma-separated, e.g. https://YOU.github.io
@@ -144,7 +149,7 @@ async function aiChatGrok(apiKey, model, system, messages) {
   const res = await fetchWithRetry429('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-    body: JSON.stringify({ model, messages: chatMessages }),
+    body: JSON.stringify({ model, messages: chatMessages, max_tokens: AI_MAX_REPLY_TOKENS }),
     signal: AbortSignal.timeout(60000)
   }, 'Grok');
   const data = await res.json().catch(() => ({}));
@@ -160,7 +165,7 @@ async function aiChatGroq(apiKey, model, system, messages) {
   const res = await fetchWithRetry429('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-    body: JSON.stringify({ model, messages: chatMessages }),
+    body: JSON.stringify({ model, messages: chatMessages, max_tokens: AI_MAX_REPLY_TOKENS }),
     signal: AbortSignal.timeout(60000)
   }, 'Groq');
   const data = await res.json().catch(() => ({}));
@@ -173,7 +178,7 @@ async function aiChatAnthropic(apiKey, model, system, messages) {
   const res = await fetchWithRetry429('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model, max_tokens: 2048, system: system || undefined, messages: chatMessages }),
+    body: JSON.stringify({ model, max_tokens: AI_MAX_REPLY_TOKENS, system: system || undefined, messages: chatMessages }),
     signal: AbortSignal.timeout(60000)
   }, 'Claude');
   const data = await res.json().catch(() => ({}));
