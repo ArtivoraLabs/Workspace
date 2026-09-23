@@ -9,6 +9,14 @@
    real data instead of guessed — as long as "Include company context" is
    left on in Settings → AI Assistant.
 
+   Reporting depth is deliberately symmetric across every business area —
+   Sales, CRM/Pipeline, Purchasing, Inventory, Accounting/Finance,
+   HR/Workforce and Projects each get their own row samples, their own
+   ranked read_group breakdowns, and their own data-quality checks below,
+   and the instructions at the bottom of build() apply the exact same
+   "KPIs → table → chart → insights → next step" structure to whichever
+   area(s) the question is about, not just Sales.
+
    Nothing here is fetched or sent anywhere except to the AI provider you
    configure, as part of the request you're already sending it.
 
@@ -82,6 +90,12 @@
     'account.move': 'Total', 'purchase.order': 'Total'
   };
 
+  function isoDate(daysAgo) {
+    var d = new Date();
+    d.setDate(d.getDate() - daysAgo);
+    return d.toISOString().slice(0, 10);
+  }
+
   // Row-level samples — good for "show me / list" style questions. Covers
   // sales, purchasing, inventory, accounting, CRM, HR and projects so
   // "fetch every kind of data" questions have something real to draw on.
@@ -100,29 +114,62 @@
     { model: 'hr.expense', label: 'Recent expenses' }
   ];
 
-  // Aggregate breakdowns via read_group — good for reporting/"sales-wise"
+  // Aggregate breakdowns via read_group — good for reporting/"X-wise"
   // questions (totals by stage, by salesperson, top performers) without
   // dumping raw rows. Each entry -> one read_group call, summarized as text.
   // orderby + limit let us pull ranked "Top N" breakdowns directly from
-  // Odoo instead of sorting client-side.
+  // Odoo instead of sorting client-side; domain (optional) filters the
+  // group the same way it does for issueFetchers below.
+  //
+  // Grouped by business area on purpose, and kept even across areas: every
+  // module that has a "Top 5 X" style table also has a plain "by stage/
+  // status" table, matching the original Sales breakdown one-for-one.
   var aggregates = [
+    // ── Sales ────────────────────────────────────────────────────────────
     { model: 'sale.order', label: 'Sales orders by stage', groupby: ['state'], fields: ['amount_total:sum'] },
     { model: 'sale.order', label: 'Sales by salesperson', groupby: ['user_id'], fields: ['amount_total:sum'], orderby: 'amount_total desc' },
     { model: 'sale.order', label: 'Top 5 customers by revenue', groupby: ['partner_id'], fields: ['amount_total:sum'], orderby: 'amount_total desc', limit: 5 },
     { model: 'sale.order.line', label: 'Top 5 products by revenue', groupby: ['product_id'], fields: ['price_subtotal:sum'], orderby: 'price_subtotal desc', limit: 5 },
-    { model: 'crm.lead', label: 'CRM leads by stage', groupby: ['stage_id'], fields: ['expected_revenue:sum'] }
-  ];
 
-  function isoDate(daysAgo) {
-    var d = new Date();
-    d.setDate(d.getDate() - daysAgo);
-    return d.toISOString().slice(0, 10);
-  }
+    // ── CRM / Pipeline ───────────────────────────────────────────────────
+    { model: 'crm.lead', label: 'CRM leads by stage', groupby: ['stage_id'], fields: ['expected_revenue:sum'] },
+    { model: 'crm.lead', label: 'Top 5 salespeople by pipeline value', groupby: ['user_id'], fields: ['expected_revenue:sum'], orderby: 'expected_revenue desc', limit: 5 },
+
+    // ── Purchasing ───────────────────────────────────────────────────────
+    { model: 'purchase.order', label: 'Purchase orders by stage', groupby: ['state'], fields: ['amount_total:sum'] },
+    { model: 'purchase.order', label: 'Top 5 vendors by spend', groupby: ['partner_id'], fields: ['amount_total:sum'], orderby: 'amount_total desc', limit: 5, domain: [['state', '!=', 'cancel']] },
+
+    // ── Inventory ────────────────────────────────────────────────────────
+    { model: 'stock.picking', label: 'Inventory transfers by status', groupby: ['state'], fields: [] },
+    { model: 'stock.quant', label: 'Top 5 products by stock on hand', groupby: ['product_id'], fields: ['quantity:sum'], orderby: 'quantity desc', limit: 5 },
+
+    // ── Accounting / Finance ─────────────────────────────────────────────
+    {
+      model: 'account.move', label: 'Revenue by month (posted customer invoices, last 12 months)',
+      groupby: ['invoice_date:month'], fields: ['amount_total:sum'], orderby: 'invoice_date:month asc',
+      domain: [['move_type', '=', 'out_invoice'], ['state', '=', 'posted'], ['invoice_date', '>=', isoDate(365)]]
+    },
+    {
+      model: 'account.move', label: 'Top 5 customers by outstanding balance (AR)',
+      groupby: ['partner_id'], fields: ['amount_residual:sum'], orderby: 'amount_residual desc', limit: 5,
+      domain: [['move_type', '=', 'out_invoice'], ['state', '=', 'posted'], ['payment_state', 'not in', ['paid', 'in_payment', 'reversed']]]
+    },
+
+    // ── HR / Workforce ───────────────────────────────────────────────────
+    { model: 'hr.employee', label: 'Headcount by department', groupby: ['department_id'], fields: [] },
+    { model: 'hr.expense', label: 'Expenses by category', groupby: ['product_id'], fields: ['total_amount:sum'], orderby: 'total_amount desc' },
+
+    // ── Projects ─────────────────────────────────────────────────────────
+    { model: 'project.task', label: 'Tasks by stage', groupby: ['stage_id'], fields: [] },
+    { model: 'project.task', label: 'Tasks by project', groupby: ['project_id'], fields: [] }
+  ];
 
   // Targeted, filtered queries that surface data-quality problems and
   // process glitches directly from Odoo — not guessed, not computed from
   // truncated sample rows. Each becomes its own "⚠️" block in the context
   // so the AI can point at real broken/stuck records with IDs and names.
+  // Covers every area with row-level data above, not just Sales/Accounting,
+  // so an HR or Projects question can get a real "Issues Found" section too.
   var issueFetchers = [
     {
       model: 'account.move', label: '⚠️ Overdue unpaid invoices',
@@ -145,6 +192,14 @@
     {
       model: 'stock.quant', label: '⚠️ Products with negative stock (data error)',
       domain: [['quantity', '<', 0]]
+    },
+    {
+      model: 'hr.expense', label: '⚠️ Expense reports pending approval/posting 14+ days',
+      domain: [['state', 'not in', ['done', 'refused']], ['create_date', '<', isoDate(14)]]
+    },
+    {
+      model: 'project.task', label: '⚠️ Open tasks past their deadline',
+      domain: [['date_deadline', '<', isoDate(0)], ['stage_id.fold', '=', false]]
     }
   ];
 
@@ -178,7 +233,7 @@
     var aggJobs = (window.DVOdoo.fetchReadGroup ? aggregates : []).map(function (a) {
       return window.DVOdoo.fetchReadGroup(a.model, {
         groupby: a.groupby, fields: a.fields.concat(['__count']),
-        orderby: a.orderby, limit: a.limit
+        orderby: a.orderby, limit: a.limit, domain: a.domain || []
       })
         .then(function (r) { return summarizeGroups(a.label, a.groupby[0], r); })
         .catch(function () { return ''; });
@@ -218,14 +273,32 @@
       var parts = [dashboardContext(), odoo].filter(Boolean);
       if (!parts.length) { cache = { text: '', at: Date.now() }; return ''; }
       var instructions = odoo
-        ? 'You are a business analyst presenting to company leadership — answer like a dashboard, not a chat reply. Rules:\n' +
-          '1. Open with 1-3 headline KPI numbers relevant to the question (e.g. total revenue, order count, average deal size) as a short bold line — not buried in a paragraph.\n' +
-          '2. Whenever the question is about sales, revenue, customers or products, include a "Top 5 Customers" and/or "Top 5 Products" table if that data is available above — use real Markdown tables (header row, |---|---| separator row, data rows), ranked by revenue, columns like Rank | Name | Revenue | Orders. Never invent ranks or numbers that are not in the context — use exactly what is given, and if there are fewer than 5, show what is available.\n' +
-          '3. Follow the table(s) with a short "Insights" section (2-4 bullet points) calling out what is notable: a top/at-risk customer, a best-selling or low-margin product, a stage where deals are stuck, a trend.\n' +
-          '4. End with a "Recommended next step / strategy" section (1-3 bullet points) — a concrete, prioritized action for this period, not generic advice.\n' +
-          '5. Use the exact figures given in the context above — never invent numbers — and say plainly if something wasn\'t in the sample/range shown.\n' +
-          '6. For non-analytical questions (a lookup, a yes/no, a how-to), skip this structure and just answer directly and concisely.\n' +
-          '7. If the user asks about mistakes, errors, glitches, problems or "what\'s wrong", OR if the "Automated data-quality / process checks" block above lists anything other than "none found", always add a "⚠️ Issues Found" section, one entry per problem, each with exactly three parts: **Issue** (what and how many, naming real records/customers/products from the data — never vague), **Why it matters** (the business impact in one line), **Fix** (a specific, actionable step — who should do what). If every checked area came back "none found", say plainly "No data-quality issues detected in the areas checked" instead of inventing one — do not pad the answer with a fake issue.'
+        ? 'You are a business analyst presenting to company leadership — answer like a dashboard, not a chat reply. ' +
+          'The context above can span several business areas — Sales, CRM/Pipeline, Purchasing, Inventory, Accounting/Finance, HR/Workforce and Projects. ' +
+          'Give EVERY area the exact same reporting depth and polish described below — never let Sales get a richer, more detailed answer than CRM, Inventory, HR, Purchasing, Accounting or Projects just because more examples below happen to mention sales. Match the quality to whichever area(s) the question is actually about. Rules:\n' +
+          '1. Open with 1-3 headline KPI numbers relevant to the question (e.g. total revenue, order count, headcount, open pipeline value, on-time delivery rate) as a short bold line — not buried in a paragraph.\n' +
+          '2. Include the ranked breakdown table(s) that fit the question, as real Markdown tables (header row, |---|---| separator row, data rows), ranked, with columns like Rank | Name | Value | (a relevant 4th column when useful, e.g. Orders/Count). Pick from whichever of these match the data available above and the question asked — do not force a table that has no data behind it:\n' +
+          '   - Sales / revenue / customers / products → Top 5 Customers and/or Top 5 Products by revenue\n' +
+          '   - CRM / pipeline / leads → CRM leads by stage and/or Top 5 salespeople by pipeline value\n' +
+          '   - Purchasing / vendors / spend → Top 5 vendors by spend and/or Purchase orders by stage\n' +
+          '   - Inventory / stock / warehouse → Top 5 products by stock on hand and/or Inventory transfers by status\n' +
+          '   - Accounting / finance / invoices → Revenue by month and/or Top 5 customers by outstanding balance (AR)\n' +
+          '   - HR / workforce / payroll → Headcount by department and/or Expenses by category\n' +
+          '   - Projects / tasks → Tasks by stage and/or Tasks by project\n' +
+          '   Never invent ranks or numbers that are not in the context — use exactly what is given, and if there are fewer rows than a table asks for, show what is available.\n' +
+          '3. Immediately below the main table, turn its top rows into a real visualization using this exact fenced format (it renders as a bar chart, not as code) — pick whichever single breakdown from step 2 is most decision-relevant to the question:\n' +
+          '```chart\n' +
+          'Short chart title\n' +
+          'Label one: 12345\n' +
+          'Label two: 9876\n' +
+          '```\n' +
+          '   One "Label: number" per line, plain numbers only (no currency symbols, commas or %), up to 8 rows, ordered largest to smallest, using only real figures already in the context above. Skip the chart only if fewer than 2 real data points exist for that breakdown — never fabricate rows to fill it.\n' +
+          '4. Follow the table/chart with a short "Insights" section (2-4 bullet points) calling out what is notable for that specific area — a top or at-risk customer/vendor/employee, a stage where things are stuck, a concentration risk, a trend.\n' +
+          '5. End with a "Recommended next step / strategy" section (1-3 bullet points) — a concrete, prioritized action for this period, not generic advice.\n' +
+          '6. If the question spans multiple areas at once (e.g. "give me a full company report", "how is the business doing", "summarize everything") produce one subsection per relevant area, each following steps 1-5 in full under a bold heading naming the area (e.g. "**Sales**", "**Inventory**") — every area gets the complete treatment, not an abbreviated one.\n' +
+          '7. Use the exact figures given in the context above — never invent numbers — and say plainly if something was not in the sample/range shown.\n' +
+          '8. For non-analytical questions (a lookup, a yes/no, a how-to), skip this structure and just answer directly and concisely.\n' +
+          '9. If the user asks about mistakes, errors, glitches, problems or "what\'s wrong", OR if the "Automated data-quality / process checks" block above lists anything other than "none found", always add a "⚠️ Issues Found" section covering every area that has a flagged item, not just Sales — one entry per problem, each with exactly three parts: **Issue** (what and how many, naming real records/customers/products/employees from the data — never vague), **Why it matters** (the business impact in one line), **Fix** (a specific, actionable step — who should do what). If every checked area came back "none found", say plainly "No data-quality issues detected in the areas checked" instead of inventing one — do not pad the answer with a fake issue.'
         : 'Background only — mention specifics from it only if the question calls for them.';
       var text = 'Company / workspace context:\n\n' + parts.join('\n\n') + '\n\n' + instructions;
       cache = { text: text, at: Date.now() };

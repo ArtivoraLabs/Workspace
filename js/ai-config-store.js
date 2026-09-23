@@ -22,6 +22,14 @@
 
   var STORE_KEY = 'dashview_ai_config';
 
+  // The company-context reporting style (js/ai-company-context.js) can ask
+  // for a full multi-module breakdown — headline KPIs, ranked tables, a
+  // ```chart visualization, insights and next steps, repeated per business
+  // area for a broad question. 2048 tokens was tuned for a single short
+  // answer and truncated those longer reports mid-table; this gives a full
+  // multi-section report room to finish.
+  var MAX_REPLY_TOKENS = 4096;
+
   var PROVIDERS = {
     offline: {
       label: 'Offline demo engine',
@@ -88,6 +96,7 @@
 
   function isConfigured() {
     var cfg = get();
+    if (cfg.provider === 'offline') return false; // the offline engine is a local fallback, not a "connected" API
     var p = PROVIDERS[cfg.provider];
     return !!(p && (!p.needsKey || cfg.apiKey));
   }
@@ -191,7 +200,7 @@
   function callAnthropic(messages, systemPrompt, cfg) {
     var body = {
       model: activeModel(cfg),
-      max_tokens: 2048,
+      max_tokens: MAX_REPLY_TOKENS,
       messages: messages.map(function (m) { return { role: toRole(m.role), content: m.content }; })
     };
     if (systemPrompt) body.system = systemPrompt;
@@ -222,7 +231,7 @@
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + cfg.apiKey
       },
-      body: JSON.stringify({ model: activeModel(cfg), messages: chatMessages })
+      body: JSON.stringify({ model: activeModel(cfg), messages: chatMessages, max_tokens: MAX_REPLY_TOKENS })
     })).then(readJsonSafe).then(function (r) {
       if (r.res.status === 429) throw friendly429('Grok');
       if (!r.res.ok) throw new Error((r.json && r.json.error && (r.json.error.message || r.json.error)) || ('Request failed with status ' + r.res.status));
@@ -240,7 +249,7 @@
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + cfg.apiKey
       },
-      body: JSON.stringify({ model: activeModel(cfg), messages: chatMessages })
+      body: JSON.stringify({ model: activeModel(cfg), messages: chatMessages, max_tokens: MAX_REPLY_TOKENS })
     })).then(readJsonSafe).then(function (r) {
       if (r.res.status === 429) throw friendly429('Groq');
       if (!r.res.ok) throw new Error((r.json && r.json.error && (r.json.error.message || r.json.error)) || ('Request failed with status ' + r.res.status));

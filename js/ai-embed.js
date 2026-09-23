@@ -34,11 +34,54 @@
       });
     }
 
+    // Turns one ```chart fenced block into a horizontal bar chart. Expected
+    // shape (see js/ai-company-context.js's reporting instructions):
+    //   ```chart
+    //   Optional title
+    //   Label one: 12345
+    //   Label two: 9876
+    //   ```
+    // Returns an HTML string, or null if fewer than 2 lines parse as
+    // "label <: or |> number", in which case the caller leaves the block
+    // untouched so it still renders as plain code instead of vanishing.
+    // NOTE: this runs on text esc() has already escaped once (see below) —
+    // do not esc() the label/value again here, or entities double-escape.
+    function renderChartBlock(raw) {
+      var lines = raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+      var rowRe = /^(.+?)\s*[:|]\s*[$€£₹]?\s*([+-]?[\d,]*\.?\d+)\s*%?$/;
+
+      var title = '';
+      if (lines.length && !rowRe.test(lines[0])) title = lines.shift();
+
+      var rows = lines.map(function (l) {
+        var m = l.match(rowRe);
+        if (!m) return null;
+        return { label: m[1].trim(), value: parseFloat(m[2].replace(/,/g, '')) };
+      }).filter(function (r) { return r && isFinite(r.value); }).slice(0, 8);
+
+      if (rows.length < 2) return null;
+
+      var max = Math.max.apply(null, rows.map(function (r) { return Math.abs(r.value); })) || 1;
+      var barsHtml = rows.map(function (r) {
+        var pct = Math.max((Math.abs(r.value) / max) * 100, 3);
+        var rounded = Math.round(r.value);
+        var valText = (Math.abs(r.value - rounded) < 0.005 ? rounded : r.value).toLocaleString();
+        return '<div class="ai-chart-row">' +
+          '<span class="ai-chart-label">' + r.label + '</span>' +
+          '<span class="ai-chart-bar-track"><span class="ai-chart-bar-fill" style="width:' + pct.toFixed(1) + '%"></span></span>' +
+          '<span class="ai-chart-value">' + valText + '</span>' +
+          '</div>';
+      }).join('');
+      var titleHtml = title ? '<div class="ai-chart-title">' + title + '</div>' : '';
+      return '<div class="ai-chart">' + titleHtml + barsHtml + '</div>';
+    }
+
     // Same shape as ai.html's renderer, kept in sync deliberately — anything
     // that goes through DashViewAI.respond() should look the same wherever
     // it's rendered.
     function renderMarkdown(text) {
       return esc(text)
+        .replace(/```chart\n?([\s\S]*?)```/g, function (match, body) { return renderChartBlock(body) || match; })
         .replace(/```(\w*)\n?([\s\S]*?)```/g, function (_, lang, code) { return '<pre><code>' + code.trim() + '</code></pre>'; })
         .replace(/`([^`]+)`/g, '<code>$1</code>')
         .replace(/^### (.+)$/gm, '<h3>$1</h3>')
