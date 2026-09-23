@@ -1038,6 +1038,17 @@
             updateOdooStatus();
             window.addEventListener('storage', updateOdooStatus);
             document.addEventListener('dv:odoo-config-saved', updateOdooStatus);
+
+            /* Deep-link straight into a settings tab, e.g. dashboard.html?stg=ai#settings
+               (used by ai.html's "Settings" button so it lands on AI Assistant
+               instead of the generic Profile tab). */
+            try {
+              var wantTab = new URLSearchParams(window.location.search).get('stg');
+              if (wantTab) {
+                var target = document.querySelector('.stg-tab[data-stg="' + wantTab + '"]');
+                if (target) target.click();
+              }
+            } catch (e) {}
           }
           if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initStgTabs);
           else initStgTabs();
@@ -1379,7 +1390,6 @@
 <script src="js/dashboard-pro.js"></script>
 <script src="js/auth-service.js"></script>
 <script src="js/odoo-service.js"></script>
-<script src="js/dashview-api.js"></script>
 <script src="js/odoo-live.js"></script>
 <script src="js/overview-live.js"></script>
 <script src="js/tasks.js"></script>
