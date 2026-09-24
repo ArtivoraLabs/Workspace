@@ -46,11 +46,15 @@
       var keyField = byId('aiKeyField');
       var modelField = byId('aiModelField');
       var needsKey = !!(p && p.needsKey);
-      keyField.style.display = needsKey ? '' : 'none';
-      modelField.style.display = needsKey ? '' : 'none';
+      var isBackend = !!(p && p.backend);
+      keyField.style.display = (needsKey || isBackend) ? '' : 'none';
+      modelField.style.display = (needsKey || isBackend) ? '' : 'none';
+      var backendField = byId('aiBackendField');
+      if (backendField) backendField.style.display = isBackend ? '' : 'none';
       var help = byId('aiKeyHelp');
       if (provider === 'grok') help.textContent = 'From console.x.ai — Settings → API Keys. If Odoo is connected, requests auto-route through your Odoo Worker proxy (avoids browser CORS issues with api.x.ai).';
       else if (provider === 'anthropic') help.textContent = 'From console.anthropic.com — Settings → API Keys.';
+      else if (provider === 'dashview') help.textContent = 'Optional service key (X-API-Key). Leave blank to use your signed-in DashView session token.';
       else if (provider === 'groq') help.textContent = 'From console.groq.com/keys. If Odoo is connected, requests auto-route through your Odoo Worker proxy.';
       else help.textContent = '';
     }
@@ -83,6 +87,7 @@
       byId('aiApiKeyInput').value = cfg.apiKey || '';
       byId('aiApiKeyInput').placeholder = cfg.apiKey ? 'Saved — leave blank to keep' : 'Paste your API key';
       byId('aiSystemPromptInput').value = cfg.systemPrompt || '';
+      if (byId('aiBackendUrlInput')) byId('aiBackendUrlInput').value = cfg.backendUrl || '';
       byId('aiIncludeContextToggle').checked = cfg.includeCompanyContext !== false;
       refreshStatusTag();
     }
@@ -113,6 +118,10 @@
       var typedKey = byId('aiApiKeyInput').value.trim();
       var existing = window.DVAIConfig.get();
 
+      if (p && p.backend && !(byId('aiBackendUrlInput').value || '').trim()) {
+        toast('Enter the URL where you deployed the AI backend first.');
+        return;
+      }
       if (p && p.needsKey && !typedKey && !existing.apiKey) {
         toast('Add your ' + p.label + ' API key first, or switch to the offline engine.');
         return;
@@ -122,7 +131,8 @@
         provider: provider,
         // Blank box with a key already saved means "keep it" — same
         // convention as the Odoo panel's password field.
-        apiKey: typedKey || (p && p.needsKey ? existing.apiKey : ''),
+        apiKey: typedKey || (p && (p.needsKey || p.backend) ? existing.apiKey : ''),
+        backendUrl: p && p.backend ? byId('aiBackendUrlInput').value.trim().replace(/\/+$/, '') : (existing.backendUrl || ''),
         model: byId('aiModelSelect').value === 'custom' ? '' : (byId('aiModelSelect').value || ''),
         systemPrompt: byId('aiSystemPromptInput').value.trim(),
         includeCompanyContext: byId('aiIncludeContextToggle').checked

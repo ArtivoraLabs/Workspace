@@ -49,6 +49,15 @@
       defaultModel: 'claude-sonnet-5',
       models: ['claude-sonnet-5', 'claude-opus-5-5', 'claude-haiku-4-5-20251001']
     },
+    dashview: {
+      // Python service in /ai-service: server-side keys, tool-calling straight
+      // against Odoo, multi-model routing + fail-over. No LLM key in the browser.
+      label: 'DashView AI (Python backend + Odoo)',
+      needsKey: false,
+      backend: true,
+      defaultModel: 'auto',
+      models: ['auto', 'fast', 'smart', 'deep']
+    },
     groq: {
       label: 'Groq',
       needsKey: true,
@@ -98,7 +107,45 @@
     var cfg = get();
     if (cfg.provider === 'offline') return false; // the offline engine is a local fallback, not a "connected" API
     var p = PROVIDERS[cfg.provider];
+    if (p && p.backend) return !!backendUrl(cfg);
     return !!(p && (!p.needsKey || cfg.apiKey));
+  }
+
+  function backendUrl(cfg) {
+    var legacy = window.DASHVIEW_AI_CONFIG || {};
+    return String((cfg && cfg.backendUrl) || legacy.backendUrl || '').replace(/\/+$/, '');
+  }
+
+  // Talks to ai-service (/v1/chat). The backend owns the system prompt, the
+  // LLM keys and the Odoo credentials; the browser only sends the chat
+  // history and a model tier ("auto" | "fast" | "smart" | "deep"), plus either
+  // the signed-in DashView session token or an optional service key.
+  function callDashView(messages, cfg) {
+    var headers = { 'Content-Type': 'application/json' };
+    var tok = '';
+    try { tok = localStorage.getItem('al_api_token') || ''; } catch (e) {}
+    if (cfg.apiKey) headers['X-API-Key'] = cfg.apiKey;
+    else if (tok) headers['Authorization'] = 'Bearer ' + tok;
+
+    var m = activeModel(cfg);
+    var body = {
+      messages: messages.map(function (x) { return { role: toRole(x.role), content: x.content }; }),
+      stream: false
+    };
+    if (/^(auto|fast|smart|deep)$/.test(m)) body.tier = m; else if (m) body.model = m;
+
+    return timeoutAware(fetch(backendUrl(cfg) + '/v1/chat', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(120000) // multi-step Odoo queries can take a while
+    }).then(readJsonSafe).then(function (r) {
+      if (r.res.status === 429) throw friendly429('DashView AI');
+      if (!r.res.ok || !r.json || r.json.ok === false) {
+        throw new Error((r.json && (r.json.error || r.json.detail)) || ('Backend request failed with status ' + r.res.status));
+      }
+      return r.json.text || '(No text in response.)';
+    }), 'DashView AI');
   }
 
   function activeModel(cfg) {
@@ -260,6 +307,8 @@
   function callAI(messages, systemPrompt) {
     var cfg = get();
     if (!isConfigured()) return Promise.reject(new Error('No AI provider is configured yet. Add a key in Settings → AI Assistant.'));
+
+    if (cfg.provider === 'dashview') return callDashView(messages, cfg);
 
     var proxy = odooProxyUrl();
 

@@ -33,6 +33,10 @@ window.DASHVIEW_AI_CONFIG = {
   model: 'claude-sonnet-5',
   maxTokens: 1024,
 
+  // URL of the Python AI backend (ai-service/). Used when Settings → AI Assistant
+  // → Provider is "DashView AI". Leave empty otherwise.
+  backendUrl: '',
+
   // System prompt sent with every real-API conversation.
   systemPrompt: 'You are the DashView AI Assistant, a helpful engineering and product co-pilot embedded in the DashView dashboard app.'
 };
