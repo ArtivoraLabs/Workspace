@@ -37,12 +37,22 @@
     } catch (e) {}
   }
 
-  function call(endpoint, extra) {
-    var s = state();
-    if (s !== 'ok') { var err = new Error(MSG[s]); err.code = s; return Promise.reject(err); }
-    var c = cfg(), t0 = Date.now();
-    var body = Object.assign({}, extra || {}, { url: c.url, db: c.db, username: c.username, apiKey: c.apiKey, endpoint: endpoint });
-    return fetch(String(c.proxyUrl).replace(/\/+$/, ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  /* ── Concurrency throttle ────────────────────────────────────────────────────
+     Overview + Odoo Live fire many parallel requests.  Odoo returns HTTP 429
+     ("Rate limit exceeded") when too many arrive at once.  We cap in-flight
+     Worker calls at MAX_CONCURRENT so Odoo never sees a burst. */
+  var MAX_CONCURRENT = 3, _inFlight = 0, _queue = [];
+  function _flush() {
+    while (_inFlight < MAX_CONCURRENT && _queue.length) {
+      var job = _queue.shift();
+      _inFlight++;
+      job.run().then(function (r) { _inFlight--; _flush(); job.resolve(r); },
+                     function (e) { _inFlight--; _flush(); job.reject(e); });
+    }
+  }
+
+  function _rawFetch(proxyUrl, body, t0) {
+    return fetch(String(proxyUrl).replace(/\/+$/, ''), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) {
         noteCors(r);
         return r.text().then(function (t) {
@@ -55,12 +65,23 @@
       }, function () { throw new Error('Cannot reach the Worker. Check the Worker URL, your connection and ALLOWED_ORIGINS.'); });
   }
 
+  function call(endpoint, extra) {
+    var s = state();
+    if (s !== 'ok') { var err = new Error(MSG[s]); err.code = s; return Promise.reject(err); }
+    var c = cfg(), t0 = Date.now();
+    var body = Object.assign({}, extra || {}, { url: c.url, db: c.db, username: c.username, apiKey: c.apiKey, endpoint: endpoint });
+    return new Promise(function (resolve, reject) {
+      _queue.push({ resolve: resolve, reject: reject, run: function () { return _rawFetch(c.proxyUrl, body, t0); } });
+      _flush();
+    });
+  }
+
   function cached(key, fn) { if (!memo[key]) memo[key] = fn().catch(function (e) { delete memo[key]; throw e; }); return memo[key]; }
 
   var api = {
     state: state, cfg: cfg, call: call, lastLatency: null,
     message: function (s) { return MSG[s || state()] || ''; },
-    reset: function () { memo = {}; },
+    reset: function () { memo = {}; _queue = []; _inFlight = 0; },
     test: function () { return call('test'); },
     modules: function () { return cached('modules', function () { return call('modules').then(function (d) { return d.modules || []; }); }); },
     fields: function (model) { return cached('f:' + model, function () { return call('fields', { model: model }).then(function (d) { return d.fields || {}; }); }); },
