@@ -49,7 +49,13 @@
     function renderChartBlock(raw) {
       var lines = raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
       var rowRe = /^(.+?)\s*[:|]\s*[$€£₹]?\s*([+-]?[\d,]*\.?\d+)\s*%?$/;
+      var PALETTE = ['#e8a33d', '#5b8fae', '#c76b3c', '#7aa874', '#a78bc4', '#d4b95e', '#5fb3b3', '#b0798a'];
 
+      // Optional first line "type: bar | line | donut" (default bar).
+      var kind = 'bar';
+      if (lines.length && /^type\s*:\s*(bar|line|donut)$/i.test(lines[0])) {
+        kind = lines.shift().split(':')[1].trim().toLowerCase();
+      }
       var title = '';
       if (lines.length && !rowRe.test(lines[0])) title = lines.shift();
 
@@ -57,23 +63,84 @@
         var m = l.match(rowRe);
         if (!m) return null;
         return { label: m[1].trim(), value: parseFloat(m[2].replace(/,/g, '')) };
-      }).filter(function (r) { return r && isFinite(r.value); }).slice(0, 8);
+      }).filter(function (r) { return r && isFinite(r.value); }).slice(0, kind === 'line' ? 24 : 8);
 
       if (rows.length < 2) return null;
 
-      var max = Math.max.apply(null, rows.map(function (r) { return Math.abs(r.value); })) || 1;
+      function fmt(v) {
+        var rounded = Math.round(v);
+        return (Math.abs(v - rounded) < 0.005 ? rounded : v).toLocaleString();
+      }
+      var titleHtml = title ? '<div class="ai-chart-title">' + (title) + '</div>' : '';
+      var vals = rows.map(function (r) { return r.value; });
+
+      if (kind === 'line') {
+        var W = 560, H = 190, L = 10, R = 14, T = 22, B = 26;
+        var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+        var span = (mx - mn) || 1;
+        var n = rows.length;
+        var pts = rows.map(function (r, i) {
+          return { x: L + i * (W - L - R) / (n - 1), y: T + (1 - (r.value - mn) / span) * (H - T - B) };
+        });
+        var d = pts.map(function (p, i) { return (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1); }).join(' ');
+        var area = d + ' L' + pts[n - 1].x.toFixed(1) + ' ' + (H - B) + ' L' + pts[0].x.toFixed(1) + ' ' + (H - B) + ' Z';
+        var step = Math.ceil(n / 6);
+        var xl = rows.map(function (r, i) {
+          if (i % step && i !== n - 1) return '';
+          return '<text x="' + pts[i].x.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="' + (i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle')) + '">' + (r.label) + '</text>';
+        }).join('');
+        var iMax = vals.indexOf(mx), iLast = n - 1;
+        var tags = [iMax].concat(iLast !== iMax ? [iLast] : []).map(function (i) {
+          return '<text class="ai-chart-pt" x="' + Math.min(Math.max(pts[i].x, 30), W - 30).toFixed(1) + '" y="' + (pts[i].y - 8).toFixed(1) + '" text-anchor="middle">' + (fmt(rows[i].value)) + '</text>';
+        }).join('');
+        var dots = pts.map(function (p) { return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3"/>'; }).join('');
+        return '<div class="ai-chart">' + titleHtml +
+          '<svg class="ai-chart-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + (title || 'Line chart') + '">' +
+          '<line class="ai-chart-axis" x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '"/>' +
+          '<path class="ai-chart-area" d="' + area + '"/><path class="ai-chart-line" d="' + d + '"/>' + dots + xl + tags + '</svg></div>';
+      }
+
+      if (kind === 'donut') {
+        var total = vals.reduce(function (a, v) { return a + Math.abs(v); }, 0) || 1;
+        var acc = 0;
+        var stops = rows.map(function (r, i) {
+          var from = acc / total * 100; acc += Math.abs(r.value); var to = acc / total * 100;
+          return PALETTE[i % PALETTE.length] + ' ' + from.toFixed(2) + '% ' + to.toFixed(2) + '%';
+        }).join(', ');
+        var legend = rows.map(function (r, i) {
+          return '<div class="ai-donut-item"><span class="ai-donut-dot" style="background:' + PALETTE[i % PALETTE.length] + '"></span>' +
+            '<span class="ai-donut-label">' + (r.label) + '</span>' +
+            '<span class="ai-chart-value">' + (fmt(r.value)) + ' · ' + (Math.abs(r.value) / total * 100).toFixed(1) + '%</span></div>';
+        }).join('');
+        return '<div class="ai-chart">' + titleHtml + '<div class="ai-donut-wrap"><div class="ai-donut" style="background:conic-gradient(' + stops + ')"><span></span></div>' +
+          '<div class="ai-donut-legend">' + legend + '</div></div></div>';
+      }
+
+      var max = Math.max.apply(null, vals.map(Math.abs)) || 1;
       var barsHtml = rows.map(function (r) {
         var pct = Math.max((Math.abs(r.value) / max) * 100, 3);
-        var rounded = Math.round(r.value);
-        var valText = (Math.abs(r.value - rounded) < 0.005 ? rounded : r.value).toLocaleString();
         return '<div class="ai-chart-row">' +
-          '<span class="ai-chart-label">' + r.label + '</span>' +
+          '<span class="ai-chart-label">' + (r.label) + '</span>' +
           '<span class="ai-chart-bar-track"><span class="ai-chart-bar-fill" style="width:' + pct.toFixed(1) + '%"></span></span>' +
-          '<span class="ai-chart-value">' + valText + '</span>' +
-          '</div>';
+          '<span class="ai-chart-value">' + (fmt(r.value)) + '</span></div>';
       }).join('');
-      var titleHtml = title ? '<div class="ai-chart-title">' + title + '</div>' : '';
       return '<div class="ai-chart">' + titleHtml + barsHtml + '</div>';
+    }
+
+    // ```kpi block: one card per line, "Label: value | change" (change optional, e.g. "+12.4% vs last month").
+    function renderKpiBlock(raw) {
+      var cards = raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean).slice(0, 6).map(function (l) {
+        var i = l.indexOf(':');
+        if (i < 1) return null;
+        var parts = l.slice(i + 1).split('|').map(function (s) { return s.trim(); });
+        if (!parts[0]) return null;
+        var delta = parts[1] || '';
+        var cls = /^[+▲↑]/.test(delta) ? ' up' : (/^[-−▼↓]/.test(delta) ? ' down' : '');
+        return '<div class="ai-kpi"><div class="ai-kpi-label">' + (l.slice(0, i).trim()) + '</div>' +
+          '<div class="ai-kpi-value">' + (parts[0]) + '</div>' +
+          (delta ? '<div class="ai-kpi-delta' + cls + '">' + (delta) + '</div>' : '') + '</div>';
+      }).filter(Boolean);
+      return cards.length ? '<div class="ai-kpi-grid">' + cards.join('') + '</div>' : null;
     }
 
     // Same shape as ai.html's renderer, kept in sync deliberately — anything
@@ -81,6 +148,7 @@
     // it's rendered.
     function renderMarkdown(text) {
       return esc(text)
+        .replace(/```kpi\n?([\s\S]*?)```/g, function (match, body) { return renderKpiBlock(body) || match; })
         .replace(/```chart\n?([\s\S]*?)```/g, function (match, body) { return renderChartBlock(body) || match; })
         .replace(/```(\w*)\n?([\s\S]*?)```/g, function (_, lang, code) { return '<pre><code>' + code.trim() + '</code></pre>'; })
         .replace(/`([^`]+)`/g, '<code>$1</code>')

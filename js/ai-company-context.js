@@ -223,11 +223,13 @@
 
   function odooContext() {
     if (!window.DVOdoo || !window.DVOdoo.isConnected()) return Promise.resolve('');
+    var unavailable = []; // areas whose query failed (module not installed / no access rights) — told to the AI instead of hidden
+    function miss(label) { return function () { unavailable.push(label.replace('⚠️ ', '')); return ''; }; }
 
     var rowJobs = fetchers.map(function (f) {
       return window.DVOdoo.fetchModel(f.model, { limit: 15 })
         .then(function (r) { return summarizeRows(f.label, r, SUM_FIELD[f.model]); })
-        .catch(function () { return ''; });
+        .catch(miss(f.label));
     });
 
     var aggJobs = (window.DVOdoo.fetchReadGroup ? aggregates : []).map(function (a) {
@@ -236,7 +238,7 @@
         orderby: a.orderby, limit: a.limit, domain: a.domain || []
       })
         .then(function (r) { return summarizeGroups(a.label, a.groupby[0], r); })
-        .catch(function () { return ''; });
+        .catch(miss(a.label));
     });
 
     // Issue-detection queries run last and are labelled separately so they
@@ -247,7 +249,7 @@
           if (!r || !r.rows || !r.rows.length) return f.label + ': none found — looks clean.';
           return summarizeRows(f.label, r, SUM_FIELD[f.model]);
         })
-        .catch(function () { return ''; }); // model/module not installed, or field not present on this DB
+        .catch(miss(f.label)); // model/module not installed, no access right, or field not present on this DB
     });
 
     return Promise.all([Promise.all(rowJobs.concat(aggJobs)), Promise.all(issueJobs)])
@@ -257,6 +259,10 @@
         if (!body && !issuesBody) return '';
         var cfg = window.DVOdoo.getConfig();
         var out = 'Live data from the connected Odoo instance (' + (cfg.url || 'Odoo') + '):\n\n' + body;
+        out += '\n\nConnection: live query OK (' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC).';
+        if (unavailable.length) {
+          out += '\nNOT available from this Odoo right now (module not installed or the API user has no access): ' + unavailable.join('; ') + '. Say so plainly if asked about these — never guess numbers for them.';
+        }
         if (issuesBody) {
           out += '\n\n--- Automated data-quality / process checks (filtered queries, not raw samples) ---\n\n' + issuesBody;
         }
@@ -276,7 +282,7 @@
         ? 'You are a business analyst presenting to company leadership — answer like a dashboard, not a chat reply. ' +
           'The context above can span several business areas — Sales, CRM/Pipeline, Purchasing, Inventory, Accounting/Finance, HR/Workforce and Projects. ' +
           'Give EVERY area the exact same reporting depth and polish described below — never let Sales get a richer, more detailed answer than CRM, Inventory, HR, Purchasing, Accounting or Projects just because more examples below happen to mention sales. Match the quality to whichever area(s) the question is actually about. Rules:\n' +
-          '1. Open with 1-3 headline KPI numbers relevant to the question (e.g. total revenue, order count, headcount, open pipeline value, on-time delivery rate) as a short bold line — not buried in a paragraph.\n' +
+          '1. Open with 2-4 headline KPI cards using this exact fenced format (it renders as KPI cards): ```kpi then one line per card as \"Label: value | change\" (change optional, start with + or -), then ```. Use only numbers present in the context.\n' +
           '2. Include the ranked breakdown table(s) that fit the question, as real Markdown tables (header row, |---|---| separator row, data rows), ranked, with columns like Rank | Name | Value | (a relevant 4th column when useful, e.g. Orders/Count). Pick from whichever of these match the data available above and the question asked — do not force a table that has no data behind it:\n' +
           '   - Sales / revenue / customers / products → Top 5 Customers and/or Top 5 Products by revenue\n' +
           '   - CRM / pipeline / leads → CRM leads by stage and/or Top 5 salespeople by pipeline value\n' +
