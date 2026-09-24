@@ -76,7 +76,7 @@
           var d = null;
           try { d = JSON.parse(t); } catch (e) {}
           if (!d) throw new Error('Proxy returned HTTP ' + r.status + ' (not JSON) — check the Proxy URL is your Worker URL.');
-          if (!d.ok) throw new Error((d.error || 'Proxy error') + ' [HTTP ' + r.status + ']');
+          if (!d.ok) { var er = new Error((d.error || 'Proxy error') + ' [HTTP ' + r.status + ']'); er.data = d; er.status = r.status; throw er; }
           return d;
         });
       })
@@ -208,7 +208,13 @@
     MODELS: MODELS,
     isConnected: isConnected, getConfig: getConfig,
     connect: connect, disconnect: disconnect,
-    testConnection: testConnection, fetchModel: fetchModel, fetchReadGroup: fetchReadGroup
+    testConnection: testConnection, fetchModel: fetchModel, fetchReadGroup: fetchReadGroup,
+    /* Raw Worker call (endpoint, extra body) for the AI agent: diagnose / batch / records / fields … */
+    rpc: function (endpoint, body) {
+      var cfg = getConfig();
+      if (!cfg.proxyUrl) return Promise.reject(new Error('Worker URL is missing. Add it in Settings → Odoo.'));
+      return proxyPost(cfg.proxyUrl, endpoint, body || {});
+    }
   };
 
   /* ── Wire existing Settings panel ──────────────────────────────────────── */
