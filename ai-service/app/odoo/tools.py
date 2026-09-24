@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
@@ -222,6 +223,99 @@ async def h_snapshot(ctx: ToolContext, a: dict) -> dict:
     }
 
 
+# ── connectivity / coverage ──────────────────────────────────────────
+HEALTH_MODELS = [
+    ("Sales", "sale.order"), ("CRM", "crm.lead"), ("Invoicing / Accounting", "account.move"),
+    ("Purchase", "purchase.order"), ("Inventory transfers", "stock.picking"), ("Stock levels", "stock.quant"),
+    ("Contacts", "res.partner"), ("Products", "product.template"), ("HR", "hr.employee"),
+    ("Projects / Tasks", "project.task"), ("Expenses", "hr.expense"),
+]
+
+
+async def h_health(ctx: ToolContext, a: dict) -> dict:
+    """Is Odoo reachable, does the login work, and which business areas can this API user actually read?"""
+    t0 = time.perf_counter()
+    out: dict = {"connection": {}, "areas": {}}
+    try:
+        info = await ctx.client.test()
+        out["connection"] = {"ok": True, "login": "ok", "total_ms": round((time.perf_counter() - t0) * 1000), **info}
+    except OdooError as e:
+        return {"connection": {"ok": False, "error": str(e)[:300]},
+                "hint": "Fix the connection first (URL, database name = subdomain on Odoo Online, username, API key)."}
+
+    async def one(label: str, model: str):
+        s = time.perf_counter()
+        try:
+            if not ctx.guard.model_allowed(model):
+                return label, {"model": model, "status": "blocked_by_guard"}
+            n = await ctx.client.search_count(model, [])
+            return label, {"model": model, "status": "ok", "records": n, "ms": round((time.perf_counter() - s) * 1000)}
+        except (OdooError, GuardError) as e:
+            msg = str(e).lower()
+            status = "no_access" if ("access" in msg or "not allowed" in msg) else "not_installed_or_error"
+            return label, {"model": model, "status": status, "detail": str(e)[:140]}
+
+    pairs = await asyncio.gather(*(one(*m) for m in HEALTH_MODELS))
+    out["areas"] = dict(pairs)
+    ok = [k for k, v in pairs if v["status"] == "ok"]
+    out["summary"] = {"readable_areas": len(ok), "checked_areas": len(pairs),
+                      "unavailable": [k for k, v in pairs if v["status"] != "ok"]}
+    return out
+
+
+# ── "what is in progress right now" ─────────────────────────────────
+async def h_in_progress(ctx: ToolContext, a: dict) -> dict:
+    """Open work items across the business, straight from Odoo. Odoo has no field called 'strategy';
+    this is the factual pipeline the current strategy is visible in."""
+    today = _now().date().isoformat()
+    old = _dt(_now() - timedelta(days=14))
+    # (label, model, domain, sum_field, oldest_field)
+    items = [
+        ("quotations_open", "sale.order", [["state", "in", ["draft", "sent"]]], "amount_total", "create_date"),
+        ("orders_confirmed_not_fully_invoiced", "sale.order",
+         [["state", "in", ["sale", "done"]], ["invoice_status", "=", "to invoice"]], "amount_total", "date_order"),
+        ("crm_open_opportunities", "crm.lead",
+         [["type", "=", "opportunity"], ["probability", "<", 100], ["active", "=", True]], "expected_revenue", "create_date"),
+        ("rfqs_open", "purchase.order", [["state", "in", ["draft", "sent"]]], "amount_total", "create_date"),
+        ("purchase_orders_awaiting_receipt", "purchase.order",
+         [["state", "=", "purchase"], ["receipt_status", "!=", "full"]], "amount_total", "date_order"),
+        ("deliveries_or_receipts_pending", "stock.picking",
+         [["state", "in", ["confirmed", "waiting", "assigned"]]], None, "create_date"),
+        ("invoices_overdue", "account.move",
+         [["move_type", "=", "out_invoice"], ["state", "=", "posted"], ["payment_state", "in", ["not_paid", "partial"]],
+          ["invoice_date_due", "<", today]], "amount_residual", "invoice_date_due"),
+        ("vendor_bills_due_or_overdue", "account.move",
+         [["move_type", "=", "in_invoice"], ["state", "=", "posted"], ["payment_state", "in", ["not_paid", "partial"]],
+          ["invoice_date_due", "<=", today]], "amount_residual", "invoice_date_due"),
+        ("tasks_open", "project.task", [["stage_id.fold", "=", False]], None, "create_date"),
+        ("tasks_past_deadline", "project.task", [["stage_id.fold", "=", False], ["date_deadline", "<", today]], None, "date_deadline"),
+    ]
+
+    async def one(label, model, domain, sum_field, oldest_field):
+        try:
+            if not ctx.guard.model_allowed(model):
+                return label, {"available": False}
+            res: dict = {}
+            if sum_field:
+                grp = await ctx.client.read_group(model, domain, [sum_field + ":sum"], [])
+                row = (grp or [{}])[0]
+                res = {"count": row.get("__count", row.get("count", 0)), f"total_{sum_field}": _pick(row, sum_field + ":sum") or 0}
+            else:
+                res = {"count": await ctx.client.search_count(model, domain)}
+            if res["count"]:
+                oldest = await ctx.client.search_read(model, domain, [oldest_field], 1, oldest_field + " asc")
+                if oldest and oldest[0].get(oldest_field):
+                    res["oldest_" + oldest_field] = str(oldest[0][oldest_field])[:10]
+            return label, res
+        except (OdooError, GuardError) as e:
+            return label, {"available": False, "reason": str(e)[:120]}
+
+    pairs = await asyncio.gather(*(one(*i) for i in items))
+    return {"as_of": today, "in_progress": dict(pairs),
+            "note": ("Factual open work items. The company's strategy itself is not stored in Odoo: any strategy you describe "
+                     "must be labelled as INFERRED from these numbers. Amounts are in each document's own currency.")}
+
+
 # ── registry ─────────────────────────────────────────────────────────
 _DOMAIN_HELP = ("Odoo domain: list of [field, operator, value] terms, optionally with '&','|','!' prefix operators. "
                 "Example: [[\"state\",\"=\",\"sale\"],[\"date_order\",\">=\",\"2026-09-01\"]]. Dates are 'YYYY-MM-DD'.")
@@ -247,6 +341,16 @@ TOOLS: list[ToolSpec] = [
              "Good first call for broad questions like 'how is the business doing'. Modules that aren't installed are reported as unavailable.",
              {"type": "object", "properties": {"days": {"type": "integer", "default": 30, "description": "Look-back window, 1-365."}}},
              h_snapshot),
+    ToolSpec("odoo_health",
+             "Connectivity + coverage check: is Odoo reachable, does the login work, how fast is it, and which business areas "
+             "(sales, CRM, invoicing, purchase, inventory, HR, projects...) can this API user actually read, with record counts. "
+             "Use for 'connection kaisa hai', 'kya connected hai', or when other tools fail.",
+             {"type": "object", "properties": {}}, h_health),
+    ToolSpec("odoo_in_progress",
+             "What is in progress RIGHT NOW: open quotations, confirmed-but-uninvoiced orders, open pipeline, RFQs, pending deliveries, "
+             "overdue invoices, due vendor bills, open and overdue tasks - each with count, value and the oldest item's date. "
+             "Use it first for 'abhi kya chal raha hai', 'current strategy', 'what should we focus on'.",
+             {"type": "object", "properties": {}}, h_in_progress),
     ToolSpec("odoo_list_models",
              "Find Odoo models (tables) by keyword in their technical or display name, e.g. 'sale', 'invoice', 'employee'.",
              {"type": "object", "properties": {"query": {"type": "string"}}}, h_list_models),

@@ -83,3 +83,28 @@ async def test_client_url_policy():
         await assert_safe_client_url("https://evil.example.com", on)
     with pytest.raises(OdooError):  # no allow-list: loopback refused
         await assert_safe_client_url("http://127.0.0.1:8069", settings(odoo_allow_client_credentials=True))
+
+
+async def test_health_reports_connection_and_areas():
+    ctx, http = make_ctx()
+    r = await run_tool(ctx, "odoo_health", {})
+    assert r["connection"]["ok"] is True and r["connection"]["server_version"] == "18.0"
+    assert r["areas"]["Sales"]["status"] == "ok" and r["areas"]["Sales"]["records"] == 42
+    assert r["summary"]["checked_areas"] >= 10
+    await http.aclose()
+
+
+async def test_health_reports_bad_login_instead_of_raising():
+    ctx, http = make_ctx(key="wrong")
+    r = await run_tool(ctx, "odoo_health", {})
+    assert r["connection"]["ok"] is False and "error" in r["connection"]
+    await http.aclose()
+
+
+async def test_in_progress_lists_open_work_with_totals():
+    ctx, http = make_ctx()
+    r = await run_tool(ctx, "odoo_in_progress", {})
+    ip = r["in_progress"]
+    assert ip["quotations_open"]["count"] == 6 and ip["quotations_open"]["total_amount_total"] == 8000.0
+    assert "INFERRED" in r["note"] and len(ip) == 10
+    await http.aclose()
