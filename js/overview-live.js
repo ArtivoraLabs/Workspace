@@ -13,7 +13,7 @@
   function $(id) { return document.getElementById(id); }
   var CONF = [['state', 'in', ['sale', 'done']]];
   var iso = F.isoDaysAgo;
-  var S = { range: 30, seq: 0, timer: null, sum: null, trend: null, cat: null, pipe: null, inv: null, top: null, recent: [], lastSynced: null };
+  var S = { range: 30, seq: 0, timer: null, sum: null, trend: null, cat: null, pipe: null, inv: null, top: null, recent: [], shops: null, shopProd: null, shopProdSource: 'pos', lastSynced: null };
   var STATE_LBL = { draft: 'Quotation', sent: 'Quotation sent', sale: 'Sales order', done: 'Locked', cancel: 'Cancelled' };
   var STATE_CLS = { draft: 'review', sent: 'review', sale: 'active', done: 'active', cancel: 'blocked' };
   var ICON = {
@@ -50,6 +50,8 @@
       panel('', 'ovTop', 'Top customers', 'Selected period') +
       panel('', 'ovPipe', 'CRM pipeline', 'Expected revenue by stage') +
       panel('', 'ovInv', 'Invoices by payment status', 'Posted customer invoices', '<div class="olx-legend" id="ovInvL"></div>') +
+      panel('ov-span-2', 'ovShops', 'Sales by shop / location', 'Selected period') +
+      panel('', 'ovShopProd', 'Best-selling products', 'Selected period') +
       panel('ov-span-3', 'ovRec', 'Recent orders', 'Latest sales orders and quotations');
   }
   function body(id, html) { var el = $(id + 'B'); if (el) el.innerHTML = html; }
@@ -83,7 +85,7 @@
   function emptyState() {
     build();
     KPIS.forEach(function (k) { kpi(k[0], '–', 'Waiting for Odoo'); });
-    ['ovTrend', 'ovCat', 'ovTop', 'ovPipe', 'ovInv', 'ovRec'].forEach(function (id) { body(id, '<div class="olx-empty-s">Connect Odoo to load this card.</div>'); });
+    ['ovTrend', 'ovCat', 'ovTop', 'ovPipe', 'ovInv', 'ovShops', 'ovShopProd', 'ovRec'].forEach(function (id) { body(id, '<div class="olx-empty-s">Connect Odoo to load this card.</div>'); });
   }
 
   /* -- Loaders (each one handles its own errors) ------------------------------ */
@@ -152,6 +154,54 @@
     }).catch(function (e) { fail('ovRec', e); });
   }
 
+  /* -- Shop / Location loaders -------------------------------------------------- */
+  function jobShops(days) {
+    /* Try POS first (shop = pos.config), fall back to sale.order by warehouse */
+    var d = iso(days);
+    return C.readGroup('pos.order', {
+      domain: [['state', 'in', ['done', 'invoiced']], ['date_order', '>=', d]],
+      fields: ['amount_total:sum'], groupby: ['config_id']
+    }).then(function (g) {
+      if (!g.length) throw new Error('no POS data');
+      S.shopProdSource = 'pos';
+      S.shops = g.map(function (x) { return { label: label(x.config_id, 'Unknown shop'), value: Number(x.amount_total) || 0, count: x.__count || 0 }; })
+        .sort(function (a, b) { return b.value - a.value; }).slice(0, 8);
+      $('ovShopsT').textContent = 'Sales by POS shop';
+      $('ovShopsS').textContent = 'Revenue per point-of-sale · selected period';
+      drawShops();
+    }).catch(function () {
+      /* Fallback: sale.order grouped by warehouse (shop = warehouse) */
+      S.shopProdSource = 'sale';
+      return C.readGroup('sale.order', {
+        domain: CONF.concat([['date_order', '>=', d]]),
+        fields: ['amount_total:sum'], groupby: ['warehouse_id']
+      }).then(function (g) {
+        S.shops = g.map(function (x) { return { label: label(x.warehouse_id, 'Default'), value: Number(x.amount_total) || 0, count: x.__count || 0 }; })
+          .sort(function (a, b) { return b.value - a.value; }).slice(0, 8);
+        $('ovShopsT').textContent = 'Sales by warehouse / location';
+        $('ovShopsS').textContent = 'Revenue per warehouse · selected period';
+        drawShops();
+      }).catch(function (e) { fail('ovShops', e); });
+    });
+  }
+  function jobShopProd(days) {
+    /* Top products: POS order lines first, then sale.order lines */
+    var d = iso(days);
+    var posDom = [['order_id.state', 'in', ['done', 'invoiced']], ['order_id.date_order', '>=', d]];
+    var saleDom = [['order_id.state', 'in', ['sale', 'done']], ['order_id.date_order', '>=', d]];
+    var src = S.shopProdSource === 'pos' ? C.readGroup('pos.order.line', { domain: posDom, fields: ['price_subtotal:sum'], groupby: ['product_id'] })
+                                         : Promise.reject(new Error('use sale'));
+    return src.catch(function () {
+      return C.readGroup('sale.order.line', { domain: saleDom, fields: ['price_subtotal:sum'], groupby: ['product_id'] });
+    }).then(function (g) {
+      if (!g.length) { body('ovShopProd', '<div class="olx-empty-s">No product sales in this period.</div>'); return; }
+      S.shopProd = g.map(function (x) { return { label: label(x.product_id, 'Unknown'), value: Number(x.price_subtotal) || 0, count: x.__count || 0 }; })
+        .filter(function (r) { return r.value > 0; })
+        .sort(function (a, b) { return b.value - a.value; }).slice(0, 8);
+      drawShopProd();
+    }).catch(function (e) { fail('ovShopProd', e); });
+  }
+
   /* -- Drawing ------------------------------------------------------------------ */
   var COMPACT = function (v) { return F.money(v, true); };
   function drawTrend() {
@@ -204,7 +254,57 @@
           '<td><span class="status-pill ' + (STATE_CLS[o.state] || 'review') + '">' + esc(STATE_LBL[o.state] || o.state) + '</span></td></tr>';
       }).join('') + '</tbody></table></div>');
   }
-  function redraw() { drawTrend(); drawCat(); drawInv(); drawTop(); drawPipe(); }
+  function drawShops() {
+    var rows = S.shops || [];
+    if (!rows.length) { body('ovShops', '<div class="olx-empty-s">No shop/warehouse data in this period.</div>'); return; }
+    var th = F.theme(), topShop = rows[0];
+    /* Badge for top shop */
+    var badge = '<div class="ov-top-shop-badge"><span class="status-pill active">🏆 ' + esc(topShop.label) + '</span><span class="ov-shop-stat">' + F.money(topShop.value, topShop.value >= 1e5) + ' · ' + F.num(topShop.count) + ' orders</span></div>';
+    var cv = canvas('ovShops');
+    /* Put badge in the subtitle slot */
+    var sub = $('ovShopsS'); if (sub) sub.innerHTML = (sub.textContent || '') + ' &nbsp;' + badge;
+    var colors = rows.map(function (r, i) { return F.PALETTE[i % F.PALETTE.length]; });
+    F.chart(cv, {
+      type: 'bar',
+      data: { labels: rows.map(function (r) { return r.label; }), datasets: [{
+        data: rows.map(function (r) { return r.value; }),
+        backgroundColor: colors.map(function (c) { return c + 'cc'; }),
+        borderColor: colors,
+        borderWidth: 1.5,
+        borderRadius: 6,
+        maxBarThickness: 52
+      }] },
+      options: {
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) {
+          var r = rows[c.dataIndex];
+          return [' Revenue: ' + F.money(c.raw), ' Orders: ' + F.num(r.count)];
+        } } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: th.text, maxRotation: 30 } },
+          y: { grid: { color: th.grid }, ticks: { color: th.text, callback: COMPACT }, beginAtZero: true }
+        }
+      }
+    });
+  }
+  function drawShopProd() {
+    var rows = S.shopProd || [];
+    if (!rows.length) { body('ovShopProd', '<div class="olx-empty-s">No product data in this period.</div>'); return; }
+    var max = rows[0].value || 1;
+    body('ovShopProd', '<div class="ov-bars">' + rows.map(function (r, i) {
+      return '<div class="ov-bar-row">' +
+        '<span class="ov-rank">' + (i + 1) + '</span>' +
+        '<div class="ov-bar-main">' +
+          '<div class="ov-bar-top">' +
+            '<span title="' + esc(r.label) + '">' + esc(r.label) + '</span>' +
+            '<b>' + F.money(r.value, true) + '</b>' +
+          '</div>' +
+          '<div class="ov-bar-track"><i style="width:' + Math.max(4, Math.round(r.value / max * 100)) + '%;background:' + F.PALETTE[i % F.PALETTE.length] + '"></i></div>' +
+        '</div>' +
+      '</div>';
+    }).join('') + '</div>');
+  }
+
+  function redraw() { drawTrend(); drawCat(); drawInv(); drawTop(); drawPipe(); drawShops(); drawShopProd(); }
 
   /* -- Widget Builder compatibility (its “Odoo overview” source reads this) ------ */
   function publish() {
@@ -224,7 +324,7 @@
     if (!banner()) { emptyState(); return; }
     var seq = ++S.seq, days = S.range, t0 = Date.now();
     setStatus('connecting', 'Syncing…');
-    Promise.all([jobSales(days), jobTrend(), jobCategory(days), jobTop(days), jobPipeline(), jobInvoices(), jobCustomers(), jobRecent()]).then(function () {
+    Promise.all([jobSales(days), jobTrend(), jobCategory(days), jobTop(days), jobPipeline(), jobInvoices(), jobCustomers(), jobRecent(), jobShops(days), jobShopProd(days)]).then(function () {
       if (seq !== S.seq) return;
       S.lastSynced = new Date(); setStatus('live', 'Live · synced ' + S.lastSynced.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) + ' · ' + (Date.now() - t0) + ' ms'); publish();
     });
