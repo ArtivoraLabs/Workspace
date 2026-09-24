@@ -14,7 +14,8 @@
   `server/`, model/field deny-lists, strict domain validation, SSRF guard.
 - **Dashboard:** Settings → AI Assistant → new provider **DashView AI** (backend
   URL). LLM and Odoo keys stay on the server. Existing providers are unchanged.
-- 36 Python tests (no network/keys needed) + CI workflow. See `ai-service/README.md`.
+- **Accuracy layer:** verified KPI definitions (`odoo_metric`), server-side date ranges in the business timezone, server-side totals, stricter prompt rules, `auto` accuracy floor, audit log + feedback endpoint, and an eval runner (`python -m app.evals.run`) that checks answers against ground truth computed from Odoo.
+- 57 Python tests (no network/keys needed) + CI workflow. See `ai-service/README.md`.
 
 ## Live Odoo everywhere, task assignments, workspace security - 2026-09-22
 
