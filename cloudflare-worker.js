@@ -249,6 +249,17 @@ async function rpc(baseUrl, service, method, args, hop = 0) {
     return rpc(next.origin, service, method, args, hop + 1);
   }
 
+  /* 429 from Odoo = too many concurrent requests from this IP.
+     Retry once after the Retry-After header (or 2 s default).
+     The client-side concurrency throttle (odoo-client.js, MAX_CONCURRENT=3)
+     prevents most 429s, but one retry here catches any that still slip through. */
+  if (res.status === 429 && hop < 1) {
+    const ra = parseFloat(res.headers.get('retry-after') || '');
+    const delay = Number.isFinite(ra) && ra > 0 && ra < 30 ? ra * 1000 : 2000;
+    await new Promise(r => setTimeout(r, delay));
+    return rpc(baseUrl, service, method, args, hop + 1);
+  }
+
   if (!res.ok) {
     let snip = '';
     try { snip = (await res.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160); } catch {}
