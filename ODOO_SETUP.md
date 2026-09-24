@@ -87,3 +87,15 @@ server or your usual dev setup. Then:
   Admin/Owner roles can call the `/api/odoo/*` routes that carry Odoo
   credentials (client-side gating exists today; the comment in
   `odoo.routes.js` already flags this as a pre-production TODO).
+
+
+## The AI shows no Odoo data — checklist
+
+1. In **ai.html** type `status`. It prints the exact failing stage:
+   - `config` → a field is empty. With a workspace passcode the API key lives only in memory: unlock, or re-enter the key in Settings → Odoo and press Connect.
+   - `proxy` / `reach` → Worker URL wrong or not deployed, or `ALLOWED_ORIGINS` / `ALLOWED_ODOO_HOSTS` don't match.
+   - `login` → Database must be the subdomain (name.odoo.com → `name`), login email, fresh API key.
+   - table row "no access" → give the API user that app's rights in Odoo; "not installed" → ignore or install.
+2. **No AI key?** Settings → AI Assistant → pick Groq/Grok/Claude and paste the key. Without one only the offline engine runs, and it cannot read Odoo.
+3. Redeploy `cloudflare-worker.js` (Cloudflare → Worker → Edit code → paste → Deploy) to enable `diagnose` and `batch`; then hard-refresh (Ctrl+Shift+R) so the new service worker cache loads.
+4. Same check from a terminal: `node scripts/odoo-check.mjs` (see the header of that file).

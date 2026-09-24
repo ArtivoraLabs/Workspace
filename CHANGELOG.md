@@ -1,5 +1,16 @@
 # Changelog
 
+## "AI gives no data" fix: targeted Odoo agent, live status, Worker batch - 2026-09-24
+
+**Cause.** The browser AI pre-fetched ~34 fixed queries in parallel and pasted them into the prompt. Any failure (Odoo rate limit from 34 logins, locked passcode vault leaving the API key empty, module not installed, Worker down) was swallowed with `catch(() => '')`, so the model saw *no data* and answered "I have no access" to every question. With no AI key the offline engine answered instead — it cannot read Odoo at all.
+
+- **`js/ai-odoo-agent.js` (new).** Plan → fetch → answer: the model turns the question into up to 8 read-only queries (schema catalogue + date table), they run in **one** Worker call, field errors get one to two repair rounds, and the answer is written from the exact rows/server-side totals that came back (KPI cards, charts, insights, ranked best approach, "Inferred from Odoo data" for strategy). Ends with a "Live Odoo · N queries · Xs" trace line. If the planner fails it falls back to the old snapshot instead of returning nothing.
+- **Exact diagnosis instead of silence.** Before the model is called the connection is checked (config → Worker → Odoo reach → login → per-area access). A broken connection is reported with the precise stage and fix, and the model is not called. Type **status** (or "odoo connection kaisa hai") for the full table; a chip in the top bar shows `Odoo ● live · 9/11 areas` or `Odoo ⚠ login` at all times.
+- **Worker (`cloudflare-worker.js`) — redeploy needed.** New `diagnose` (stage-by-stage check, per-area record counts, installed apps, company currency) and `batch` (up to 10 queries, one login, 4 at a time, per-query errors, security models blocked, `fields` op for schema lookup). Older Workers keep working: the agent falls back to single calls.
+- **No provider key.** Data questions in offline mode now say plainly that no AI provider is set (and what to do) instead of returning unrelated canned answers. Odoo-not-connected is also told to the model so it can't invent figures.
+- **Security.** `ai.html` now HTML-escapes the whole AI reply (Odoo text such as web-form lead names is attacker-controlled) and only renders `http(s)` links. Planner output is sanitised: read-only ops, blocked models (`res.users`, `ir.*`, payment, mail…), secret-looking fields dropped, domain operators whitelisted, row/limit caps.
+- `sw.js` cache bumped to `dv-2026.09.5` so browsers pick up the new files. Tests: `agent.smoke.test.js` (20), `worker.smoke.test.js` (11), `render-blocks.smoke.test.js` (13).
+
 ## AI strategy briefings, richer visuals, connectivity self-check - 2026-09-24
 
 - **New AI tools (`ai-service`):** `odoo_health` (connected? version, latency, which business areas the API user can read, and whether a gap is "module not installed" or "no access rights") and `odoo_in_progress` (open quotations, uninvoiced orders, pipeline, RFQs, pending deliveries, overdue invoices, due bills, open/overdue tasks - count, value, oldest item).

@@ -346,6 +346,7 @@ textarea#chatInput::placeholder{color:var(--text3)}
         <span id="convTitleText">New conversation</span>
       </div>
       <div class="top-actions">
+        <button class="btn btn-outline btn-sm" id="odooChip" type="button" title="Check the Odoo connection" hidden>Odoo …</button>
         <button class="btn btn-outline btn-sm" id="aboutTopBtn">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
           About
@@ -487,6 +488,7 @@ textarea#chatInput::placeholder{color:var(--text3)}
 <script src="js/ai-config-store.js"></script>
 <script src="js/odoo-service.js"></script>
 <script src="js/ai-company-context.js"></script>
+<script src="js/ai-odoo-agent.js"></script>
 <script src="js/ai-engine.js"></script>
 <script>
 // ══════════ STATE ══════════
@@ -684,7 +686,7 @@ function renderChartBlock(raw) {
     var rounded = Math.round(v);
     return (Math.abs(v - rounded) < 0.005 ? rounded : v).toLocaleString();
   }
-  var titleHtml = title ? '<div class="ai-chart-title">' + esc(title) + '</div>' : '';
+  var titleHtml = title ? '<div class="ai-chart-title">' + (title) + '</div>' : '';
   var vals = rows.map(function (r) { return r.value; });
 
   if (kind === 'line') {
@@ -700,15 +702,15 @@ function renderChartBlock(raw) {
     var step = Math.ceil(n / 6);
     var xl = rows.map(function (r, i) {
       if (i % step && i !== n - 1) return '';
-      return '<text x="' + pts[i].x.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="' + (i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle')) + '">' + esc(r.label) + '</text>';
+      return '<text x="' + pts[i].x.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="' + (i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle')) + '">' + (r.label) + '</text>';
     }).join('');
     var iMax = vals.indexOf(mx), iLast = n - 1;
     var tags = [iMax].concat(iLast !== iMax ? [iLast] : []).map(function (i) {
-      return '<text class="ai-chart-pt" x="' + Math.min(Math.max(pts[i].x, 30), W - 30).toFixed(1) + '" y="' + (pts[i].y - 8).toFixed(1) + '" text-anchor="middle">' + esc(fmt(rows[i].value)) + '</text>';
+      return '<text class="ai-chart-pt" x="' + Math.min(Math.max(pts[i].x, 30), W - 30).toFixed(1) + '" y="' + (pts[i].y - 8).toFixed(1) + '" text-anchor="middle">' + (fmt(rows[i].value)) + '</text>';
     }).join('');
     var dots = pts.map(function (p) { return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3"/>'; }).join('');
     return '<div class="ai-chart">' + titleHtml +
-      '<svg class="ai-chart-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(title || 'Line chart') + '">' +
+      '<svg class="ai-chart-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + (title || 'Line chart') + '">' +
       '<line class="ai-chart-axis" x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '"/>' +
       '<path class="ai-chart-area" d="' + area + '"/><path class="ai-chart-line" d="' + d + '"/>' + dots + xl + tags + '</svg></div>';
   }
@@ -722,8 +724,8 @@ function renderChartBlock(raw) {
     }).join(', ');
     var legend = rows.map(function (r, i) {
       return '<div class="ai-donut-item"><span class="ai-donut-dot" style="background:' + PALETTE[i % PALETTE.length] + '"></span>' +
-        '<span class="ai-donut-label">' + esc(r.label) + '</span>' +
-        '<span class="ai-chart-value">' + esc(fmt(r.value)) + ' · ' + (Math.abs(r.value) / total * 100).toFixed(1) + '%</span></div>';
+        '<span class="ai-donut-label">' + (r.label) + '</span>' +
+        '<span class="ai-chart-value">' + (fmt(r.value)) + ' · ' + (Math.abs(r.value) / total * 100).toFixed(1) + '%</span></div>';
     }).join('');
     return '<div class="ai-chart">' + titleHtml + '<div class="ai-donut-wrap"><div class="ai-donut" style="background:conic-gradient(' + stops + ')"><span></span></div>' +
       '<div class="ai-donut-legend">' + legend + '</div></div></div>';
@@ -733,9 +735,9 @@ function renderChartBlock(raw) {
   var barsHtml = rows.map(function (r) {
     var pct = Math.max((Math.abs(r.value) / max) * 100, 3);
     return '<div class="ai-chart-row">' +
-      '<span class="ai-chart-label">' + esc(r.label) + '</span>' +
+      '<span class="ai-chart-label">' + (r.label) + '</span>' +
       '<span class="ai-chart-bar-track"><span class="ai-chart-bar-fill" style="width:' + pct.toFixed(1) + '%"></span></span>' +
-      '<span class="ai-chart-value">' + esc(fmt(r.value)) + '</span></div>';
+      '<span class="ai-chart-value">' + (fmt(r.value)) + '</span></div>';
   }).join('');
   return '<div class="ai-chart">' + titleHtml + barsHtml + '</div>';
 }
@@ -749,14 +751,16 @@ function renderKpiBlock(raw) {
     if (!parts[0]) return null;
     var delta = parts[1] || '';
     var cls = /^[+▲↑]/.test(delta) ? ' up' : (/^[-−▼↓]/.test(delta) ? ' down' : '');
-    return '<div class="ai-kpi"><div class="ai-kpi-label">' + esc(l.slice(0, i).trim()) + '</div>' +
-      '<div class="ai-kpi-value">' + esc(parts[0]) + '</div>' +
-      (delta ? '<div class="ai-kpi-delta' + cls + '">' + esc(delta) + '</div>' : '') + '</div>';
+    return '<div class="ai-kpi"><div class="ai-kpi-label">' + (l.slice(0, i).trim()) + '</div>' +
+      '<div class="ai-kpi-value">' + (parts[0]) + '</div>' +
+      (delta ? '<div class="ai-kpi-delta' + cls + '">' + (delta) + '</div>' : '') + '</div>';
   }).filter(Boolean);
   return cards.length ? '<div class="ai-kpi-grid">' + cards.join('') + '</div>' : null;
 }
 
 function renderMarkdown(text) {
+  // Model output can echo Odoo text typed by outsiders (web-form leads, partner names) — escape it all first.
+  text = esc(String(text == null ? '' : text));
   // GFM tables — run first so pipe rows aren't mangled by the paragraph/
   // list passes below. Matches a header row, a |---|---| separator row,
   // then any number of body rows.
@@ -786,7 +790,7 @@ function renderMarkdown(text) {
   return text
     // Code blocks
     .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
-      `<pre><code>${esc(code.trim())}</code></pre>`)
+      `<pre><code>${code.trim()}</code></pre>`)
     // Inline code
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     // Headers
@@ -798,7 +802,7 @@ function renderMarkdown(text) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     // Blockquote
-    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    .replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
     // HR
     .replace(/^---$/gm, '<hr/>')
     // Unordered list
@@ -807,7 +811,7 @@ function renderMarkdown(text) {
     // Ordered list
     .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
     // Links
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
     // Paragraphs
     .replace(/\n\n/g, '</p><p>')
     .replace(/^(?!<[h|u|o|b|p|l|t])(.+)/, '<p>$1')
@@ -923,20 +927,45 @@ function sendMessage(content, isRegen=false) {
 
   showTyping();
 
+  // "status" / "odoo connection kaisa hai" → answered straight from a live check (works with or without an AI key).
+  if (window.DVOdooAgent && window.DVOdooAgent.looksLikeStatusQuestion(content)) {
+    window.DVOdooAgent.statusReport(true).then(function (text) {
+      hideTyping();
+      appendMessage('ai', text, true, 'Odoo status');
+      c.messages.push({ role: 'ai', content: text, tag: 'Odoo status' });
+      c.updatedAt = Date.now(); saveConvos(); renderConvoList();
+      isStreaming = false; qs('#sendBtn').disabled = !qs('#chatInput').value.trim();
+      refreshOdooChip(false);
+    });
+    return;
+  }
+
   if (window.DVAIConfig && window.DVAIConfig.isConfigured()) {
     // ── Real API mode: call the configured provider (Grok or Claude) directly
     //    from the browser, with company context (Odoo + dashboard) folded
     //    into the system prompt when that's turned on in Settings. ──
     var history = (c.messages || []).map(function (m) { return { role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }; });
     var cfg = window.DVAIConfig.get();
-    var contextPromise = (cfg.includeCompanyContext !== false && cfg.provider !== 'dashview' && window.DVAICompanyContext)
-      ? window.DVAICompanyContext.build().catch(function () { return ''; })
-      : Promise.resolve('');
+    var odooLive = !!(window.DVOdoo && window.DVOdoo.isConnected());
+    var useAgent = odooLive && cfg.includeCompanyContext !== false && cfg.provider !== 'dashview' && window.DVOdooAgent;
+    var answerPromise;
+    if (useAgent) {
+      // Targeted mode: plan → fetch exactly what the question needs from Odoo → answer from those rows.
+      answerPromise = window.DVOdooAgent.ask(content, history, { systemPrompt: cfg.systemPrompt });
+    } else {
+      var contextPromise = (cfg.includeCompanyContext !== false && cfg.provider !== 'dashview' && window.DVAICompanyContext)
+        ? window.DVAICompanyContext.build().catch(function () { return ''; })
+        : Promise.resolve('');
+      answerPromise = contextPromise.then(function (companyContext) {
+        var notLive = (!odooLive && cfg.provider !== 'dashview')
+          ? 'Odoo is NOT connected in this workspace. If the user asks for company data (sales, invoices, stock, customers…), say plainly that Odoo is not connected and that they must open Settings → Odoo (Worker URL, Odoo URL, database, username, API key) and press Connect. Never invent figures.'
+          : '';
+        var sys = [cfg.systemPrompt, companyContext, notLive].filter(Boolean).join('\n\n');
+        return window.DVAIConfig.callAI(history, sys);
+      });
+    }
 
-    contextPromise.then(function (companyContext) {
-      var sys = [cfg.systemPrompt, companyContext].filter(Boolean).join('\n\n');
-      return window.DVAIConfig.callAI(history, sys);
-    }).then(function (aiContent) {
+    answerPromise.then(function (aiContent) {
       hideTyping();
       appendMessage('ai', aiContent, true, null);
       c.messages.push({ role: 'ai', content: aiContent, tag: null });
@@ -947,7 +976,7 @@ function sendMessage(content, isRegen=false) {
       qs('#sendBtn').disabled = !qs('#chatInput').value.trim();
     }).catch(function (err) {
       hideTyping();
-      var msg = 'Could not reach the AI provider (' + err.message + '). Check your key and provider in Settings → AI Assistant, or switch back to the offline engine.';
+      var msg = 'Could not get an answer (' + err.message + '). If this mentions the provider or a rate limit, check your key/plan in Settings → AI Assistant; if it mentions Odoo or the Worker, type **status** to see exactly what is broken.';
       appendMessage('ai', msg, true, null);
       c.messages.push({ role: 'ai', content: msg, tag: null });
       saveConvos(); renderConvoList();
@@ -962,12 +991,22 @@ function sendMessage(content, isRegen=false) {
   // zero delay reads as jarring/robotic, so we pace it slightly, the same
   // way a human would take a beat before typing a reply.
   const delay = 380 + Math.random() * 480;
+  const DATA_Q = /\b(odoo|sales?|revenue|invoices?|orders?|customers?|clients?|vendors?|suppliers?|purchases?|stock|inventory|leads?|pipeline|employees?|expenses?|tasks?|receivables?|payables?|profit|bikri|udhaar|khareed|maal)\b/i;
+  // Only when Odoo is actually in play — the offline engine still answers questions about DashView itself.
+  const offlineNeedsProvider = !!((window.DVOdoo && window.DVOdoo.isConnected()) || /odoo/i.test(content)) && DATA_Q.test(content);
   setTimeout(() => {
     let aiContent, aiTag = null;
     try {
+      if (offlineNeedsProvider) {
+        aiContent = '**Abhi koi AI provider set nahi hai**, isliye main sirf offline engine par chal raha hoon — ye Odoo ka data nahi padh sakta, isi liye aapko data nahi mil raha.\n\n' +
+          '**Fix (1 minute):** Settings → AI Assistant → provider (Groq / Grok / Claude) chunen, API key paste karein aur Save karein. ' +
+          (window.DVOdoo && window.DVOdoo.isConnected() ? 'Odoo pehle se connected hai — key lagate hi aap ke sawalon ke jawab live data se aayenge. Connection check karne ke liye **status** likhein.' : 'Phir Settings → Odoo mein Odoo connect karein.');
+        aiTag = 'Setup needed';
+      } else {
       const result = DashViewAI.respond(content, { seed: activeId });
       aiContent = result.content;
       aiTag = result.tag || null;
+      }
     } catch (err) {
       aiContent = "Something went wrong generating a reply locally — try rephrasing, or reload the page if this keeps happening.";
     }
@@ -1084,6 +1123,37 @@ if (!Object.keys(conversations).length) {
     }
   }, 900);
 }
+</script>
+<script>
+// ══════════ ODOO STATUS CHIP ══════════
+// Always-visible answer to "is my data actually reaching the assistant?" — click for the full per-area report.
+function refreshOdooChip(force) {
+  var chip = document.getElementById('odooChip');
+  if (!chip || !window.DVOdooAgent || !window.DVOdoo) return;
+  var cfg = window.DVOdoo.getConfig() || {};
+  if (!cfg.proxyUrl && !cfg.url) { chip.hidden = false; chip.textContent = 'Odoo ⚠ not set up'; chip.title = 'Open Settings → Odoo'; return; }
+  chip.hidden = false; chip.textContent = 'Odoo …';
+  window.DVOdooAgent.status(!!force).then(function (s) {
+    if (!s.ok) { chip.textContent = 'Odoo ⚠ ' + (s.stage || 'error'); chip.title = (s.error || '') + (s.fix ? ' — ' + s.fix : ''); return; }
+    var names = Object.keys(s.areas || {});
+    var good = names.filter(function (n) { return s.areas[n].status === 'ok'; }).length;
+    chip.textContent = 'Odoo ● live' + (names.length ? ' · ' + good + '/' + names.length + ' areas' : '');
+    chip.title = 'Connected' + (s.latencyMs ? ' · ' + s.latencyMs + ' ms' : '') + '. Click for the full report.';
+  });
+}
+(function () {
+  var chip = document.getElementById('odooChip');
+  if (chip) chip.addEventListener('click', function () {
+    if (!window.DVOdooAgent) return;
+    window.DVOdooAgent.statusReport(true).then(function (text) {
+      appendMessage('ai', text, true, 'Odoo status');
+      refreshOdooChip(false);
+    });
+  });
+  window.addEventListener('load', function () { setTimeout(function () { refreshOdooChip(false); }, 400); });
+  document.addEventListener('dv:odoo-config-saved', function () { refreshOdooChip(true); });
+  setInterval(function () { refreshOdooChip(false); }, 5 * 60 * 1000);
+})();
 </script>
 </body>
 </html>

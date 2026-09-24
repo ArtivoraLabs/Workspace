@@ -99,6 +99,8 @@ export default {
       if (action === 'fields')     return reply(await odooFields(odooBase, db, username, apiKey, body.model));
       if (action === 'records')    return reply(await odooRecords(odooBase, db, username, apiKey, body));
       if (action === 'read-group') return reply(await odooReadGroup(odooBase, db, username, apiKey, body));
+      if (action === 'diagnose')   return reply(await odooDiagnose(odooBase, db, username, apiKey));
+      if (action === 'batch')      return reply(await odooBatch(odooBase, db, username, apiKey, body));
       return reply({ ok: false, error: 'Unknown endpoint: ' + action }, 404);
     } catch (err) {
       return reply({ ok: false, error: err.message || 'Odoo call failed' }, 502);
@@ -364,4 +366,111 @@ async function odooReadGroup(base, db, user, key, body) {
   const result = await exKw(base, db, key, uid, model, 'read_group',
     [domain || [], fields && fields.length ? fields : ['__count'], groupby || []], kw);
   return { ok: true, model, groups: result };
+}
+
+
+/* ─── Diagnose + batch (used by the AI Assistant) ─────────────────────────────
+   diagnose : one call that says exactly where a connection breaks
+              (reach → login → per-area access) and what the company/currency is.
+   batch    : up to 10 read-only queries in ONE request — logs in once instead of
+              once per query, which is what made the old "fetch 34 things in
+              parallel" approach hit Odoo rate limits and silently return nothing. */
+const AREAS = [
+  ['Sales', 'sale.order'], ['CRM', 'crm.lead'], ['Invoicing / Accounting', 'account.move'],
+  ['Purchase', 'purchase.order'], ['Inventory transfers', 'stock.picking'], ['Stock levels', 'stock.quant'],
+  ['Contacts', 'res.partner'], ['Products', 'product.template'], ['HR', 'hr.employee'],
+  ['Projects / Tasks', 'project.task'], ['Expenses', 'hr.expense'],
+];
+const DENY_MODEL = /^(res\.users(\.|$)|ir\.(?!model$)|auth_|payment\.|mail\.|bus\.|sms\.|fetchmail)/;
+
+async function pool(items, n, fn) {
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (i < items.length) { const it = items[i++]; await fn(it); }
+  }));
+}
+const firstLine = (e) => String((e && e.message) || e || '').split('\n')[0].slice(0, 160);
+
+async function odooDiagnose(base, db, user, key) {
+  const t0 = Date.now();
+  let version;
+  try { version = await rpc(base, 'common', 'version', []); }
+  catch (e) { return { ok: false, stage: 'reach', error: firstLine(e) }; }
+  let uid;
+  try { uid = await authenticate(base, db, user, key); }
+  catch (e) { return { ok: false, stage: 'login', version: version && version.server_version, error: firstLine(e) }; }
+
+  const areas = {};
+  await pool(AREAS, 4, async ([label, model]) => {
+    const s = Date.now();
+    try {
+      areas[label] = { model, status: 'ok', records: await exKw(base, db, key, uid, model, 'search_count', [[]]), ms: Date.now() - s };
+    } catch (e) {
+      const m = firstLine(e);
+      areas[label] = { model, status: /access|not allowed|forbidden|permission/i.test(m) ? 'no_access' : 'not_installed_or_error', detail: m };
+    }
+  });
+  const out = { ok: true, stage: 'access', uid, version: version && version.server_version, areas };
+  try {
+    const c = await exKw(base, db, key, uid, 'res.company', 'search_read', [[]], { fields: ['name', 'currency_id'], limit: 1 });
+    if (c[0]) { out.company = c[0].name; out.currency = c[0].currency_id && c[0].currency_id[1]; }
+  } catch { /* optional */ }
+  try {
+    const apps = await exKw(base, db, key, uid, 'ir.module.module', 'search_read',
+      [[['state', '=', 'installed'], ['application', '=', true]]], { fields: ['name', 'shortdesc'], limit: 80 });
+    out.apps = apps.map((a) => a.shortdesc || a.name);
+  } catch { /* optional */ }
+  out.latencyMs = Date.now() - t0;
+  return out;
+}
+
+async function odooBatch(base, db, user, key, body) {
+  const qs = body.queries;
+  if (!Array.isArray(qs) || !qs.length) throw new Error('queries must be a non-empty array');
+  if (qs.length > 10) throw new Error('At most 10 queries per batch');
+  const t0 = Date.now();
+  const uid = await authenticate(base, db, user, key);
+  const results = {};
+
+  await pool(qs.map((q, i) => [q, i]), 4, async ([q, i]) => {
+    const id = String((q && q.id) || 'q' + (i + 1)).slice(0, 40);
+    try {
+      if (!q || typeof q !== 'object') throw new Error('query must be an object');
+      const bad = checkArgs(q);
+      if (bad) throw new Error(bad);
+      if (!q.model) throw new Error('model is required');
+      if (DENY_MODEL.test(q.model)) throw new Error('Model "' + q.model + '" is not available to the assistant');
+      const domain = q.domain || [];
+      if (q.op === 'count') {
+        results[id] = { ok: true, op: 'count', model: q.model, count: await exKw(base, db, key, uid, q.model, 'search_count', [domain]) };
+      } else if (q.op === 'records') {
+        const kw = { fields: q.fields && q.fields.length ? q.fields : undefined, limit: Math.min(q.limit || 25, 200), order: q.order || undefined };
+        const [rows, total] = await Promise.all([
+          exKw(base, db, key, uid, q.model, 'search_read', [domain], kw),
+          exKw(base, db, key, uid, q.model, 'search_count', [domain]),
+        ]);
+        results[id] = { ok: true, op: 'records', model: q.model, rows, total };
+      } else if (q.op === 'read-group') {
+        const kw = { lazy: false };
+        if (q.orderby) kw.orderby = q.orderby;
+        if (q.limit) kw.limit = q.limit;
+        const groups = await exKw(base, db, key, uid, q.model, 'read_group',
+          [domain, q.fields && q.fields.length ? q.fields : ['__count'], q.groupby || []], kw);
+        results[id] = { ok: true, op: 'read-group', model: q.model, groups };
+      } else if (q.op === 'fields') {
+        const f = await exKw(base, db, key, uid, q.model, 'fields_get', [], { attributes: ['string', 'type', 'relation', 'selection', 'store'] });
+        const out = {};
+        for (const [name, m] of Object.entries(f)) {
+          if (m.store === false) continue;
+          out[name] = [m.type, m.string, m.relation || '', m.type === 'selection' && Array.isArray(m.selection) ? m.selection.map((x) => x[0]).join('/') : ''];
+        }
+        results[id] = { ok: true, op: 'fields', model: q.model, fields: out };
+      } else {
+        throw new Error('op must be records, read-group, count or fields');
+      }
+    } catch (e) {
+      results[id] = { ok: false, error: firstLine(e) };
+    }
+  });
+  return { ok: true, results, latencyMs: Date.now() - t0 };
 }

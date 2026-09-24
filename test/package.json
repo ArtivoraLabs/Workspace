@@ -4,7 +4,7 @@
   "private": true,
   "description": "Unit tests for js/studio-core.js, plus headless DOM smoke tests for the Data Studio, AI Assistant and People pages.",
   "scripts": {
-    "test": "npm run test:core && npm run test:studio && npm run test:report && npm run test:health && npm run test:roles && npm run test:assistant && npm run test:people && npm run test:render",
+    "test": "npm run test:core && npm run test:studio && npm run test:report && npm run test:health && npm run test:roles && npm run test:assistant && npm run test:people && npm run test:render && npm run test:agent && npm run test:worker",
     "test:core": "node studio-core.test.js",
     "test:studio": "node studio-ui.smoke.test.js",
     "test:report": "node report-engine.smoke.test.js",
@@ -12,7 +12,9 @@
     "test:roles": "node role-presets.smoke.test.js",
     "test:assistant": "node assistant.smoke.test.js",
     "test:people": "node people.smoke.test.js",
-    "test:render": "node render-blocks.smoke.test.js"
+    "test:render": "node render-blocks.smoke.test.js",
+    "test:agent": "node agent.smoke.test.js",
+    "test:worker": "node worker.smoke.test.js"
   },
   "devDependencies": {
     "jsdom": "^30.0.1"
