@@ -24,11 +24,19 @@ def fake_odoo_transport(calls: list | None = None) -> httpx.MockTransport:
             result = {"server_version": "18.0"}
         else:
             _db, _uid, _key, model, m, a, kw = args
-            if model == "sale.order" and m == "read_group":
-                result = [
-                    {"partner_id": [1, "Acme"], "amount_total": 5000.0, "__count": 4},
-                    {"partner_id": [2, "Globex"], "amount_total": 3000.0, "__count": 2},
-                ]
+            if m == "read_group":
+                fields, groupby = a[1], a[2]
+                aggs = {f.split(":")[0]: 8000.0 for f in fields if f != "__count"}
+                if not groupby:
+                    result = [{**aggs, "__count": 6}]
+                else:
+                    g = groupby[0]
+                    result = [
+                        {g: [1, "Acme"], **{k: 5000.0 for k in aggs}, "__count": 4},
+                        {g: [2, "Globex"], **{k: 3000.0 for k in aggs}, "__count": 2},
+                    ]
+            elif model == "res.company":
+                result = [{"id": 1, "currency_id": [3, "PKR"]}]
             elif m == "search_count":
                 result = 42
             elif m == "fields_get":

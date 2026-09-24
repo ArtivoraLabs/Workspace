@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 
 from .client import OdooClient, OdooError
+from .dates import PERIODS
 from .guard import Guard, GuardError
+from .metrics import DEFAULT_METRICS, Metric, run_metric
 
 MAX_RESULT_CHARS = 24_000
 MAX_CELL_CHARS = 300
@@ -22,6 +24,8 @@ SKIP_FIELD_TYPES = {"binary", "html", "image", "one2many", "many2many", "seriali
 class ToolContext:
     client: OdooClient
     guard: Guard
+    metrics: dict[str, Metric] = field(default_factory=lambda: dict(DEFAULT_METRICS))
+    tz: str = "UTC"
 
 
 @dataclass
@@ -165,6 +169,17 @@ async def h_get_record(ctx: ToolContext, a: dict) -> dict:
     return {"model": model, "found": True, "record": _compact_rows([row])[0]}
 
 
+async def h_metric(ctx: ToolContext, a: dict) -> dict:
+    return await run_metric(ctx, a.get("metric"), a.get("period"), a.get("start"), a.get("end"),
+                            a.get("groupby"), a.get("limit") or 10)
+
+
+async def h_installed_apps(ctx: ToolContext, a: dict) -> dict:
+    rows = await ctx.client.search_read("ir.module.module", [["state", "=", "installed"], ["application", "=", True]],
+                                        ["name", "shortdesc"], 100, "shortdesc")
+    return {"apps": [{"module": r["name"], "label": r["shortdesc"]} for r in rows]}
+
+
 def _dt(d: datetime) -> str:
     return d.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -212,6 +227,21 @@ _DOMAIN_HELP = ("Odoo domain: list of [field, operator, value] terms, optionally
                 "Example: [[\"state\",\"=\",\"sale\"],[\"date_order\",\">=\",\"2026-09-01\"]]. Dates are 'YYYY-MM-DD'.")
 
 TOOLS: list[ToolSpec] = [
+    ToolSpec("odoo_metric",
+             "PREFERRED for any KPI in the verified-metrics list (sales, invoiced revenue, receivables, payables, purchases, "
+             "pipeline, stock, headcount...). Computes it with a fixed business definition and server-side date ranges, and "
+             "returns total, the definition used, the exact period and (optionally) a top-N breakdown. Do not re-derive these with "
+             "odoo_search_read/odoo_aggregate.",
+             {"type": "object", "properties": {
+                 "metric": {"type": "string", "enum": sorted(DEFAULT_METRICS)},
+                 "period": {"type": "string", "enum": list(PERIODS), "description": "Default this_month. Ignored for point-in-time metrics."},
+                 "start": {"type": "string", "description": "Custom range start YYYY-MM-DD (inclusive); use with end."},
+                 "end": {"type": "string", "description": "Custom range end YYYY-MM-DD (inclusive)."},
+                 "groupby": {"type": "string", "description": "A groupable field of the metric (e.g. partner_id, product_id) or day|week|month|quarter|year for a trend."},
+                 "limit": {"type": "integer", "default": 10}},
+              "required": ["metric"]}, h_metric),
+    ToolSpec("odoo_installed_apps", "List the installed Odoo apps, so you know which modules exist before querying them.",
+             {"type": "object", "properties": {}}, h_installed_apps),
     ToolSpec("odoo_business_snapshot",
              "Headline KPIs across Sales, Purchasing, Invoicing (receivables/payables), CRM, customers and products for the last N days. "
              "Good first call for broad questions like 'how is the business doing'. Modules that aren't installed are reported as unavailable.",

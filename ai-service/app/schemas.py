@@ -24,3 +24,10 @@ class ChatRequest(BaseModel):
     tier: Literal["auto", "fast", "smart", "deep"] = "auto"
     stream: bool = True
     odoo: OdooCreds | None = None  # only honoured if ODOO_ALLOW_CLIENT_CREDENTIALS=true
+
+
+class Feedback(BaseModel):
+    request_id: str = Field(max_length=40)
+    rating: Literal["up", "down"]
+    comment: str = Field(default="", max_length=1000)
+    expected: str = Field(default="", max_length=1000)  # what the right answer should have been

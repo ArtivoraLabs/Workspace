@@ -80,9 +80,27 @@ def test_routing():
     avail = {"anthropic", "openai"}
     pri = ["anthropic", "openai"]
     assert pick_tier("how many orders?", "auto") == "fast"
+    assert pick_tier("how many orders?", "auto", "smart") == "smart"   # accuracy floor
+    assert pick_tier("hi", "fast", "smart") == "fast"                 # explicit choice wins
     assert pick_tier("compare revenue by month and explain why", "auto") == "smart"
     chain = plan(DEFAULT_CATALOG, avail, pri, "how many orders?")
     assert chain[0].id == "claude-haiku-4-5-20251001" and chain[1].provider == "openai"
     assert plan(DEFAULT_CATALOG, avail, pri, "x", "deep")[0].id == "claude-opus-5-5"
     assert plan(DEFAULT_CATALOG, avail, pri, "x", "auto", "gpt-5.6-sol")[0].id == "gpt-5.6-sol"
     assert plan(DEFAULT_CATALOG, set(), pri, "x") == []
+
+
+def test_audit_and_feedback(make_app, tmp_path):
+    log = tmp_path / "audit.jsonl"
+    prov = ScriptedProvider("anthropic", [tool_call_result("odoo_metric", {"metric": "sales_total", "period": "last_month"}),
+                                          LLMResult(text="Total 8,000")])
+    with TestClient(make_app({"anthropic": prov}, audit_log_file=str(log))) as c:
+        j = c.post("/v1/chat", json=ASK, headers=H()).json()
+        assert j["tools"] == ["odoo_metric"]
+        fb = c.post("/v1/feedback", json={"request_id": j["request_id"], "rating": "down", "expected": "9,100"}, headers=H())
+        assert fb.status_code == 200
+        assert any(m["key"] == "sales_total" for m in c.get("/v1/metrics", headers=H()).json()["metrics"])
+    import json
+    recs = [json.loads(l) for l in log.read_text().splitlines()]
+    assert recs[0]["kind"] == "chat" and recs[0]["tools"][0]["args"]["metric"] == "sales_total"
+    assert recs[1]["kind"] == "feedback" and recs[1]["request_id"] == j["request_id"]

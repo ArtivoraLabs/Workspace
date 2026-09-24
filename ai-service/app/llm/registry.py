@@ -64,15 +64,17 @@ def build_providers(settings: Settings) -> dict:
     return providers
 
 
-def pick_tier(question: str, requested: str) -> str:
+def pick_tier(question: str, requested: str, min_tier: str = "fast") -> str:
     if requested in TIER_ORDER:
         return requested
     q = question or ""
-    return "smart" if (len(q) > 350 or _ANALYTIC.search(q)) else "fast"
+    picked = "smart" if (len(q) > 350 or _ANALYTIC.search(q)) else "fast"
+    floor = min_tier if min_tier in TIER_ORDER else "fast"
+    return max(picked, floor, key=TIER_ORDER.index)
 
 
 def plan(catalog: list[ModelSpec], available: set[str], priority: list[str],
-         question: str, tier: str = "auto", model: str | None = None) -> list[ModelSpec]:
+         question: str, tier: str = "auto", model: str | None = None, min_tier: str = "fast") -> list[ModelSpec]:
     """Ordered fail-over chain of usable models for this request."""
     usable = [m for m in catalog if m.provider in available]
     rank = {p: i for i, p in enumerate(priority)}
@@ -80,7 +82,7 @@ def plan(catalog: list[ModelSpec], available: set[str], priority: list[str],
     chain: list[ModelSpec] = []
     if model:
         chain += [m for m in usable if m.id == model]
-    want = pick_tier(question, tier)
+    want = pick_tier(question, tier, min_tier)
     # same tier first, then upward tiers (better answers), then cheaper ones
     order = [want] + [t for t in TIER_ORDER if TIER_ORDER.index(t) > TIER_ORDER.index(want)] + \
             [t for t in reversed(TIER_ORDER) if TIER_ORDER.index(t) < TIER_ORDER.index(want)]

@@ -11,14 +11,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from contextlib import asynccontextmanager
 
+import time
+
 from .agent import stream_agent
+from .audit import Audit
 from .cache import build_cache
 from .config import Settings, get_settings
 from .llm.registry import build_providers, load_catalog, plan
 from .odoo.client import OdooClient, OdooConfig, OdooError, assert_safe_client_url
 from .odoo.guard import Guard
+from .odoo.metrics import load_metrics
 from .odoo.tools import ToolContext
-from .schemas import ChatRequest
+from .schemas import ChatRequest, Feedback
 from .security import Principal, authenticate, rate_limit
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -40,6 +44,8 @@ def create_app(settings: Settings | None = None, *, providers: dict | None = Non
         )
         app.state.providers = providers if providers is not None else build_providers(settings)
         app.state.catalog = load_catalog(settings)
+        app.state.metrics = load_metrics(settings.metrics_file)
+        app.state.audit = Audit(settings.audit_log_file)
         if settings.env == "prod" and (settings.cors_list == ["*"] or not settings.jwt_secret):
             log.warning("PROD with open CORS or empty JWT_SECRET - fix before exposing this service.")
         yield
@@ -76,6 +82,16 @@ def create_app(settings: Settings | None = None, *, providers: dict | None = Non
         return {"models": [m.__dict__ for m in request.app.state.catalog if m.provider in avail],
                 "providers": sorted(avail)}
 
+    @app.get("/v1/metrics")
+    async def metrics_list(request: Request, principal: Principal = Depends(authenticate)):
+        return {"metrics": [{"key": m.key, "title": m.title, "definition": m.definition, "groupable": list(m.groupable)}
+                            for m in request.app.state.metrics.values()], "timezone": request.app.state.settings.timezone}
+
+    @app.post("/v1/feedback")
+    async def feedback(fb: Feedback, request: Request, principal: Principal = Depends(authenticate)):
+        await request.app.state.audit.record({"kind": "feedback", "user": principal.id, **fb.model_dump()})
+        return {"ok": True}
+
     @app.post("/v1/odoo/test")
     async def odoo_test(request: Request, principal: Principal = Depends(authenticate)):
         client = await resolve_client(request, None)
@@ -89,14 +105,37 @@ def create_app(settings: Settings | None = None, *, providers: dict | None = Non
         await rate_limit(request, principal)
         st = request.app.state
         client = await resolve_client(request, req.odoo)
-        ctx = ToolContext(client=client, guard=Guard(st.settings))
+        ctx = ToolContext(client=client, guard=Guard(st.settings), metrics=st.metrics, tz=st.settings.timezone)
         history = [m.model_dump() for m in req.messages]
         if history[-1]["role"] != "user":
             raise HTTPException(400, "The last message must be from the user.")
-        chain = plan(st.catalog, set(st.providers), st.settings.priority, history[-1]["content"], req.tier, req.model)
-        rid = uuid.uuid4().hex[:8]
+        chain = plan(st.catalog, set(st.providers), st.settings.priority, history[-1]["content"], req.tier, req.model,
+                     st.settings.auto_min_tier)
+        rid = uuid.uuid4().hex[:12]
         log.info("chat rid=%s user=%s chain=%s", rid, principal.id, [m.id for m in chain][:3])
-        events = stream_agent(history=history, ctx=ctx, chain=chain, providers=st.providers, settings=st.settings)
+        raw_events = stream_agent(history=history, ctx=ctx, chain=chain, providers=st.providers, settings=st.settings)
+
+        async def events_gen():
+            """Pass events through while collecting an audit record."""
+            t0, tools, answer, err, model = time.monotonic(), {}, None, None, None
+            try:
+                async for ev in raw_events:
+                    if ev["type"] == "tool_start":
+                        tools[ev["id"]] = {"name": ev["name"], "args": ev["args"]}
+                    elif ev["type"] == "tool_result" and ev["id"] in tools:
+                        tools[ev["id"]]["result"] = ev["summary"]
+                    elif ev["type"] == "final":
+                        answer, model = ev["text"], ev["model"]
+                        ev = {**ev, "request_id": rid}
+                    elif ev["type"] == "error":
+                        err = ev["message"]
+                    yield ev
+            finally:
+                await st.audit.record({"kind": "chat", "request_id": rid, "user": principal.id, "question": history[-1]["content"],
+                                       "model": model, "tools": list(tools.values()), "answer": answer, "error": err,
+                                       "latency_s": round(time.monotonic() - t0, 2)})
+
+        events = events_gen()
 
         if not req.stream:
             tools_used, final, error = [], None, None
@@ -110,7 +149,7 @@ def create_app(settings: Settings | None = None, *, providers: dict | None = Non
             if final is None:
                 return JSONResponse({"ok": False, "error": error or "No answer produced."}, status_code=502)
             return {"ok": True, "text": final["text"], "model": final["model"], "provider": final["provider"],
-                    "usage": final["usage"], "tools": tools_used}
+                    "usage": final["usage"], "tools": tools_used, "request_id": final["request_id"]}
 
         async def sse():
             try:

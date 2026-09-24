@@ -19,11 +19,11 @@ Roman Urdu / Urdu / English questions are answered in the language they were ask
 | Area | Detail |
 |---|---|
 | Models | Anthropic (native) + one adapter for every OpenAI-compatible API (OpenAI, xAI Grok, Groq, Gemini). Tiers `fast` / `smart` / `deep`; `auto` picks by question complexity; automatic **fail-over** to the next configured model. Catalog is editable (`MODEL_CATALOG_FILE`). |
-| Odoo tools | `odoo_business_snapshot`, `odoo_list_models`, `odoo_get_fields`, `odoo_search_read`, `odoo_count`, `odoo_aggregate`, `odoo_get_record` |
+| Odoo tools | `odoo_metric` (verified KPIs), `odoo_installed_apps`, `odoo_business_snapshot`, `odoo_list_models`, `odoo_get_fields`, `odoo_search_read`, `odoo_count`, `odoo_aggregate`, `odoo_get_record` |
 | Safety | Read-only by construction (only `search_read/search_count/read/read_group/fields_get/name_search` can be sent). Security/infra models (`res.users`, `ir.*`, payment, mail…) blocked; secret-looking fields hidden; domains/groupby/order strictly validated; row caps; prompt-injection rule in the system prompt. Optional hard allow-list `ODOO_ALLOWED_MODELS`. |
 | Scale | Async end-to-end, shared HTTP pool, per-host concurrency cap, result + schema + uid caching, optional Redis (shared across replicas), rate limit per user, stateless → add replicas freely. |
 | Auth | Accepts the same JWT the Node `server/` issues (`JWT_SECRET`, HS256; role must be in `ALLOWED_ROLES`) or `X-API-Key`. |
-| API | `POST /v1/chat` (SSE stream by default, `"stream": false` for JSON), `GET /v1/models`, `POST /v1/odoo/test`, `GET /health` |
+| API | `POST /v1/chat` (SSE stream by default, `"stream": false` for JSON), `GET /v1/models`, `GET /v1/metrics`, `POST /v1/feedback`, `POST /v1/odoo/test`, `GET /health` |
 
 ## Run locally
 
@@ -59,6 +59,32 @@ event: tool_result  data: {"name":"odoo_aggregate","summary":"5 groups"}
 event: final        data: {"text":"Top customers this month: ...","usage":{...}}
 event: done         data: {}
 ```
+
+## Accuracy: how it is kept correct (and how to improve it)
+
+A hosted LLM can't be "trained" on your database in any useful way — Odoo data changes every minute and fine-tuning
+would only memorise old numbers. Accuracy comes from grounding, so that is what this service does:
+
+1. **Verified metrics (semantic layer)** — `app/odoo/metrics.py`. Sales, invoiced revenue, receivables/overdue, payables,
+   purchases, CRM pipeline, stock, headcount, new customers each have ONE fixed definition (model, states, date field,
+   sign, currency). The model calls `odoo_metric` instead of improvising domains. **Edit or add your own definitions in
+   `knowledge/metrics.json`** (`METRICS_FILE`) — see `knowledge/metrics.example.json`.
+2. **Server-side dates** — "this month / last quarter / YTD" are resolved in `TIMEZONE`, weeks start Monday, datetimes are
+   converted to UTC boundaries. The model never does date maths.
+3. **Server-side totals** — `total` covers all records even when only the top N groups are shown; nothing is summed from samples.
+4. **Prompt rules** — must state definition + exact period + currency, cross-check odd results, retry on tool errors,
+   never invent numbers; business vocabulary (bikri, udhaar, wasooli…) mapped to metrics; worked examples.
+5. **Accuracy floor** — `AUTO_MIN_TIER=smart`: `auto` never uses the cheapest tier for questions.
+6. **Audit + feedback** — set `AUDIT_LOG_FILE`; every question, tool call (with args) and answer is logged.
+   `POST /v1/feedback {request_id, rating, expected}` attaches a thumbs-down and the correct answer to that record.
+7. **Evals** — the improvement loop:
+   ```bash
+   cp evals/golden.example.json evals/golden.json     # add your real questions
+   python -m app.evals.run evals/golden.json --tier smart
+   ```
+   Ground truth is computed from Odoo directly with the same metric, then the model's answer is checked for the right
+   totals, group names and values. Every wrong answer you find → fix a metric definition / prompt rule → add it to
+   `golden.json` → it can never silently regress.
 
 ## Things to verify before going live
 

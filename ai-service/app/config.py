@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     provider_priority: str = "anthropic,openai,xai,groq,gemini"
     model_catalog_file: str = ""
+    timezone: str = "UTC"            # business timezone for "today / this month" (e.g. Asia/Karachi)
+    auto_min_tier: str = "smart"     # accuracy floor for tier=auto (fast | smart | deep)
+    metrics_file: str = ""           # JSON with your own KPI definitions (see README)
+    audit_log_file: str = ""         # JSONL of every question / tool call / answer (for accuracy reviews)
     max_tool_hops: int = 8
     max_output_tokens: int = 4096
     tool_timeout_s: float = 45.0
