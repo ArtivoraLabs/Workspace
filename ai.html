@@ -183,6 +183,27 @@ html[data-theme="light"] .theme-toggle .icon-moon{opacity:0;transform:rotate(70d
 .msg-content .ai-chart-label{flex:0 0 30%;max-width:150px;font-size:.78rem;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msg-content .ai-chart-bar-track{flex:1;height:14px;background:rgba(232,163,61,.1);border-radius:var(--r-full);overflow:hidden}
 .msg-content .ai-chart-bar-fill{display:block;height:100%;border-radius:var(--r-full);background:var(--grad);min-width:4px}
+.msg-content .ai-chart-svg{width:100%;height:auto;display:block;overflow:visible}
+.msg-content .ai-chart-line{fill:none;stroke:#e8a33d;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.msg-content .ai-chart-area{fill:rgba(232,163,61,.14);stroke:none}
+.msg-content .ai-chart-svg circle{fill:#e8a33d}
+.msg-content .ai-chart-axis{stroke:rgba(128,128,128,.35);stroke-width:1}
+.msg-content .ai-chart-svg text{font-size:11px;fill:currentColor;opacity:.65;font-family:inherit}
+.msg-content .ai-chart-svg text.ai-chart-pt{opacity:1;font-weight:700}
+.msg-content .ai-donut-wrap{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.msg-content .ai-donut{position:relative;width:112px;height:112px;border-radius:50%;flex:0 0 auto}
+.msg-content .ai-donut span{position:absolute;inset:26%;border-radius:50%;background:var(--card)}
+.msg-content .ai-donut-legend{flex:1;min-width:180px}
+.msg-content .ai-donut-item{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:.78rem}
+.msg-content .ai-donut-dot{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.msg-content .ai-donut-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-content .ai-kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}
+.msg-content .ai-kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.msg-content .ai-kpi-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;opacity:.65;margin-bottom:6px}
+.msg-content .ai-kpi-value{font-size:1.25rem;font-weight:700;line-height:1.2}
+.msg-content .ai-kpi-delta{font-size:.74rem;margin-top:4px;opacity:.8}
+.msg-content .ai-kpi-delta.up{color:#3f9b5f;opacity:1}
+.msg-content .ai-kpi-delta.down{color:#c8503c;opacity:1}
 .msg-content .ai-chart-value{flex:0 0 auto;font-family:var(--f-mono);font-size:.75rem;font-weight:600;color:var(--text);min-width:56px;text-align:right}
 
 /* Typing indicator */
@@ -639,36 +660,100 @@ else loadConvo(activeId);
 // block untouched so it still renders as a plain code block rather than
 // disappearing.
 function renderChartBlock(raw) {
-  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const rowRe = /^(.+?)\s*[:|]\s*[$€£₹]?\s*([+-]?[\d,]*\.?\d+)\s*%?$/;
+  var lines = raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+  var rowRe = /^(.+?)\s*[:|]\s*[$€£₹]?\s*([+-]?[\d,]*\.?\d+)\s*%?$/;
+  var PALETTE = ['#e8a33d', '#5b8fae', '#c76b3c', '#7aa874', '#a78bc4', '#d4b95e', '#5fb3b3', '#b0798a'];
 
-  let title = '';
+  // Optional first line "type: bar | line | donut" (default bar).
+  var kind = 'bar';
+  if (lines.length && /^type\s*:\s*(bar|line|donut)$/i.test(lines[0])) {
+    kind = lines.shift().split(':')[1].trim().toLowerCase();
+  }
+  var title = '';
   if (lines.length && !rowRe.test(lines[0])) title = lines.shift();
 
-  const rows = lines
-    .map((l) => {
-      const m = l.match(rowRe);
-      if (!m) return null;
-      return { label: m[1].trim(), value: parseFloat(m[2].replace(/,/g, '')) };
-    })
-    .filter((r) => r && isFinite(r.value))
-    .slice(0, 8);
+  var rows = lines.map(function (l) {
+    var m = l.match(rowRe);
+    if (!m) return null;
+    return { label: m[1].trim(), value: parseFloat(m[2].replace(/,/g, '')) };
+  }).filter(function (r) { return r && isFinite(r.value); }).slice(0, kind === 'line' ? 24 : 8);
 
   if (rows.length < 2) return null;
 
-  const max = Math.max(...rows.map((r) => Math.abs(r.value))) || 1;
-  const barsHtml = rows.map((r) => {
-    const pct = Math.max((Math.abs(r.value) / max) * 100, 3);
-    const rounded = Math.round(r.value);
-    const valText = (Math.abs(r.value - rounded) < 0.005 ? rounded : r.value).toLocaleString();
-    return `<div class="ai-chart-row">` +
-      `<span class="ai-chart-label">${esc(r.label)}</span>` +
-      `<span class="ai-chart-bar-track"><span class="ai-chart-bar-fill" style="width:${pct.toFixed(1)}%"></span></span>` +
-      `<span class="ai-chart-value">${esc(valText)}</span>` +
-      `</div>`;
+  function fmt(v) {
+    var rounded = Math.round(v);
+    return (Math.abs(v - rounded) < 0.005 ? rounded : v).toLocaleString();
+  }
+  var titleHtml = title ? '<div class="ai-chart-title">' + esc(title) + '</div>' : '';
+  var vals = rows.map(function (r) { return r.value; });
+
+  if (kind === 'line') {
+    var W = 560, H = 190, L = 10, R = 14, T = 22, B = 26;
+    var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+    var span = (mx - mn) || 1;
+    var n = rows.length;
+    var pts = rows.map(function (r, i) {
+      return { x: L + i * (W - L - R) / (n - 1), y: T + (1 - (r.value - mn) / span) * (H - T - B) };
+    });
+    var d = pts.map(function (p, i) { return (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1); }).join(' ');
+    var area = d + ' L' + pts[n - 1].x.toFixed(1) + ' ' + (H - B) + ' L' + pts[0].x.toFixed(1) + ' ' + (H - B) + ' Z';
+    var step = Math.ceil(n / 6);
+    var xl = rows.map(function (r, i) {
+      if (i % step && i !== n - 1) return '';
+      return '<text x="' + pts[i].x.toFixed(1) + '" y="' + (H - 8) + '" text-anchor="' + (i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle')) + '">' + esc(r.label) + '</text>';
+    }).join('');
+    var iMax = vals.indexOf(mx), iLast = n - 1;
+    var tags = [iMax].concat(iLast !== iMax ? [iLast] : []).map(function (i) {
+      return '<text class="ai-chart-pt" x="' + Math.min(Math.max(pts[i].x, 30), W - 30).toFixed(1) + '" y="' + (pts[i].y - 8).toFixed(1) + '" text-anchor="middle">' + esc(fmt(rows[i].value)) + '</text>';
+    }).join('');
+    var dots = pts.map(function (p) { return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="3"/>'; }).join('');
+    return '<div class="ai-chart">' + titleHtml +
+      '<svg class="ai-chart-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(title || 'Line chart') + '">' +
+      '<line class="ai-chart-axis" x1="' + L + '" y1="' + (H - B) + '" x2="' + (W - R) + '" y2="' + (H - B) + '"/>' +
+      '<path class="ai-chart-area" d="' + area + '"/><path class="ai-chart-line" d="' + d + '"/>' + dots + xl + tags + '</svg></div>';
+  }
+
+  if (kind === 'donut') {
+    var total = vals.reduce(function (a, v) { return a + Math.abs(v); }, 0) || 1;
+    var acc = 0;
+    var stops = rows.map(function (r, i) {
+      var from = acc / total * 100; acc += Math.abs(r.value); var to = acc / total * 100;
+      return PALETTE[i % PALETTE.length] + ' ' + from.toFixed(2) + '% ' + to.toFixed(2) + '%';
+    }).join(', ');
+    var legend = rows.map(function (r, i) {
+      return '<div class="ai-donut-item"><span class="ai-donut-dot" style="background:' + PALETTE[i % PALETTE.length] + '"></span>' +
+        '<span class="ai-donut-label">' + esc(r.label) + '</span>' +
+        '<span class="ai-chart-value">' + esc(fmt(r.value)) + ' · ' + (Math.abs(r.value) / total * 100).toFixed(1) + '%</span></div>';
+    }).join('');
+    return '<div class="ai-chart">' + titleHtml + '<div class="ai-donut-wrap"><div class="ai-donut" style="background:conic-gradient(' + stops + ')"><span></span></div>' +
+      '<div class="ai-donut-legend">' + legend + '</div></div></div>';
+  }
+
+  var max = Math.max.apply(null, vals.map(Math.abs)) || 1;
+  var barsHtml = rows.map(function (r) {
+    var pct = Math.max((Math.abs(r.value) / max) * 100, 3);
+    return '<div class="ai-chart-row">' +
+      '<span class="ai-chart-label">' + esc(r.label) + '</span>' +
+      '<span class="ai-chart-bar-track"><span class="ai-chart-bar-fill" style="width:' + pct.toFixed(1) + '%"></span></span>' +
+      '<span class="ai-chart-value">' + esc(fmt(r.value)) + '</span></div>';
   }).join('');
-  const titleHtml = title ? `<div class="ai-chart-title">${esc(title)}</div>` : '';
-  return `<div class="ai-chart">${titleHtml}${barsHtml}</div>`;
+  return '<div class="ai-chart">' + titleHtml + barsHtml + '</div>';
+}
+
+// ```kpi block: one card per line, "Label: value | change" (change optional, e.g. "+12.4% vs last month").
+function renderKpiBlock(raw) {
+  var cards = raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean).slice(0, 6).map(function (l) {
+    var i = l.indexOf(':');
+    if (i < 1) return null;
+    var parts = l.slice(i + 1).split('|').map(function (s) { return s.trim(); });
+    if (!parts[0]) return null;
+    var delta = parts[1] || '';
+    var cls = /^[+▲↑]/.test(delta) ? ' up' : (/^[-−▼↓]/.test(delta) ? ' down' : '');
+    return '<div class="ai-kpi"><div class="ai-kpi-label">' + esc(l.slice(0, i).trim()) + '</div>' +
+      '<div class="ai-kpi-value">' + esc(parts[0]) + '</div>' +
+      (delta ? '<div class="ai-kpi-delta' + cls + '">' + esc(delta) + '</div>' : '') + '</div>';
+  }).filter(Boolean);
+  return cards.length ? '<div class="ai-kpi-grid">' + cards.join('') + '</div>' : null;
 }
 
 function renderMarkdown(text) {
@@ -695,6 +780,7 @@ function renderMarkdown(text) {
   // malformed/too-short chart block is left as-is here and falls through
   // to that generic handler, so it still renders as readable text instead
   // of vanishing.
+  text = text.replace(/```kpi\n?([\s\S]*?)```/g, (match, body) => renderKpiBlock(body) || match);
   text = text.replace(/```chart\n?([\s\S]*?)```/g, (match, body) => renderChartBlock(body) || match);
 
   return text

@@ -1,5 +1,13 @@
 # Changelog
 
+## AI strategy briefings, richer visuals, connectivity self-check - 2026-09-24
+
+- **New AI tools (`ai-service`):** `odoo_health` (connected? version, latency, which business areas the API user can read, and whether a gap is "module not installed" or "no access rights") and `odoo_in_progress` (open quotations, uninvoiced orders, pipeline, RFQs, pending deliveries, overdue invoices, due bills, open/overdue tasks - count, value, oldest item).
+- **Prompt playbooks:** exact-detail questions return record-level rows with "showing N of total"; connectivity questions call `odoo_health`; strategy/direction questions follow a fixed briefing (KPI cards, in-progress table, trend + breakdown charts, evidence-backed insights, ranked best-approach table, risks, assumptions). Strategy is always labelled *inferred from Odoo data* - Odoo does not store one.
+- **Visuals (`ai.html`, `js/ai-embed.js`):** `chart` blocks now support `type: line` (trends) and `type: donut` (share of total) besides bars, plus a new `kpi` block that renders headline cards with coloured change. Tests: `test/render-blocks.smoke.test.js`.
+- **Browser-side context (`js/ai-company-context.js`):** areas whose query fails are now reported to the model as "not available" instead of silently vanishing; same KPI/trend/best-approach structure as above.
+- **`scripts/odoo-check.mjs`:** run it yourself to test Odoo login, per-area access and the Worker path end to end.
+
 ## Python AI backend: tool-calling agent over live Odoo - 2026-09-24
 
 - **New `ai-service/` (FastAPI).** The AI Assistant can now run as a real agent:
