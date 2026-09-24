@@ -1,5 +1,21 @@
 # Changelog
 
+## Python AI backend: tool-calling agent over live Odoo - 2026-09-24
+
+- **New `ai-service/` (FastAPI).** The AI Assistant can now run as a real agent:
+  the model calls read-only Odoo tools (KPI snapshot, schema lookup, `read_group`
+  totals, filtered search) instead of being handed a pre-built text dump, and
+  answers only from what came back. Replies follow the user's language (Roman
+  Urdu / Urdu / English).
+- **Multi-model routing with fail-over:** Claude (native) plus OpenAI, Grok, Groq
+  and Gemini via one OpenAI-compatible adapter; `auto | fast | smart | deep` tiers.
+- **Scale & safety:** async + connection pooling, per-host concurrency cap, cached
+  schema/results (optional Redis), per-user rate limit, JWT auth shared with
+  `server/`, model/field deny-lists, strict domain validation, SSRF guard.
+- **Dashboard:** Settings → AI Assistant → new provider **DashView AI** (backend
+  URL). LLM and Odoo keys stay on the server. Existing providers are unchanged.
+- 36 Python tests (no network/keys needed) + CI workflow. See `ai-service/README.md`.
+
 ## Live Odoo everywhere, task assignments, workspace security - 2026-09-22
 
 Removed the last mock data path, rebuilt the tabs that depended on it to

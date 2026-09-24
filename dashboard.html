@@ -837,6 +837,7 @@
                       <label>Provider</label>
                       <select class="stg-input" id="aiProviderSelect">
                         <option value="offline">Offline demo engine (no key needed)</option>
+                        <option value="dashview">DashView AI — Python backend + Odoo (recommended)</option>
                         <option value="grok">Grok (xAI)</option>
                         <option value="anthropic">Claude (Anthropic)</option>
                         <option value="groq">Groq</option>
@@ -846,6 +847,11 @@
                     <div class="stg-field" id="aiModelField">
                       <label>Model</label>
                       <select class="stg-input" id="aiModelSelect"></select>
+                    </div>
+                    <div class="stg-field span-2" id="aiBackendField" style="display:none">
+                      <label>AI backend URL</label>
+                      <input type="text" class="stg-input" id="aiBackendUrlInput" placeholder="https://ai.yourcompany.com"/>
+                      <span class="stg-field-help">Where you deployed <code>ai-service/</code>. Model: auto picks fast/smart by question; deep is opt-in.</span>
                     </div>
                     <div class="stg-field span-2" id="aiKeyField">
                       <label>API key</label>

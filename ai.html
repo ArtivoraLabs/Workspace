@@ -843,7 +843,7 @@ function sendMessage(content, isRegen=false) {
     //    into the system prompt when that's turned on in Settings. ──
     var history = (c.messages || []).map(function (m) { return { role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }; });
     var cfg = window.DVAIConfig.get();
-    var contextPromise = (cfg.includeCompanyContext !== false && window.DVAICompanyContext)
+    var contextPromise = (cfg.includeCompanyContext !== false && cfg.provider !== 'dashview' && window.DVAICompanyContext)
       ? window.DVAICompanyContext.build().catch(function () { return ''; })
       : Promise.resolve('');
 
