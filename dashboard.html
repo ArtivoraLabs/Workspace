@@ -149,7 +149,17 @@
               <button type="button" data-range="365">1Y</button>
             </div>
             <button class="btn btn-outline btn-sm" id="ovRefresh" type="button">Refresh</button>
-            <button class="btn btn-outline btn-sm" id="ovExport" type="button">Export CSV</button>
+            <div class="studio-dropdown" id="ovExportDropdown">
+              <button class="btn btn-outline btn-sm" id="ovExportDropdownBtn" type="button">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3M7 10l5 5 5-5M4 21h16"/></svg>
+                Export
+              </button>
+              <div class="studio-dropdown-menu">
+                <button class="studio-dropdown-item" id="ovExportCsvBtn" type="button">CSV data</button>
+                <div class="studio-dropdown-sep"></div>
+                <button class="studio-dropdown-item" id="ovExportReportBtn" type="button">Full report (PDF, AI insights + snapshot)</button>
+              </div>
+            </div>
           </div>
         </div>
         <div class="odoo-live-connect-banner" id="ovBanner" hidden>
@@ -409,14 +419,14 @@
         </div>
         <div class="olx-conn" id="odooLiveConn"></div>
         <div class="olx-shell">
-          <aside class="olx-rail" aria-label="Odoo modules">
-            <div class="olx-rail-head"><h4>Apps &amp; modules</h4><span id="odooLiveModCount"></span></div>
-            <div class="olx-rail-search"><input type="search" id="odooLiveModSearch" placeholder="Search modules…" aria-label="Search modules"/></div>
-            <div class="olx-rail-list" id="odooLiveModList"><div class="olx-empty-s">Connect Odoo to list your installed modules.</div></div>
-          </aside>
           <div class="olx-main">
             <div class="panel olx-select-bar">
-              <div class="olx-crumb" id="odooLiveCrumb"><b>Select a module</b><span>Choose an app on the left</span></div>
+              <div class="olx-crumb" id="odooLiveCrumb"><b>Select a module</b><span>Choose an app below</span></div>
+              <div class="olx-model olx-module">
+                <label for="odooLiveModuleSelect">Module</label>
+                <select class="pro-select" id="odooLiveModuleSelect" disabled><option value="">Connect Odoo…</option></select>
+                <small id="odooLiveModCount"></small>
+              </div>
               <div class="olx-model">
                 <label for="odooLiveModelSelect">Model</label>
                 <select class="pro-select" id="odooLiveModelSelect" disabled><option value="">Select a module first</option></select>
