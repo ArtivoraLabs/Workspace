@@ -381,6 +381,44 @@ var DVReportEngine = (function () {
     return doc;
   }
 
+  /* AI-generated narrative (payload.insightsText) explaining the "why" behind
+     the numbers, plus a full dashboard screenshot (payload.snapshot =
+     { image, width, height }) — both optional; the section is skipped when
+     neither is supplied. */
+  function buildInsightsSection(doc, payload) {
+    var text = payload.insightsText && String(payload.insightsText).trim();
+    var snap = payload.snapshot && payload.snapshot.image;
+    if (!text && !snap) return doc;
+    if (text) {
+      doc.addPage();
+      var y = sectionHeading(doc, 'AI insights', 60);
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(9); pdfSetMuted(doc);
+      doc.text('Generated from the figures on this report \u2014 review before acting on it.', PAGE.margin, y);
+      y += 16;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); pdfSetInk(doc);
+      var paras = text.split(/\n{2,}/);
+      paras.forEach(function (p) {
+        var lines = doc.splitTextToSize(p.trim(), PAGE.w - PAGE.margin * 2);
+        if (y + lines.length * 13 > PAGE.h - PAGE.margin) { doc.addPage(); y = sectionHeading(doc, 'AI insights (continued)', 60); }
+        doc.text(lines, PAGE.margin, y);
+        y += lines.length * 13 + 10;
+      });
+    }
+    if (snap) {
+      doc.addPage();
+      var sy = sectionHeading(doc, 'Dashboard snapshot', 60);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); pdfSetMuted(doc);
+      doc.text('Captured at the moment this report was generated.', PAGE.margin, sy); sy += 12;
+      var maxW = PAGE.w - PAGE.margin * 2, maxH = PAGE.h - sy - PAGE.margin;
+      var ratio = (payload.snapshot.width && payload.snapshot.height) ? payload.snapshot.width / payload.snapshot.height : 16 / 9;
+      var w = maxW, h = w / ratio;
+      if (h > maxH) { h = maxH; w = h * ratio; }
+      try { doc.addImage(snap, 'PNG', PAGE.margin, sy, w, h, undefined, 'FAST'); }
+      catch (e) { doc.setFont('helvetica', 'italic'); doc.setFontSize(10); pdfSetMuted(doc); doc.text('Snapshot could not be embedded.', PAGE.margin, sy + 20); }
+    }
+    return doc;
+  }
+
   function buildChartsSection(doc, payload) {
     var charts = (payload.charts || []).filter(function (c) { return c && c.image; });
     if (!charts.length) return doc;
@@ -461,6 +499,7 @@ var DVReportEngine = (function () {
     var doc = new jsPDFCtor({ unit: 'pt', format: 'a4', compress: true });
     buildCoverPage(doc, payload);
     if (payload.includeKpis && payload.kpis && payload.kpis.length) buildKpiSection(doc, payload);
+    buildInsightsSection(doc, payload);
     if (payload.includeCharts) buildChartsSection(doc, payload);
     if (payload.includeData !== false) buildDataTableSection(doc, payload);
     if (payload.includePivot) buildPivotSection(doc, payload);

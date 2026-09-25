@@ -13,7 +13,7 @@
   function $(id) { return document.getElementById(id); }
   var CONF = [['state', 'in', ['sale', 'done']]];
   var iso = F.isoDaysAgo;
-  var S = { range: 30, seq: 0, timer: null, sum: null, trend: null, cat: null, pipe: null, inv: null, top: null, recent: [], shops: null, shopProd: null, shopProdSource: 'pos', lastSynced: null };
+  var S = { range: 30, seq: 0, timer: null, sum: null, trend: null, cat: null, pipe: null, inv: null, top: null, recent: [], shops: null, shopProd: null, shopProdSource: 'pos', lastSynced: null, customers: null };
   var STATE_LBL = { draft: 'Quotation', sent: 'Quotation sent', sale: 'Sales order', done: 'Locked', cancel: 'Cancelled' };
   var STATE_CLS = { draft: 'review', sent: 'review', sale: 'active', done: 'active', cancel: 'blocked' };
   var ICON = {
@@ -146,7 +146,7 @@
   }
   function jobCustomers() {
     return C.count('res.partner', [['customer_rank', '>', 0]]).catch(function () { return C.count('res.partner', [['is_company', '=', true]]); })
-      .then(function (n) { kpi('cust', F.num(n), 'Partners with sales', 'neutral'); }).catch(function (e) { kpiErr('cust', e); });
+      .then(function (n) { S.customers = n; kpi('cust', F.num(n), 'Partners with sales', 'neutral'); }).catch(function (e) { kpiErr('cust', e); });
   }
   function jobRecent() {
     return C.records('sale.order', { fields: ['name', 'partner_id', 'amount_total', 'state', 'date_order', 'user_id'], limit: 8, order: 'date_order desc' }).then(function (r) {
@@ -339,6 +339,105 @@
     if (window.DVSec) window.DVSec.log('Exported overview', 'CSV summary');
   }
 
+  /* -- Full report export (PDF: KPIs + charts + AI insights + dashboard snapshot) - */
+  var libState = { html2canvas: { loaded: false, loading: null } };
+  function loadHtml2Canvas() {
+    if (window.html2canvas) { libState.html2canvas.loaded = true; return Promise.resolve(); }
+    if (libState.html2canvas.loaded) return Promise.resolve();
+    if (libState.html2canvas.loading) return libState.html2canvas.loading;
+    libState.html2canvas.loading = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+      s.onload = function () { libState.html2canvas.loaded = true; resolve(); };
+      s.onerror = function () { reject(new Error('Could not load the snapshot library from the CDN.')); };
+      document.head.appendChild(s);
+    });
+    return libState.html2canvas.loading;
+  }
+  function reportKpis() {
+    return KPIS.map(function (k) {
+      var el = $('ovk-' + k[0]); if (!el) return null;
+      var v = el.querySelector('.kpi-value').textContent, sub = el.querySelector('.kpi-delta').textContent;
+      return { label: k[1], value: v + (sub && sub.trim() ? '  (' + sub.trim() + ')' : '') };
+    }).filter(Boolean);
+  }
+  var REPORT_CHARTS = [['ovTrendCv', 'Revenue trend'], ['ovCatCv', 'Sales by category'], ['ovPipeCv', 'CRM pipeline'], ['ovInvCv', 'Invoices by payment status'], ['ovShopsCv', 'Sales by shop / location']];
+  function reportCharts() {
+    return REPORT_CHARTS.map(function (c) {
+      var inst = F.getChart && F.getChart(c[0]); if (!inst) return null;
+      var img; try { img = inst.toBase64Image('image/png', 1); } catch (e) { img = null; }
+      if (!img) return null;
+      return { title: c[1], image: img, width: inst.width, height: inst.height };
+    }).filter(Boolean);
+  }
+  function insightsPrompt() {
+    var t = S.trend || { labels: [], rev: [], cnt: [] };
+    var data = {
+      period_days: S.range,
+      revenue: S.sum && S.sum.revenue, orders: S.sum && S.sum.orders, avg_order_value: S.sum && S.sum.aov,
+      revenue_last_12_months: t.labels.map(function (l, i) { return { month: l, revenue: t.rev[i], orders: t.cnt[i] }; }),
+      sales_by_category: (S.cat && S.cat.rows) || [],
+      top_customers: S.top || [],
+      crm_pipeline_by_stage: S.pipe || [],
+      invoices_by_payment_status: S.inv || [],
+      sales_by_shop: S.shops || [],
+      best_selling_products: S.shopProd || [],
+      customers_total: S.customers
+    };
+    return 'Here is live business data pulled from our Odoo instance (JSON): ' + JSON.stringify(data) +
+      '\n\nWrite a short, plain-English business report narrative (3-4 short paragraphs, no headings, no markdown, no bullet lists) that: ' +
+      '1) summarises what is happening in the numbers, 2) explains the likely causes behind the key trends (growth/decline in revenue, order volume, top customers, pipeline, overdue invoices, etc.), and ' +
+      '3) states what it means for the business and one or two sensible next steps. Be concrete and reference the actual figures. Do not invent data that is not given.';
+  }
+  function fallbackInsights() {
+    var s = S.sum || { revenue: 0, orders: 0, aov: 0, days: S.range };
+    var lines = ['Over the last ' + s.days + ' days, confirmed revenue was ' + F.money(s.revenue) + ' across ' + F.num(s.orders) + ' orders, an average order value of ' + F.money(s.aov) + '.'];
+    if (S.pipe && S.pipe.length) lines.push('The CRM pipeline currently spans ' + S.pipe.length + ' stage(s), representing open opportunities still to be converted into revenue.');
+    if (S.inv && S.inv.length) lines.push('Outstanding customer invoices are split across ' + S.inv.length + ' payment status(es) — worth reviewing any "not paid" balances for collection.');
+    if (S.top && S.top.length) lines.push('Revenue is concentrated among a handful of top customers, led by ' + S.top[0].label + '; keep an eye on how dependent overall revenue is on this small group.');
+    lines.push('(AI provider not configured — this is a plain summary of the figures above. Add a key in Settings → AI Assistant for a fuller, causal write-up.)');
+    return lines.join('\n\n');
+  }
+  function buildSnapshot() {
+    var el = document.querySelector('#view-overview');
+    if (!el || !window.html2canvas) return Promise.resolve(null);
+    return window.html2canvas(el, { backgroundColor: getComputedStyle(document.body).backgroundColor || '#0e1114', useCORS: true, scale: 1.5, logging: false })
+      .then(function (cv) { return { image: cv.toDataURL('image/png'), width: cv.width, height: cv.height }; })
+      .catch(function () { return null; });
+  }
+  function exportReport() {
+    if (!S.sum) { if (window.showToast) window.showToast('Connect Odoo first \u2014 nothing to export yet.'); return; }
+    var btn = $('ovExportReportBtn'); var restore = btn ? btn.textContent : null;
+    if (btn) { btn.disabled = true; btn.textContent = 'Generating\u2026'; }
+    var aiPromise = (window.DVAIConfig && window.DVAIConfig.isConfigured())
+      ? window.DVAIConfig.callAI([{ role: 'user', content: insightsPrompt() }]).catch(function () { return fallbackInsights(); })
+      : Promise.resolve(fallbackInsights());
+    Promise.all([loadHtml2Canvas().catch(function () { return null; }), aiPromise]).then(function (r) {
+      return buildSnapshot().then(function (snap) { return [r[1], snap]; });
+    }).then(function (r) {
+      var insightsText = r[0], snapshot = r[1];
+      var payload = {
+        title: 'Odoo Business Overview',
+        workbookName: 'Odoo Overview',
+        sourceFileName: 'Live Odoo data \u2014 last ' + S.range + ' days',
+        generatedAt: new Date(),
+        filteredRows: S.recent.length, totalRows: S.recent.length,
+        filtersSummary: ['Period: last ' + S.range + ' days'],
+        includeKpis: true, includeCharts: true, includeData: true, includePivot: false,
+        kpis: reportKpis(), charts: reportCharts(), insightsText: insightsText, snapshot: snapshot,
+        fields: [{ name: 'Order', type: 'text' }, { name: 'Customer', type: 'text' }, { name: 'Salesperson', type: 'text' }, { name: 'Date', type: 'text' }, { name: 'Total', type: 'text' }, { name: 'Status', type: 'text' }],
+        rows: S.recent.map(function (o) { return { Order: o.name, Customer: label(o.partner_id), Salesperson: label(o.user_id, '\u2013'), Date: F.when(o.date_order), Total: F.money(o.amount_total), Status: STATE_LBL[o.state] || o.state }; }),
+        formatCell: function (v) { return v == null ? '' : String(v); }
+      };
+      return window.DVReportEngine.generatePdfReport(payload);
+    }).then(function () {
+      if (window.showToast) window.showToast('Report downloaded.');
+      if (window.DVSec) window.DVSec.log('Exported overview', 'Full PDF report');
+    }).catch(function (err) {
+      if (window.showToast) window.showToast((err && err.message) || 'Could not generate the report.');
+    }).then(function () { if (btn) { btn.disabled = false; btn.textContent = restore; } });
+  }
+
   function init() {
     var d = new Date(), h = d.getHours(), name = '';
     try { name = (JSON.parse(localStorage.getItem('dashview_profile')) || {}).displayName || ''; } catch (e) {}
@@ -350,7 +449,8 @@
       b.addEventListener('click', function () { document.querySelectorAll('#ovRange button').forEach(function (x) { x.classList.toggle('active', x === b); }); S.range = +b.getAttribute('data-range'); loadAll(); });
     });
     $('ovRefresh').addEventListener('click', function () { C.reset(); loadAll(); });
-    $('ovExport').addEventListener('click', exportCsv);
+    $('ovExportCsvBtn').addEventListener('click', exportCsv);
+    $('ovExportReportBtn').addEventListener('click', exportReport);
     ['dv:odoo-config-saved', 'dv:unlocked'].forEach(function (ev) { document.addEventListener(ev, function () { C.reset(); loadAll(); }); });
     window.__overviewExportCSV = exportCsv; // shared hook: command palette \u201cExport\u201d + Reports \u2192 Sales Overview Report
     document.addEventListener('dv:locked', function () { banner(); emptyState(); });

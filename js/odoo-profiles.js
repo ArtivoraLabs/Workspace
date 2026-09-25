@@ -15,14 +15,17 @@
       title: 'Sales', models: ['sale.order', 'sale.order.line', 'res.partner', 'product.template'],
       kpis: [
         { label: 'Confirmed revenue', model: 'sale.order', domain: CONF, measure: 'amount_total', kind: 'money', sub: 'All confirmed orders' },
+        { label: 'Revenue (30 days)', model: 'sale.order', domain: CONF.concat([['date_order', '>=', '$d30']]), measure: 'amount_total', kind: 'money', sub: 'Confirmed in the last 30 days' },
         { label: 'Open quotations', model: 'sale.order', domain: [['state', 'in', ['draft', 'sent']]], measure: 'amount_total', kind: 'count', sub: 'Waiting to be confirmed' },
         { label: 'Orders (30 days)', model: 'sale.order', domain: CONF.concat([['date_order', '>=', '$d30']]), kind: 'count', sub: 'Confirmed in the last 30 days' }
       ],
       charts: [
         { title: 'Revenue by month', model: 'sale.order', domain: CONF, groupby: 'date_order:month', measure: 'amount_total', type: 'bar', last: 12 },
         { title: 'Orders by stage', model: 'sale.order', groupby: 'state', type: 'doughnut' },
-        { title: 'Top salespeople', model: 'sale.order', domain: CONF, groupby: 'user_id', measure: 'amount_total', type: 'hbar', limit: 8 },
-        { title: 'Top customers', model: 'sale.order', domain: CONF, groupby: 'partner_id', measure: 'amount_total', type: 'hbar', limit: 8 }
+        { title: 'Top salespeople by revenue', model: 'sale.order', domain: CONF, groupby: 'user_id', measure: 'amount_total', type: 'hbar', limit: 8 },
+        { title: 'Top customers by revenue', model: 'sale.order', domain: CONF, groupby: 'partner_id', measure: 'amount_total', type: 'hbar', limit: 8 },
+        { title: 'Top products by revenue', model: 'sale.order.line', groupby: 'product_id', measure: 'price_subtotal', type: 'hbar', limit: 8 },
+        { title: 'Revenue by sales team', model: 'sale.order', domain: CONF, groupby: 'team_id', measure: 'amount_total', type: 'doughnut' }
       ]
     },
     crm: {
@@ -56,17 +59,22 @@
       title: 'Purchase', models: ['purchase.order', 'purchase.order.line', 'res.partner'],
       kpis: [
         { label: 'Confirmed spend', model: 'purchase.order', domain: [['state', 'in', ['purchase', 'done']]], measure: 'amount_total', kind: 'money', sub: 'Confirmed purchase orders' },
-        { label: 'RFQs open', model: 'purchase.order', domain: [['state', 'in', ['draft', 'sent']]], kind: 'count', sub: 'Requests for quotation' }
+        { label: 'Spend (30 days)', model: 'purchase.order', domain: [['state', 'in', ['purchase', 'done']], ['date_order', '>=', '$d30']], measure: 'amount_total', kind: 'money', sub: 'Confirmed in the last 30 days' },
+        { label: 'RFQs open', model: 'purchase.order', domain: [['state', 'in', ['draft', 'sent']]], kind: 'count', sub: 'Requests for quotation' },
+        { label: 'Orders (30 days)', model: 'purchase.order', domain: [['state', 'in', ['purchase', 'done']], ['date_order', '>=', '$d30']], kind: 'count', sub: 'Confirmed in the last 30 days' }
       ],
       charts: [
         { title: 'Spend by month', model: 'purchase.order', domain: [['state', 'in', ['purchase', 'done']]], groupby: 'date_order:month', measure: 'amount_total', type: 'bar', last: 12 },
         { title: 'Orders by status', model: 'purchase.order', groupby: 'state', type: 'doughnut' },
-        { title: 'Top vendors', model: 'purchase.order', domain: [['state', 'in', ['purchase', 'done']]], groupby: 'partner_id', measure: 'amount_total', type: 'hbar', limit: 8 }
+        { title: 'Top vendors by spend', model: 'purchase.order', domain: [['state', 'in', ['purchase', 'done']]], groupby: 'partner_id', measure: 'amount_total', type: 'hbar', limit: 8 },
+        { title: 'Top products purchased', model: 'purchase.order.line', groupby: 'product_id', measure: 'price_subtotal', type: 'hbar', limit: 8 },
+        { title: 'Orders placed per month', model: 'purchase.order', groupby: 'date_order:month', type: 'line', last: 12 }
       ]
     },
     stock: {
       title: 'Inventory', models: ['stock.picking', 'stock.move', 'stock.quant', 'stock.warehouse', 'product.product'],
       kpis: [
+        { label: 'Units on hand', model: 'stock.quant', measure: 'quantity', kind: 'num', sub: 'Total stock across all locations' },
         { label: 'Ready to process', model: 'stock.picking', domain: [['state', '=', 'assigned']], kind: 'count', sub: 'Transfers ready' },
         { label: 'Waiting', model: 'stock.picking', domain: [['state', 'in', ['confirmed', 'waiting']]], kind: 'count', sub: 'Waiting on stock/another operation' },
         { label: 'Late', model: 'stock.picking', domain: [['state', 'not in', ['done', 'cancel']], ['scheduled_date', '<', '$now']], kind: 'count', sub: 'Past scheduled date' }
@@ -74,7 +82,10 @@
       charts: [
         { title: 'Transfers by status', model: 'stock.picking', groupby: 'state', type: 'doughnut' },
         { title: 'Transfers by type', model: 'stock.picking', groupby: 'picking_type_id', type: 'hbar', limit: 8 },
-        { title: 'Transfers per month', model: 'stock.picking', groupby: 'scheduled_date:month', type: 'line', last: 12 }
+        { title: 'Transfers per month', model: 'stock.picking', groupby: 'scheduled_date:month', type: 'line', last: 12 },
+        { title: 'Stock on hand by location', model: 'stock.quant', groupby: 'location_id', measure: 'quantity', type: 'hbar', limit: 8 },
+        { title: 'Stock on hand by product', model: 'stock.quant', groupby: 'product_id', measure: 'quantity', type: 'hbar', limit: 8 },
+        { title: 'Quantity moved per month', model: 'stock.move', groupby: 'date:month', measure: 'product_uom_qty', type: 'line', last: 12 }
       ]
     },
     hr: {

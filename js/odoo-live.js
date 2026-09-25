@@ -30,7 +30,7 @@
   var state = {
     modules: [], activeModule: null, models: [], activeModel: null, fields: {}, filters: [],
     page: 0, total: 0, records: [], columns: [], tab: 'insights', dirty: { insights: true, records: true },
-    lastSynced: null, version: null, timer: null, search: '', seq: 0,
+    lastSynced: null, version: null, timer: null, seq: 0,
     columnPrefs: loadJSON(COLUMNS_KEY, {}), savedViews: loadJSON(VIEWS_KEY, [])
   };
 
@@ -61,18 +61,19 @@
     byId('odooLiveConn').innerHTML = chips.map(function (x) { return '<span class="olx-chip"><em>' + esc(x[0]) + '</em>' + esc(x[1]) + '</span>'; }).join('');
   }
 
-  /* -- Modules rail --------------------------------------------------------- */
-  function renderModules() {
-    var q = state.search.toLowerCase();
-    var list = state.modules.filter(function (m) { return !q || (m.label + ' ' + m.technicalName).toLowerCase().indexOf(q) > -1; });
+  /* -- Module select (filter, same pattern as the Model select) ------------- */
+  function fillModuleSelect() {
+    var sel = byId('odooLiveModuleSelect');
+    var opt = function (m) { return '<option value="' + esc(m.technicalName) + '">' + esc(m.label) + (PR.has(m.technicalName) ? ' \u2605' : '') + '</option>'; };
+    var apps = state.modules.filter(function (m) { return m.isApp; }).sort(function (a, b) { return String(a.label).localeCompare(String(b.label)); });
+    var mods = state.modules.filter(function (m) { return !m.isApp; }).sort(function (a, b) { return String(a.label).localeCompare(String(b.label)); });
+    var html = '';
+    if (apps.length) html += '<optgroup label="Apps">' + apps.map(opt).join('') + '</optgroup>';
+    if (mods.length) html += '<optgroup label="Modules">' + mods.map(opt).join('') + '</optgroup>';
+    sel.innerHTML = html || '<option value="">No modules found</option>';
+    sel.disabled = !state.modules.length;
+    if (state.activeModule) sel.value = state.activeModule;
     byId('odooLiveModCount').textContent = state.modules.length ? state.modules.length + ' installed' : '';
-    byId('odooLiveModList').innerHTML = list.map(function (m) {
-      var pro = PR.has(m.technicalName);
-      return '<button type="button" class="olx-mod' + (m.technicalName === state.activeModule ? ' active' : '') + '" data-mod="' + esc(m.technicalName) + '">' +
-        '<span class="olx-mod-name">' + esc(m.label) + '</span>' +
-        (pro ? '<span class="olx-badge pro" title="Dedicated dashboard">insights</span>' : '') +
-        '<span class="olx-badge">' + (m.isApp ? 'app' : 'mod') + '</span></button>';
-    }).join('') || '<div class="olx-empty-s">No modules match.</div>';
   }
   function defaultModule() {
     var names = state.modules.map(function (m) { return m.technicalName; });
@@ -124,7 +125,8 @@
   }
   function selectModule(name) {
     var mod = state.modules.filter(function (m) { return m.technicalName === name; })[0];
-    state.activeModule = name; renderModules();
+    state.activeModule = name;
+    var msel = byId('odooLiveModuleSelect'); if (msel.value !== name) msel.value = name;
     byId('odooLiveCrumb').innerHTML = '<b>' + esc(mod ? mod.label : name) + '</b><span>' + esc(name) + '</span>';
     byId('odooLiveModelSelect').disabled = true;
     byId('odooLiveModelSelect').innerHTML = '<option>Loading models…</option>';
@@ -371,14 +373,15 @@
   function loadModules(force) {
     if (!renderBanner()) return;
     if (force) C.reset();
-    byId('odooLiveModList').innerHTML = '<div class="olx-empty-s">Loading modules…</div>';
+    byId('odooLiveModuleSelect').disabled = true;
+    byId('odooLiveModuleSelect').innerHTML = '<option>Loading modules…</option>';
     setStatus('connecting', 'Syncing…');
     C.test().then(function (d) { var v = d.version && (d.version.server_version || d.version.server_serie); if (v) { state.version = v; renderConn(); } }).catch(function () {});
     C.modules().then(function (mods) {
-      state.modules = mods; setStatus('live', 'Live'); renderModules(); renderConn();
+      state.modules = mods; setStatus('live', 'Live'); fillModuleSelect(); renderConn();
       var keep = state.activeModule && mods.some(function (m) { return m.technicalName === state.activeModule; }) ? state.activeModule : defaultModule();
       if (keep) selectModule(keep);
-    }).catch(function (e) { setStatus('error', 'Connection error'); byId('odooLiveModList').innerHTML = '<div class="olx-empty-s is-error">' + esc(e.message) + '</div>'; });
+    }).catch(function (e) { setStatus('error', 'Connection error'); byId('odooLiveModuleSelect').innerHTML = '<option>' + esc(e.message) + '</option>'; });
   }
   function refresh(force) {
     if (!renderBanner()) return;
@@ -390,8 +393,7 @@
   function init() {
     renderBanner();
     byId('odooLiveRefreshBtn').addEventListener('click', function () { var b = this; b.classList.add('is-spinning'); refresh(); setTimeout(function () { b.classList.remove('is-spinning'); }, 700); });
-    byId('odooLiveModList').addEventListener('click', function (e) { var b = e.target.closest('[data-mod]'); if (b) selectModule(b.getAttribute('data-mod')); });
-    byId('odooLiveModSearch').addEventListener('input', function () { state.search = this.value; renderModules(); });
+    byId('odooLiveModuleSelect').addEventListener('change', function () { if (this.value) selectModule(this.value); });
     byId('odooLiveModelSelect').addEventListener('change', function () { if (this.value) selectModel(this.value); });
     document.querySelectorAll('#odooLiveTabs button').forEach(function (b) { b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); }); });
     ['odooLiveGroupBy', 'odooLiveMeasure', 'odooLiveChartType'].forEach(function (id) { byId(id).addEventListener('change', runBuilder); });

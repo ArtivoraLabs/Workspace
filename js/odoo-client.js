@@ -158,8 +158,9 @@
   function resizeCharts(root) {
     Object.keys(charts).forEach(function (k) { var c = charts[k]; if (c && c.canvas && (!root || root.contains(c.canvas))) { try { c.resize(); } catch (e) {} } });
   }
+  function getChart(canvasId) { return charts[canvasId] || null; }
   api.currency().then(function (c) { cur = c; }, function () {});
   ['dv:unlocked', 'dv:odoo-config-saved'].forEach(function (ev) { document.addEventListener(ev, function () { memo = {}; api.currency().then(function (c) { cur = c; }); }); });
 
-  window.DVFmt = { esc: esc, num: num, money: money, stripHtml: stripHtml, when: when, isoDaysAgo: isoDaysAgo, csv: csv, download: download, PALETTE: PALETTE, chart: chart, theme: theme, resizeCharts: resizeCharts, setCurrency: function (c) { cur = c; } };
+  window.DVFmt = { esc: esc, num: num, money: money, stripHtml: stripHtml, when: when, isoDaysAgo: isoDaysAgo, csv: csv, download: download, PALETTE: PALETTE, chart: chart, theme: theme, resizeCharts: resizeCharts, getChart: getChart, setCurrency: function (c) { cur = c; } };
 })();
