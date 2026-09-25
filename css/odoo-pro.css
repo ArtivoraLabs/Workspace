@@ -48,14 +48,7 @@
 .olx-conn { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; } .olx-conn:empty { display: none; }
 .olx-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font: 500 12.5px var(--f-mono, monospace); background: var(--paper-soft); border: 1px solid var(--line); color: var(--ink); }
 .olx-chip em { font: 600 10.5px var(--f-body, inherit); font-style: normal; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-50); }
-.olx-shell { display: grid; grid-template-columns: 262px minmax(0, 1fr); gap: 16px; align-items: start; }
-.olx-rail { position: sticky; top: 12px; display: flex; flex-direction: column; max-height: calc(100vh - 120px); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; }
-.olx-rail-head { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 16px 6px; } .olx-rail-head h4 { margin: 0; font-size: 13px; } .olx-rail-head span { font-size: 11.5px; color: var(--ink-50); }
-.olx-rail-search { padding: 6px 12px 10px; } .olx-rail-search input { width: 100%; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--paper-soft); color: var(--ink); font-size: 13px; outline: none; } .olx-rail-search input:focus { border-color: var(--signal); }
-.olx-rail-list { overflow-y: auto; padding: 0 8px 10px; display: grid; gap: 2px; align-content: start; }
-.olx-mod { display: flex; align-items: center; gap: 6px; width: 100%; padding: 9px 10px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-70); font-size: 13px; text-align: left; cursor: pointer; transition: background .12s; }
-.olx-mod:hover { background: var(--signal-10); color: var(--ink); } .olx-mod.active { background: var(--signal-20); color: var(--ink); box-shadow: inset 3px 0 0 var(--signal); font-weight: 600; }
-.olx-mod-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.olx-shell { display: block; }
 .olx-badge { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 6px; border-radius: 6px; background: rgba(127,127,127,.16); color: var(--ink-50); }
 .olx-badge.pro { background: var(--signal-10); color: var(--signal-bright); }
 .olx-main { min-width: 0; display: grid; gap: 14px; }
@@ -63,6 +56,7 @@
 .olx-crumb b { display: block; font-size: 17px; font-family: var(--f-display, inherit); } .olx-crumb span { font: 11.5px var(--f-mono, monospace); color: var(--ink-50); }
 .olx-model { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 260px; max-width: 520px; } .olx-model label { font-size: 12px; font-weight: 600; color: var(--ink-50); text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
 .olx-model select { flex: 1; min-width: 0; } .olx-model small { color: var(--ink-50); font-size: 11.5px; white-space: nowrap; }
+.olx-module select { font-weight: 600; }
 .olx-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
 .olx-kpi { position: relative; overflow: hidden; padding: 16px 18px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); }
 .olx-kpi::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, var(--signal), transparent); }
@@ -76,7 +70,7 @@
 .olx-refresh.is-spinning svg { animation: olxSpin .7s linear; } @keyframes olxSpin { to { transform: rotate(360deg); } }
 #odooLiveTable { width: 100%; } #odooLiveTable td { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #odooLiveTable tbody tr:hover { background: var(--signal-10); }
-@media (max-width: 980px) { .olx-shell { grid-template-columns: 1fr; } .olx-rail { position: static; max-height: 280px; } }
+@media (max-width: 980px) { .olx-select-bar { flex-direction: column; align-items: stretch; } .olx-model { max-width: none; } }
 
 /* -- Audit log ---------------------------------------------------------------------- */
 .audit-toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
