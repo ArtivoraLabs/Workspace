@@ -342,15 +342,20 @@
       });
     },
 
-    /* ── Derived headline stats ─────────────────────────────────────────── */
+    /* ── Derived headline stats ───────────────────────────────────────────
+       Real counts from whatever's currently loaded — the seeded demo team
+       when Odoo isn't connected, or the live hr.employee/hr.applicant sync
+       once it is (see js/people-odoo-live.js). "Projects" comes from a
+       best-effort live project.project count; falls back to the tracked
+       candidate pipeline size when Project isn't installed / not synced. */
     stats: function () {
       var s = this.get();
       var active = s.team.filter(function (e) { return e.status !== 'Offboarded'; }).length;
       var open = s.candidates.filter(function (c) { return c.stage !== 'Hired'; }).length;
       return {
-        employees: 66 + active,          // 66 org-wide + the directory we track
-        hirings: 47 + open,
-        projects: 203
+        employees: active,
+        hirings: open,
+        projects: (typeof s._liveProjectCount === 'number') ? s._liveProjectCount : s.candidates.length
       };
     },
 

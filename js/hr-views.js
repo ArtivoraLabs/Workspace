@@ -133,8 +133,9 @@
     var active = st.team.filter(function (e) { return e.status === 'Active'; }).length;
     var payroll = st.team.reduce(function (a, e) { return a + e.pay; }, 0);
 
+    var pplSub = st.team.length + ' people in the directory' + (global.__pplOdooLive ? ' · Live from Odoo' : '');
     byId('view-people').innerHTML =
-      head('People', st.team.length + ' people in the directory', tools) +
+      head('People', pplSub, tools) +
       '<div class="hr-tiles">' +
         tile('Directory', String(st.team.length), 'tracked in this workspace') +
         tile('Active', String(active), st.team.length - active + ' on leave or notice') +
@@ -202,8 +203,11 @@
     var hired = st.candidates.filter(function (c) { return c.stage === 'Hired'; }).length;
     var avgDays = Math.round(st.candidates.reduce(function (a, c) { return a + c.days; }, 0) / st.candidates.length);
 
+    var hireSub = global.__pplOdooLive
+      ? 'Live from Odoo (hr.applicant) · read-only — move a candidate\u2019s stage in Odoo'
+      : 'Drag a card between columns, or use the arrows';
     byId('view-hiring').innerHTML =
-      head('Hiring', 'Drag a card between columns, or use the arrows') +
+      head('Hiring', hireSub) +
       '<div class="hr-tiles">' +
         tile('In pipeline', String(st.candidates.length - hired), 'active candidates') +
         tile('At offer', String(offers), 'awaiting signature') +
@@ -211,6 +215,14 @@
         tile('Avg. time in stage', avgDays + ' d', 'across the pipeline') +
       '</div>' +
       '<div class="hr-board">' + board + '</div>';
+
+    /* In live mode the board is read-only: candidates come from Odoo and any
+       local move would just be overwritten by the next 60s sync, which is
+       more confusing than not letting the drag start in the first place. */
+    if (global.__pplOdooLive) {
+      byId('view-hiring').querySelectorAll('[data-cand]').forEach(function (el) { el.removeAttribute('draggable'); });
+      return;
+    }
 
     byId('view-hiring').querySelectorAll('[data-move]').forEach(function (b) {
       on(b, 'click', function (e) {
@@ -295,7 +307,7 @@
     var repair = st.devices.filter(function (d) { return d.status === 'Repair'; }).length;
 
     byId('view-devices').innerHTML =
-      head('Devices', 'Hardware issued across the company', tools) +
+      head('Devices', 'Hardware issued across the company · tracked in this workspace (not from Odoo)', tools) +
       '<div class="hr-tiles">' +
         tile('Total units', String(st.devices.length), 'in the asset register') +
         tile('Issued', String(issued), 'with a named owner') +
@@ -351,7 +363,7 @@
       }).join('') + '</tbody></table></div>';
 
     byId('view-apps').innerHTML =
-      head('Apps', 'Subscriptions and seat utilisation') +
+      head('Apps', 'Subscriptions and seat utilisation · tracked in this workspace (not from Odoo)') +
       '<div class="hr-tiles">' +
         tile('Monthly spend', U.money(monthly), U.money(monthly * 12) + ' a year') +
         tile('Seats owned', String(seats), used + ' currently assigned') +
@@ -401,8 +413,11 @@
           '</div>';
       }).join('');
 
+    var salSub = global.__pplOdooLive
+      ? (st._liveHasPay ? 'Live from Odoo (hr.contract wage)' : 'Live headcount from Odoo — wage needs Payroll access for this API user, so pay shows as \u2014')
+      : 'Payroll for the tracked directory';
     byId('view-salary').innerHTML =
-      head('Salary', 'Payroll for the tracked directory',
+      head('Salary', salSub,
         '<button class="hr-btn hr-btn--quiet" id="salExport">' + I.svg('download') + 'Export</button>') +
       '<div class="hr-tiles">' +
         tile('Monthly payroll', U.money(total), U.money(total * 12) + ' annualised') +
@@ -500,7 +515,7 @@
       }).join('') + '</tbody></table></div>';
 
     byId('view-reviews').innerHTML =
-      head('Reviews', 'H1 2026 performance cycle') +
+      head('Reviews', 'H1 2026 performance cycle · tracked in this workspace (not from Odoo)') +
       '<div class="hr-tiles">' +
         tile('In cycle', String(st.reviews.length), 'reviews scheduled') +
         tile('Complete', String(done.length), st.reviews.length - done.length + ' still open') +

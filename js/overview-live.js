@@ -453,6 +453,7 @@
     $('ovExportReportBtn').addEventListener('click', exportReport);
     ['dv:odoo-config-saved', 'dv:unlocked'].forEach(function (ev) { document.addEventListener(ev, function () { C.reset(); loadAll(); }); });
     window.__overviewExportCSV = exportCsv; // shared hook: command palette \u201cExport\u201d + Reports \u2192 Sales Overview Report
+    window.__overviewExportPDF = exportReport; // shared hook: Reports \u2192 Monthly Sales Summary (full PDF, AI insights + snapshot)
     document.addEventListener('dv:locked', function () { banner(); emptyState(); });
     window.addEventListener('storage', function (e) { if (e.key === 'dashview_odoo_config') loadAll(); });
     window.applyOverviewChartTheme = redraw;

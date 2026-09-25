@@ -139,6 +139,25 @@
       };
       reader.readAsText(file);
     }
+    function exportPeopleCSV(filename) {
+      var team = (window.PeopleStore && window.PeopleStore.get().team) || [];
+      var candidates = (window.PeopleStore && window.PeopleStore.get().candidates) || [];
+      if (!team.length) { toast('No one in the People directory yet — connect Odoo or add people first.'); return; }
+      var F = window.DVFmt;
+      var rows = [['Directory']]
+        .concat([['Name', 'Role', 'Department', 'Contract', 'Status', 'Monthly pay', 'Started', 'Email']])
+        .concat(team.map(function (e) { return [e.name, e.role, e.dept, e.type, e.status, e.pay, e.start, e.email]; }))
+        .concat([[]], [['Hiring pipeline']], [['Name', 'Role', 'Stage', 'Source', 'Days in pipeline']])
+        .concat(candidates.map(function (c) { return [c.name, c.role, c.stage, c.source, c.days]; }));
+      if (F) F.download(filename, F.csv(rows));
+      else {
+        var csv = rows.map(function (r) { return r.map(function (c) { var v = String(c == null ? '' : c); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\n');
+        var url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+        var a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+      }
+      toast('People directory report exported.');
+      if (window.DVSec) window.DVSec.log('Exported report', 'People Directory Report');
+    }
     function exportXLSX(filename, sheetName) {
       if (!window.XLSX) { toast('Excel export library did not load.'); return; }
       var orders = (window.DASHVIEW_OV && window.DASHVIEW_OV.ORDERS) || [];
@@ -208,9 +227,10 @@
     /* ── Reports ──────────────────────────────────────────────────────────── */
     var REPORTS = [
       { title: 'Sales Overview Report', desc: 'Revenue, orders and recent activity from your connected Odoo.', fmt: 'CSV', generated: 'Live', action: 'csv', src: 'overview' },
+      { title: 'People Directory Report', desc: 'Headcount, department, contract type and hiring pipeline — live from Odoo once People is connected.', fmt: 'CSV', generated: 'Live', action: 'csv', src: 'people' },
       { title: 'Task Completion Report', desc: 'Every assigned task, its owner, status and due date.', fmt: 'CSV', generated: 'Live', action: 'csv', src: 'tasks' },
       { title: 'Recent Orders Workbook', desc: 'The latest confirmed sales orders as an Excel file.', fmt: 'XLSX', generated: 'Live', action: 'xlsx' },
-      { title: 'Monthly Sales Summary', desc: 'Print or save the current tab as a PDF.', fmt: 'PDF', generated: 'On demand', action: 'pdf' },
+      { title: 'Monthly Sales Summary', desc: 'Full PDF — KPIs, charts and an AI-written narrative, built from live Odoo data.', fmt: 'PDF', generated: 'Live', action: 'pdf-overview' },
       { title: 'Finance P&L Statement', desc: 'Print or save the current tab as a PDF.', fmt: 'PDF', generated: 'On demand', action: 'pdf' },
       { title: 'Marketing Campaign ROI', desc: 'Print or save the current tab as a PDF.', fmt: 'PDF', generated: 'On demand', action: 'pdf' }
     ];
@@ -240,12 +260,16 @@
         toast('Preparing "' + title + '"…');
         setTimeout(function () {
           if (src === 'tasks' && window.__tasksExportCSV) window.__tasksExportCSV(slug + '.csv');
+          else if (src === 'people') exportPeopleCSV(slug + '.csv');
           else if (window.__overviewExportCSV) window.__overviewExportCSV(slug + '.csv');
           else toast('This report needs Odoo connected — open Settings to connect it.');
         }, 300);
       } else if (type === 'xlsx') {
         toast('Preparing "' + title + '"…');
         setTimeout(function () { exportXLSX(slug + '.xlsx', title); }, 300);
+      } else if (type === 'pdf-overview') {
+        if (window.__overviewExportPDF) { window.__overviewExportPDF(); }
+        else toast('Open the Overview tab once first, then generate this report.');
       } else if (type === 'pdf') {
         toast('Opening the print dialog for "' + title + '"…');
         setTimeout(function () { window.print(); }, 300);
