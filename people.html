@@ -20,6 +20,7 @@
 <link rel="stylesheet" href="css/people.css"/>
 <link rel="stylesheet" href="css/people-pro.css"/>
 <link rel="stylesheet" href="css/security.css"/>
+<link rel="stylesheet" href="css/odoo-live.css"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="DashView"/>
@@ -100,6 +101,7 @@
       </button>
 
       <div class="dash-top-actions" style="margin-left:auto;">
+        <span class="odoo-live-status" id="pplOdooStatus"><span class="dot"></span><span id="pplOdooStatusText">Not connected</span></span>
         <button class="hr-iconbtn theme-toggle-btn" id="themeToggleBtn" type="button" aria-label="Switch to dark theme" title="Switch theme">
           <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
           <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
@@ -152,6 +154,11 @@
         <button class="hr-nav-btn" role="tab" data-view="reviews"   aria-selected="false">Reviews</button>
       </div>
     </nav>
+
+    <div class="odoo-live-connect-banner" id="pplOdooBanner" hidden>
+      <p id="pplOdooBannerText"></p>
+      <a href="dashboard.html#settings" class="btn btn-primary btn-sm">Open Settings</a>
+    </div>
 
     <main id="main">
 
@@ -345,10 +352,12 @@
 <div class="hr-toasts" id="toasts" aria-live="polite"></div>
 
 <script src="js/dv-security.js"></script>
+<script src="js/odoo-client.js"></script>
 <script src="js/people-shell.js"></script>
 <script src="js/hr-store.js"></script>
 <script src="js/hr-icons.js"></script>
 <script src="js/hr-views.js"></script>
 <script src="js/hr-app.js"></script>
+<script src="js/people-odoo-live.js"></script>
 </body>
 </html>
