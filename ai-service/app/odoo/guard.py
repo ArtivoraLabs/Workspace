@@ -45,6 +45,7 @@ BLOCKED_MODELS = {"res.users", "res.company.ldap", "queue.job"}
 
 MAX_DOMAIN_TERMS = 30
 MAX_FIELDS = 40
+MAX_OFFSET = 100_000
 
 
 class Guard:
@@ -131,6 +132,17 @@ class Guard:
         except (TypeError, ValueError):
             raise GuardError("limit must be an integer.")
         return max(1, min(n, self.max_rows))
+
+    def check_offset(self, offset: Any) -> int:
+        if isinstance(offset, bool):
+            raise GuardError("offset must be a non-negative integer.")
+        try:
+            n = int(offset) if offset is not None else 0
+        except (TypeError, ValueError):
+            raise GuardError("offset must be a non-negative integer.")
+        if n < 0 or n > MAX_OFFSET or str(n) != str(offset if offset is not None else 0):
+            raise GuardError(f"offset must be between 0 and {MAX_OFFSET}.")
+        return n
 
     def check_order(self, order: Any) -> str | None:
         if not order:

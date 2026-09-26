@@ -140,7 +140,7 @@ def resolve_groupby(m: Metric, groupby: str | None) -> str | None:
 
 
 async def run_metric(ctx, key: str, period: str | None = None, start: str | None = None, end: str | None = None,
-                     groupby: str | None = None, limit: int = 10) -> dict:
+                     groupby: str | None = None, limit: int = 10, offset: int = 0) -> dict:
     m = ctx.metrics.get(key)
     if not m:
         raise GuardError(f"Unknown metric '{key}'. Available: {', '.join(ctx.metrics)}.")
@@ -159,6 +159,7 @@ async def run_metric(ctx, key: str, period: str | None = None, start: str | None
     measure = m.measure or "__count"
     gb = resolve_groupby(m, groupby)
     limit = ctx.guard.check_limit(limit, default=10)
+    offset = ctx.guard.check_offset(offset)
 
     grand = (await ctx.client.read_group(m.model, domain, [measure], []) or [{}])[0]
 
@@ -181,7 +182,7 @@ async def run_metric(ctx, key: str, period: str | None = None, start: str | None
         out["currency"] = "each document's own currency (may mix if multi-currency)"
     if gb:
         order = None if ":" in gb else (f"{measure.split(':')[0]} desc" if m.measure else None)
-        rows = await ctx.client.read_group(m.model, domain, [measure], [gb], order, limit)
+        rows = await ctx.client.read_group(m.model, domain, [measure], [gb], order, limit + 1, offset)
         groups = []
         for r in rows[:limit]:
             label = r.get(gb, r.get(gb.split(":")[0]))
@@ -190,6 +191,10 @@ async def run_metric(ctx, key: str, period: str | None = None, start: str | None
             groups.append({"group": label if label is not False else "(none)", "value": round(val(r), 2),
                            "records": r.get("__count", r.get("count"))})
         out.update(groupby=gb, groups=groups)
-        if len(rows) >= limit:
-            out["note"] = f"Top {limit} groups shown; 'total' covers ALL records."
+        returned = len(groups)
+        has_more = len(rows) > limit
+        out.update(groups_offset=offset, groups_limit=limit, groups_returned=returned,
+                   groups_has_more=has_more, groups_next_offset=offset + returned if has_more else None)
+        if offset == 0 and has_more:
+            out["note"] = f"Top {limit} groups shown; 'total' covers ALL records. More groups are available."
     return out

@@ -21,7 +21,7 @@ Roman Urdu / Urdu / English questions are answered in the language they were ask
 | Models | Anthropic (native) + one adapter for every OpenAI-compatible API (OpenAI, xAI Grok, Groq, Gemini). Tiers `fast` / `smart` / `deep`; `auto` picks by question complexity; automatic **fail-over** to the next configured model. Catalog is editable (`MODEL_CATALOG_FILE`). |
 | Odoo tools | `odoo_metric` (verified KPIs), `odoo_installed_apps`, `odoo_business_snapshot`, `odoo_list_models`, `odoo_get_fields`, `odoo_search_read`, `odoo_count`, `odoo_aggregate`, `odoo_get_record` |
 | Safety | Read-only by construction (only `search_read/search_count/read/read_group/fields_get/name_search` can be sent). Security/infra models (`res.users`, `ir.*`, payment, mail…) blocked; secret-looking fields hidden; domains/groupby/order strictly validated; row caps; prompt-injection rule in the system prompt. Optional hard allow-list `ODOO_ALLOWED_MODELS`. |
-| Scale | Async end-to-end, shared HTTP pool, per-host concurrency cap, result + schema + uid caching, optional Redis (shared across replicas), rate limit per user, stateless → add replicas freely. |
+| Scale | Async end-to-end, shared HTTP pool, bounded in-flight chats, per-host Odoo concurrency with bounded queue wait, result + schema + uid caching, optional Redis (shared across replicas), rate limit per user, stateless → add replicas freely. |
 | Auth | Accepts the same JWT the Node `server/` issues (`JWT_SECRET`, HS256; role must be in `ALLOWED_ROLES`) or `X-API-Key`. |
 | API | `POST /v1/chat` (SSE stream by default, `"stream": false` for JSON), `GET /v1/models`, `GET /v1/metrics`, `POST /v1/feedback`, `POST /v1/odoo/test`, `GET /health` |
 
@@ -36,6 +36,22 @@ uvicorn app.main:app --reload --port 8000
 
 Docker (with Redis): `docker compose up --build`.
 Tests (no network or keys needed): `pip install -r requirements-dev.txt && pytest -q`
+
+`MAX_CHAT_CONCURRENCY` bounds active chat generations per worker (`32` by default);
+requests that cannot enter within `CHAT_QUEUE_TIMEOUT_S` (`0.05` seconds) receive
+HTTP 503 with `Retry-After`. Odoo calls are independently capped per host and
+return a retryable 503 after `ODOO_QUEUE_TIMEOUT_S` (`2` seconds) waiting for a
+slot. Keep worker/process counts in mind: these limits are per process, not
+cluster-wide. Request and response `X-Request-ID` values are logged and included
+in chat JSON/SSE events for correlation.
+
+Chat input is capped at 40 messages, 8,000 characters per message and 32,000
+combined characters. Odoo row limits are bounded by `MAX_ROWS` (1,000 maximum);
+search, aggregate and metric report tools accept an `offset` (maximum 100,000)
+and return page-boundary metadata (`has_more` / `next_offset` or their
+`groups_*` equivalents). Aggregate reports include full-domain `records` and
+`totals`; metric `total` and `records` remain server-side aggregates across the
+full matching set, independent of the displayed group page.
 
 ## Connect the dashboard
 

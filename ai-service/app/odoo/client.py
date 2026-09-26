@@ -122,11 +122,19 @@ class OdooClient:
         last: Exception | None = None
         for attempt in range(3):  # reads are idempotent, so retrying is safe
             try:
-                async with self._sem:
+                try:
+                    await asyncio.wait_for(self._sem.acquire(), timeout=self._s.odoo_queue_timeout_s)
+                except TimeoutError:
+                    raise OdooError("Odoo is busy; retry this request shortly.", 503)
+                try:
                     r = await self._http.post(
                         self.cfg.base + "/jsonrpc", json=payload, timeout=self._s.odoo_timeout_s
                     )
+                finally:
+                    self._sem.release()
                 break
+            except OdooError:
+                raise
             except (httpx.TimeoutException, httpx.TransportError) as e:
                 last = e
                 if attempt < 2:
@@ -207,12 +215,15 @@ class OdooClient:
         return await self.call(model, "read", [ids], kw, ttl=self._s.cache_ttl_data_s)
 
     async def read_group(self, model: str, domain: list, measures: list[str], groupby: list[str],
-                         orderby: str | None = None, limit: int | None = None) -> list[dict]:
+                         orderby: str | None = None, limit: int | None = None,
+                         offset: int = 0) -> list[dict]:
         kw: dict[str, Any] = {"lazy": False}
         if orderby:
             kw["orderby"] = orderby
         if limit:
             kw["limit"] = limit
+        if offset:
+            kw["offset"] = offset
         try:
             return await self.call(model, "read_group", [domain, measures, groupby], kw,
                                    ttl=self._s.cache_ttl_data_s)
@@ -227,5 +238,7 @@ class OdooClient:
                 kw2["order"] = orderby
             if limit:
                 kw2["limit"] = limit
+            if offset:
+                kw2["offset"] = offset
             return await self.call(model, "formatted_read_group", [domain, groupby, aggs], kw2,
                                    ttl=self._s.cache_ttl_data_s)

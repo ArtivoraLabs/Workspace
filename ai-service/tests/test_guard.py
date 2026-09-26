@@ -47,3 +47,20 @@ def test_groupby_measures_order_limit():
                     (g.check_order, "1; drop table"), (g.check_groupby, [])]:
         with pytest.raises(GuardError):
             fn(arg)
+
+
+def test_offset_is_nonnegative_and_bounded():
+    assert g.check_offset(None) == 0
+    assert g.check_offset(100_000) == 100_000
+    for offset in (-1, 100_001, 1.5, True, "not-an-offset"):
+        with pytest.raises(GuardError):
+            g.check_offset(offset)
+
+
+def test_operational_limits_are_validated():
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        settings(max_rows=1001)
+    with pytest.raises(ValidationError):
+        settings(max_chat_concurrency=0)

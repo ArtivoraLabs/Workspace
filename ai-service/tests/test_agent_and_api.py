@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi.testclient import TestClient
 
 from app.llm.base import LLMResult, ProviderError
@@ -18,6 +20,7 @@ def test_full_tool_loop_returns_answer(make_app):
     assert r.status_code == 200, r.text
     j = r.json()
     assert j["text"] == "Acme leads with 5000." and j["tools"] == ["odoo_aggregate"]
+    assert r.headers["X-Request-ID"] == j["request_id"]
     # the 2nd model call must have seen the tool output
     assert prov.seen[1]["turns"][0].outputs[0].count("Acme") == 1
 
@@ -52,6 +55,35 @@ def test_sse_stream_events(make_app):
         r = c.post("/v1/chat", json={**ASK, "stream": True}, headers=H())
     body = r.text
     assert "event: tool_start" in body and "event: tool_result" in body and "event: final" in body and "event: done" in body
+    assert r.headers["X-Request-ID"] in body
+
+
+def test_request_id_is_propagated_and_unsafe_values_are_replaced(make_app):
+    prov = ScriptedProvider("anthropic", [LLMResult(text="hi")])
+    with TestClient(make_app({"anthropic": prov})) as c:
+        supplied = c.post("/v1/chat", json=ASK, headers={**H(), "X-Request-ID": "report-2026.09"})
+        invalid = c.get("/health", headers={"X-Request-ID": "bad id"})
+    assert supplied.headers["X-Request-ID"] == "report-2026.09"
+    assert supplied.json()["request_id"] == "report-2026.09"
+    assert invalid.headers["X-Request-ID"] != "bad id"
+
+
+def test_chat_total_content_is_bounded(make_app):
+    prov = ScriptedProvider("anthropic", [LLMResult(text="unused")])
+    body = {"messages": [{"role": "user", "content": "x" * 8000}] * 5, "stream": False}
+    with TestClient(make_app({"anthropic": prov})) as c:
+        response = c.post("/v1/chat", json=body, headers=H())
+    assert response.status_code == 422
+
+
+def test_chat_backpressure_returns_retryable_service_unavailable(make_app):
+    prov = ScriptedProvider("anthropic", [LLMResult(text="unused")])
+    app = make_app({"anthropic": prov}, chat_queue_timeout_s=0.01)
+    with TestClient(app) as c:
+        app.state.chat_semaphore = asyncio.Semaphore(0)
+        response = c.post("/v1/chat", json=ASK, headers=H())
+    assert response.status_code == 503 and response.headers["Retry-After"] == "1"
+    assert prov.seen == []
 
 
 def test_tool_budget_forces_final_answer(make_app):

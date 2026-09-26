@@ -37,6 +37,16 @@ async def test_aggregate_tool_shapes_result():
     r = await run_tool(ctx, "odoo_aggregate", {"model": "sale.order", "groupby": ["partner_id"],
                                               "measures": ["amount_total:sum"], "order": "amount_total desc"})
     assert r["groups"][0] == {"partner_id": "Acme", "amount_total:sum": 5000.0, "count": 4}
+    assert r["records"] == 6 and r["totals"]["amount_total:sum"] == 8000.0
+    assert r["groups_has_more"] is False and r["groups_returned"] == 2
+    await http.aclose()
+
+
+async def test_aggregate_pages_include_boundary_metadata():
+    ctx, http = make_ctx()
+    r = await run_tool(ctx, "odoo_aggregate", {"model": "sale.order", "groupby": ["partner_id"],
+                                              "measures": ["amount_total:sum"], "limit": 1})
+    assert r["groups_returned"] == 1 and r["groups_has_more"] is True and r["next_offset"] == 1
     await http.aclose()
 
 
@@ -54,7 +64,27 @@ async def test_get_fields_hides_sensitive_and_search_read_compacts():
     assert "password" not in f["fields"] and "name" in f["fields"]
     r = await run_tool(ctx, "odoo_search_read", {"model": "sale.order", "limit": 5})
     assert r["total_matching"] == 42 and r["rows"][0] == {"id": 1, "name": "SO001", "partner_id": "Acme", "note": None}
+    assert r["has_more"] is True and r["next_offset"] == 1
+    page = await run_tool(ctx, "odoo_search_read", {"model": "sale.order", "limit": 5, "offset": 8})
+    assert page["offset"] == 8 and page["next_offset"] == 9
+    assert "error" in await run_tool(ctx, "odoo_search_read", {"model": "sale.order", "offset": -1})
     await http.aclose()
+
+
+async def test_odoo_queue_has_bounded_wait():
+    import asyncio
+
+    s = settings(odoo_queue_timeout_s=0.01)
+    http = httpx.AsyncClient(transport=fake_odoo_transport())
+    client = OdooClient(OdooConfig("https://x.odoo.com", "db", "u", "good-key"), http, MemoryCache(), s)
+    await client._sem.acquire()
+    try:
+        with pytest.raises(OdooError) as exc:
+            await client.search_count("sale.order", [])
+        assert exc.value.status == 503
+    finally:
+        client._sem.release()
+        await http.aclose()
 
 
 async def test_snapshot_survives_missing_modules():

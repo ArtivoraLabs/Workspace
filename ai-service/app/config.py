@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,12 +14,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     env: str = "dev"
-    cors_origins: str = "*"
+    cors_origins: str = "http://localhost:3000"
     jwt_secret: str = ""
     auth_required: bool = True
     allowed_roles: str = "owner,admin"
     service_api_keys: str = ""
-    rate_limit_per_min: int = 30
+    rate_limit_per_min: int = Field(default=30, ge=0, le=100_000)
     redis_url: str = ""
 
     # Odoo
@@ -31,9 +32,10 @@ class Settings(BaseSettings):
     odoo_allowed_models: str = ""
     odoo_blocked_models: str = ""
     odoo_blocked_fields: str = ""
-    odoo_timeout_s: float = 20.0
-    odoo_max_concurrency_per_host: int = 6
-    max_rows: int = 200
+    odoo_timeout_s: float = Field(default=20.0, gt=0, le=300)
+    odoo_max_concurrency_per_host: int = Field(default=6, ge=1, le=100)
+    odoo_queue_timeout_s: float = Field(default=2.0, gt=0, le=60)
+    max_rows: int = Field(default=200, ge=1, le=1000)
     cache_ttl_schema_s: int = 3600
     cache_ttl_data_s: int = 60
 
@@ -49,13 +51,15 @@ class Settings(BaseSettings):
     auto_min_tier: str = "smart"     # accuracy floor for tier=auto (fast | smart | deep)
     metrics_file: str = ""           # JSON with your own KPI definitions (see README)
     audit_log_file: str = ""         # JSONL of every question / tool call / answer (for accuracy reviews)
-    max_tool_hops: int = 8
-    max_output_tokens: int = 4096
-    tool_timeout_s: float = 45.0
+    max_tool_hops: int = Field(default=8, ge=1, le=20)
+    max_output_tokens: int = Field(default=4096, ge=1, le=32_000)
+    tool_timeout_s: float = Field(default=45.0, gt=0, le=300)
+    max_chat_concurrency: int = Field(default=32, ge=1, le=1000)
+    chat_queue_timeout_s: float = Field(default=0.05, gt=0, le=5)
 
     @property
     def cors_list(self) -> list[str]:
-        return _csv(self.cors_origins) or ["*"]
+        return _csv(self.cors_origins)
 
     @property
     def roles(self) -> set[str]:

@@ -95,6 +95,15 @@ async def test_time_groupby_maps_to_date_field():
     await http.aclose()
 
 
+async def test_metric_group_pagination_keeps_all_record_total():
+    c, http = ctx()
+    r = await run_metric(c, "sales_total", "last_month", groupby="partner_id", limit=1)
+    assert r["records"] == 6 and r["total"] == 8000.0
+    assert r["groups_returned"] == 1 and r["groups_has_more"] is True
+    assert r["groups_next_offset"] == 1
+    await http.aclose()
+
+
 def test_custom_metrics_override(tmp_path):
     f = tmp_path / "m.json"
     f.write_text('[{"key":"sales_total","title":"Sales (invoiced)","definition":"our own","model":"account.move",'

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import uuid
 
 import httpx
@@ -46,8 +47,14 @@ def create_app(settings: Settings | None = None, *, providers: dict | None = Non
         app.state.catalog = load_catalog(settings)
         app.state.metrics = load_metrics(settings.metrics_file)
         app.state.audit = Audit(settings.audit_log_file)
-        if settings.env == "prod" and (settings.cors_list == ["*"] or not settings.jwt_secret):
-            log.warning("PROD with open CORS or empty JWT_SECRET - fix before exposing this service.")
+        app.state.chat_semaphore = asyncio.Semaphore(settings.max_chat_concurrency)
+        if settings.env == "prod":
+            if not settings.cors_list or "*" in settings.cors_list:
+                raise RuntimeError("CORS_ORIGINS must contain an explicit origin in production")
+            if len(settings.jwt_secret) < 32:
+                raise RuntimeError("JWT_SECRET must be at least 32 characters in production")
+            if settings.odoo_allow_client_credentials and not settings.allowed_hosts:
+                raise RuntimeError("ODOO_ALLOWED_HOSTS is required when client credentials are enabled")
         yield
         await app.state.http.aclose()
         await app.state.cache.close()
@@ -55,7 +62,37 @@ def create_app(settings: Settings | None = None, *, providers: dict | None = Non
     app = FastAPI(title="DashView AI Service", version="1.0.0", lifespan=lifespan,
                   docs_url=None if settings.env == "prod" else "/docs", redoc_url=None)
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_list, allow_methods=["GET", "POST"],
-                       allow_headers=["Authorization", "Content-Type", "X-API-Key"])
+                       allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Request-ID"],
+                       expose_headers=["X-Request-ID"])
+
+    @app.middleware("http")
+    async def request_observability(request: Request, call_next):
+        incoming_id = request.headers.get("x-request-id", "")
+        rid = incoming_id if re.fullmatch(r"[A-Za-z0-9._-]{1,64}", incoming_id) else uuid.uuid4().hex
+        request.state.request_id = rid
+        started = time.monotonic()
+
+        def log_completion(status_code: int):
+            log.info("request_complete request_id=%s method=%s path=%s status=%s latency_ms=%d",
+                     rid, request.method, request.url.path, status_code,
+                     round((time.monotonic() - started) * 1000))
+
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = rid
+        if hasattr(response, "body_iterator"):
+            body_iterator = response.body_iterator
+
+            async def observe_body():
+                try:
+                    async for chunk in body_iterator:
+                        yield chunk
+                finally:
+                    log_completion(response.status_code)
+
+            response.body_iterator = observe_body()
+        else:
+            log_completion(response.status_code)
+        return response
 
     @app.exception_handler(OdooError)
     async def odoo_error_handler(request: Request, exc: OdooError):
@@ -111,7 +148,12 @@ def create_app(settings: Settings | None = None, *, providers: dict | None = Non
             raise HTTPException(400, "The last message must be from the user.")
         chain = plan(st.catalog, set(st.providers), st.settings.priority, history[-1]["content"], req.tier, req.model,
                      st.settings.auto_min_tier)
-        rid = uuid.uuid4().hex[:12]
+        rid = request.state.request_id
+        try:
+            await asyncio.wait_for(st.chat_semaphore.acquire(), timeout=st.settings.chat_queue_timeout_s)
+        except TimeoutError:
+            raise HTTPException(503, "The AI service is busy; retry shortly.",
+                                headers={"Retry-After": "1"})
         log.info("chat rid=%s user=%s chain=%s", rid, principal.id, [m.id for m in chain][:3])
         raw_events = stream_agent(history=history, ctx=ctx, chain=chain, providers=st.providers, settings=st.settings)
 
@@ -126,9 +168,9 @@ def create_app(settings: Settings | None = None, *, providers: dict | None = Non
                         tools[ev["id"]]["result"] = ev["summary"]
                     elif ev["type"] == "final":
                         answer, model = ev["text"], ev["model"]
-                        ev = {**ev, "request_id": rid}
                     elif ev["type"] == "error":
                         err = ev["message"]
+                    ev = {**ev, "request_id": rid}
                     yield ev
             finally:
                 await st.audit.record({"kind": "chat", "request_id": rid, "user": principal.id, "question": history[-1]["content"],
@@ -139,15 +181,19 @@ def create_app(settings: Settings | None = None, *, providers: dict | None = Non
 
         if not req.stream:
             tools_used, final, error = [], None, None
-            async for ev in events:
-                if ev["type"] == "tool_start":
-                    tools_used.append(ev["name"])
-                elif ev["type"] == "final":
-                    final = ev
-                elif ev["type"] == "error":
-                    error = ev["message"]
+            try:
+                async for ev in events:
+                    if ev["type"] == "tool_start":
+                        tools_used.append(ev["name"])
+                    elif ev["type"] == "final":
+                        final = ev
+                    elif ev["type"] == "error":
+                        error = ev["message"]
+            finally:
+                st.chat_semaphore.release()
             if final is None:
-                return JSONResponse({"ok": False, "error": error or "No answer produced."}, status_code=502)
+                return JSONResponse({"ok": False, "error": error or "No answer produced.", "request_id": rid},
+                                    status_code=502)
             return {"ok": True, "text": final["text"], "model": final["model"], "provider": final["provider"],
                     "usage": final["usage"], "tools": tools_used, "request_id": final["request_id"]}
 
@@ -159,11 +205,17 @@ def create_app(settings: Settings | None = None, *, providers: dict | None = Non
                 raise
             except Exception:  # noqa: BLE001
                 log.exception("stream failed rid=%s", rid)
-                yield 'event: error\ndata: {"type":"error","message":"Internal error."}\n\n'
-            yield "event: done\ndata: {}\n\n"
+                yield f'event: error\ndata: {json.dumps({"type": "error", "message": "Internal error.", "request_id": rid})}\n\n'
+            finally:
+                try:
+                    await events.aclose()
+                finally:
+                    st.chat_semaphore.release()
+            yield f"event: done\ndata: {json.dumps({'request_id': rid})}\n\n"
 
         return StreamingResponse(sse(), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+                                          "X-Request-ID": rid})
 
     return app
 

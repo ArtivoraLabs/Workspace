@@ -54,14 +54,21 @@ def _compact_rows(rows: list[dict]) -> list[dict]:
 
 def shrink(obj: dict, max_chars: int = MAX_RESULT_CHARS) -> dict:
     """Trim the largest list in a result until it fits the token budget."""
-    text = json.dumps(obj, default=str)
-    if len(text) <= max_chars:
-        return obj
-    for key, val in list(obj.items()):
-        if isinstance(val, list) and len(val) > 1:
-            keep = max(1, int(len(val) * max_chars / len(text) * 0.8))
-            obj = {**obj, key: val[:keep], "truncated": f"showing {keep} of {len(val)} {key}"}
+    truncated: dict[str, int] = {}
+    while True:
+        text = json.dumps(obj, default=str)
+        if len(text) <= max_chars:
             break
+        candidates = [(key, value) for key, value in obj.items()
+                      if isinstance(value, list) and len(value) > 1]
+        if not candidates:
+            break
+        key, values = max(candidates, key=lambda item: len(item[1]))
+        original = truncated.get(key, len(values))
+        keep = max(1, min(len(values) - 1, int(len(values) * max_chars / len(text) * 0.8)))
+        obj = {**obj, key: values[:keep]}
+        truncated[key] = original
+        obj["truncated"] = f"showing {keep} of {original} {key}"
     return obj
 
 
@@ -111,6 +118,7 @@ async def h_search_read(ctx: ToolContext, a: dict) -> dict:
     domain = g.check_domain(a.get("domain"))
     fields = g.check_fields(a.get("fields"))
     limit = g.check_limit(a.get("limit"))
+    offset = g.check_offset(a.get("offset"))
     order = g.check_order(a.get("order"))
     if not fields:  # never pull "all fields": choose scalar, non-sensitive ones
         meta = await ctx.client.fields_get(model)
@@ -118,10 +126,15 @@ async def h_search_read(ctx: ToolContext, a: dict) -> dict:
                   if m.get("type") not in SKIP_FIELD_TYPES and m.get("store", True)
                   and not g.field_sensitive(n)][:25]
     rows, total = await asyncio.gather(
-        ctx.client.search_read(model, domain, fields, limit, order),
+        ctx.client.search_read(model, domain, fields, limit, order, offset),
         ctx.client.search_count(model, domain),
     )
-    return shrink({"model": model, "total_matching": total, "returned": len(rows), "rows": _compact_rows(rows)})
+    result = shrink({"model": model, "total_matching": total, "returned": len(rows), "rows": _compact_rows(rows)})
+    returned = len(result["rows"])
+    has_more = offset + returned < total
+    result.update(offset=offset, limit=limit, has_more=has_more,
+                  next_offset=offset + returned if has_more else None)
+    return result
 
 
 async def h_count(ctx: ToolContext, a: dict) -> dict:
@@ -143,7 +156,9 @@ async def h_aggregate(ctx: ToolContext, a: dict) -> dict:
     measures = g.check_measures(a.get("measures"))
     order = g.check_order(a.get("order"))
     limit = g.check_limit(a.get("limit"), default=20)
-    raw = await ctx.client.read_group(model, domain, measures, groupby, order, limit)
+    offset = g.check_offset(a.get("offset"))
+    summary = (await ctx.client.read_group(model, domain, measures, []) or [{}])[0]
+    raw = await ctx.client.read_group(model, domain, measures, groupby, order, limit + 1, offset)
     groups = []
     for row in raw[:limit]:
         item = {gb: _cell(_pick(row, gb)) for gb in groupby}
@@ -152,7 +167,16 @@ async def h_aggregate(ctx: ToolContext, a: dict) -> dict:
         if "__count" not in item:
             item["count"] = row.get("__count", row.get("count"))
         groups.append(item)
-    return shrink({"model": model, "groupby": groupby, "measures": measures, "groups": groups})
+    totals = {measure: summary.get("__count", summary.get("count", 0)) if measure == "__count"
+              else _pick(summary, measure) for measure in measures}
+    result = shrink({"model": model, "groupby": groupby, "measures": measures,
+                     "records": summary.get("__count", summary.get("count", 0)),
+                     "totals": totals, "groups": groups})
+    returned = len(result["groups"])
+    has_more = len(raw) > limit or returned < len(raw[:limit])
+    result.update(offset=offset, limit=limit, groups_returned=returned, groups_has_more=has_more,
+                  next_offset=offset + returned if has_more else None)
+    return result
 
 
 async def h_get_record(ctx: ToolContext, a: dict) -> dict:
@@ -172,7 +196,7 @@ async def h_get_record(ctx: ToolContext, a: dict) -> dict:
 
 async def h_metric(ctx: ToolContext, a: dict) -> dict:
     return await run_metric(ctx, a.get("metric"), a.get("period"), a.get("start"), a.get("end"),
-                            a.get("groupby"), a.get("limit") or 10)
+                            a.get("groupby"), a.get("limit") or 10, a.get("offset") or 0)
 
 
 async def h_installed_apps(ctx: ToolContext, a: dict) -> dict:
@@ -332,7 +356,7 @@ TOOLS: list[ToolSpec] = [
                  "start": {"type": "string", "description": "Custom range start YYYY-MM-DD (inclusive); use with end."},
                  "end": {"type": "string", "description": "Custom range end YYYY-MM-DD (inclusive)."},
                  "groupby": {"type": "string", "description": "A groupable field of the metric (e.g. partner_id, product_id) or day|week|month|quarter|year for a trend."},
-                 "limit": {"type": "integer", "default": 10}},
+                 "limit": {"type": "integer", "default": 10}, "offset": {"type": "integer", "default": 0}},
               "required": ["metric"]}, h_metric),
     ToolSpec("odoo_installed_apps", "List the installed Odoo apps, so you know which modules exist before querying them.",
              {"type": "object", "properties": {}}, h_installed_apps),
@@ -359,11 +383,13 @@ TOOLS: list[ToolSpec] = [
              {"type": "object", "properties": {"model": {"type": "string"}, "query": {"type": "string", "description": "Optional substring to narrow fields."}},
               "required": ["model"]}, h_get_fields),
     ToolSpec("odoo_search_read",
-             "Read records from a model. Returns total_matching plus up to `limit` rows. Prefer odoo_aggregate for totals/rankings.",
+             "Read a page of records from a model. Returns total_matching, has_more and next_offset with up to `limit` rows. "
+             "Pass next_offset to retrieve the next page. Prefer odoo_aggregate for totals/rankings.",
              {"type": "object", "properties": {
                  "model": {"type": "string"}, "domain": {"type": "array", "description": _DOMAIN_HELP},
                  "fields": {"type": "array", "items": {"type": "string"}}, "limit": {"type": "integer", "default": 25},
-                 "order": {"type": "string", "description": "e.g. 'date_order desc'"}}, "required": ["model"]}, h_search_read),
+                 "order": {"type": "string", "description": "e.g. 'date_order desc'"},
+                 "offset": {"type": "integer", "default": 0}}, "required": ["model"]}, h_search_read),
     ToolSpec("odoo_count", "Count records matching a domain.",
              {"type": "object", "properties": {"model": {"type": "string"}, "domain": {"type": "array", "description": _DOMAIN_HELP}},
               "required": ["model"]}, h_count),
@@ -374,7 +400,8 @@ TOOLS: list[ToolSpec] = [
                  "model": {"type": "string"}, "domain": {"type": "array", "description": _DOMAIN_HELP},
                  "groupby": {"type": "array", "items": {"type": "string"}},
                  "measures": {"type": "array", "items": {"type": "string"}},
-                 "order": {"type": "string", "description": "e.g. 'amount_total desc'"}, "limit": {"type": "integer", "default": 20}},
+                 "order": {"type": "string", "description": "e.g. 'amount_total desc'"},
+                 "limit": {"type": "integer", "default": 20}, "offset": {"type": "integer", "default": 0}},
               "required": ["model", "groupby"]}, h_aggregate),
     ToolSpec("odoo_get_record", "Read one record by id.",
              {"type": "object", "properties": {"model": {"type": "string"}, "id": {"type": "integer"},
