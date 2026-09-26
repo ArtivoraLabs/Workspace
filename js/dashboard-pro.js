@@ -23,45 +23,88 @@
     function initials(name) { return name.split(' ').map(function (p) { return p[0]; }).join('').slice(0, 2).toUpperCase(); }
     function hashColor(name) { var h = 0; for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0; return AVATAR_COLORS[h % AVATAR_COLORS.length]; }
 
-    /* ── Team ─────────────────────────────────────────────────────────────────
-       Same treatment as Projects: persisted to localStorage (dv_team), real
-       CRUD instead of a demo toast, and matching import/export. */
+    /* ── Team: real hr.employee rows while Odoo is connected; local edits are
+       explicitly isolated in this browser and never presented as live data. */
     var TEAM_KEY = 'dv_team';
     function saveTeam(list) { try { localStorage.setItem(TEAM_KEY, JSON.stringify(list)); } catch (e) { toast('Could not save — local storage may be full.'); } }
-    function seedTeam() {
-      var seed = [
-        { name: 'Amara Khan', role: 'Founder & Admin', status: 'online', projects: 8, email: '' },
-        { name: 'Daniyal Raza', role: 'Engineering Lead', status: 'online', projects: 5, email: '' },
-        { name: 'Sara Ahmed', role: 'Product Manager', status: 'away', projects: 4, email: '' },
-        { name: 'Bilal Hussain', role: 'DevOps Engineer', status: 'online', projects: 3, email: '' },
-        { name: 'Zara Farooq', role: 'UI/UX Designer', status: 'offline', projects: 2, email: '' },
-        { name: 'Hamza Tariq', role: 'Data Engineer', status: 'online', projects: 3, email: '' },
-        { name: 'Mahnoor Iqbal', role: 'QA Engineer', status: 'away', projects: 4, email: '' },
-        { name: 'Omer Sheikh', role: 'Customer Success', status: 'online', projects: 1, email: '' }
-      ];
-      seed.forEach(function (m, i) { m.id = 't_' + i + '_' + Date.now().toString(36); });
-      saveTeam(seed);
-      return seed;
-    }
     function loadTeam() {
-      try { var raw = JSON.parse(localStorage.getItem(TEAM_KEY)); if (raw && raw.length) return raw; } catch (e) {}
-      return seedTeam();
+      try { var raw = JSON.parse(localStorage.getItem(TEAM_KEY)); if (Array.isArray(raw)) return raw; } catch (e) {}
+      return [];
     }
     var TEAM = loadTeam();
+    var ODOO_TEAM = [], teamLoading = false, teamError = '', teamLoadedAt = null;
     var editingTeamId = null;
 
+    function teamIsLive() { return !!(window.DVOdoo && window.DVOdoo.isConnected && window.DVOdoo.isConnected()); }
+    function displayedTeam() { return teamIsLive() ? ODOO_TEAM : TEAM; }
+    function loadOdooTeam() {
+      if (!teamIsLive()) { teamError = ''; teamLoading = false; renderTeam(); return; }
+      if (!window.AL_API || !window.AL_API.isConnected()) {
+        teamError = 'Sign in to DashView to read employees through the authenticated Node API.';
+        teamLoading = false; renderTeam(); return;
+      }
+      teamLoading = true; teamError = ''; renderTeam();
+      window.AL_API.odooRecords(window.DVOdoo.getConfig(), 'hr.employee', {
+        domain: [['active', '=', true]],
+        fields: ['id', 'name', 'job_title', 'department_id', 'user_id', 'active'],
+        limit: 200, order: 'name asc'
+      }).then(function (result) {
+        ODOO_TEAM = (result.rows || []).map(function (employee) {
+          return {
+            id: Number(employee.id), name: employee.name || 'Unnamed employee',
+            role: employee.job_title || '', dept: Array.isArray(employee.department_id) ? employee.department_id[1] : '',
+            userId: Array.isArray(employee.user_id) ? Number(employee.user_id[0]) : null,
+            status: 'offline', projects: null
+          };
+        });
+        teamLoadedAt = Date.now(); teamLoading = false; teamError = ''; renderTeam();
+      }).catch(function (error) {
+        teamLoading = false;
+        teamError = /401|not authenticated|expired/i.test(String(error && error.message))
+          ? 'Sign in to DashView to read employees through the authenticated Node API.'
+          : (/403|permission|access|rights/i.test(String(error && error.message))
+            ? 'The DashView account or Odoo user cannot read hr.employee.'
+            : 'Could not load live employees from Odoo. Check the connection and retry.');
+        ODOO_TEAM = [];
+        renderTeam();
+      });
+    }
+
     function renderTeam() {
-      var canEdit = can('manageTeam');
-      byId('teamGrid').innerHTML = TEAM.map(function (m) {
+      var live = teamIsLive(), rows = displayedTeam();
+      var canEdit = !live && can('manageTeam');
+      var note = byId('teamSourceNote');
+      if (note) note.textContent = live
+        ? (teamLoading ? 'Loading live employees from Odoo through the authenticated DashView API…'
+          : teamError ? 'Odoo · live source unavailable. ' + teamError
+            : 'Live Odoo · hr.employee · read-only' + (teamLoadedAt ? ' · refreshed ' + new Date(teamLoadedAt).toLocaleTimeString() : ''))
+        : 'Local-only team data · saved in this browser and not synced to Odoo.';
+      var importButton = byId('teamImportBtn'), exportWrap = byId('teamExportBtn'), inviteButton = byId('inviteTeamBtn');
+      if (importButton) importButton.hidden = live;
+      if (exportWrap && exportWrap.parentElement) exportWrap.parentElement.hidden = live;
+      if (inviteButton) inviteButton.hidden = live;
+      if (teamLoading) {
+        byId('teamGrid').innerHTML = '<div class="tk-empty"><h3>Loading live employees…</h3><p>Reading the hr.employee directory from Odoo.</p></div>';
+      } else if (teamError) {
+        byId('teamGrid').innerHTML = '<div class="tk-empty"><h3>Live team unavailable</h3><p>' + esc(teamError) + '</p><button type="button" class="btn btn-outline btn-sm" id="teamRetry">Retry</button></div>';
+      } else if (!rows.length) {
+        byId('teamGrid').innerHTML = '<div class="tk-empty"><h3>' + (live ? 'No active Odoo employees' : 'No local team members') + '</h3><p>' +
+          (live ? 'Odoo returned no active hr.employee records.' : 'Add members here for local-only planning, or connect Odoo to view its employee directory.') + '</p></div>';
+      } else byId('teamGrid').innerHTML = rows.map(function (m) {
+        var meta = live ? [m.role, m.dept].filter(Boolean).join(' · ') || 'Odoo employee'
+          : m.projects + ' project' + (m.projects === 1 ? '' : 's');
         return '<div class="team-card">'
-          + '<div class="team-avatar-wrap"><div class="team-avatar" style="background:' + hashColor(m.name) + '">' + initials(m.name) + '</div><span class="team-status-dot ' + m.status + '"></span></div>'
-          + '<div style="flex:1;min-width:0;"><p class="team-card-name">' + esc(m.name) + '</p><p class="team-card-role">' + esc(m.role) + '</p><p class="team-card-meta">' + m.projects + ' project' + (m.projects === 1 ? '' : 's') + '</p></div>'
-          + (canEdit ? '<span class="project-card-actions"><button type="button" class="dv-widget-icon-btn" data-edit-team="' + m.id + '" title="Edit" aria-label="Edit team member"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button><button type="button" class="dv-widget-icon-btn danger" data-delete-team="' + m.id + '" title="Remove" aria-label="Remove team member"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></span>' : '')
+          + '<div class="team-avatar-wrap"><div class="team-avatar" style="background:' + hashColor(m.name) + '">' + initials(m.name) + '</div>' + (!live ? '<span class="team-status-dot ' + esc(m.status) + '"></span>' : '') + '</div>'
+          + '<div style="flex:1;min-width:0;"><p class="team-card-name">' + esc(m.name) + '</p><p class="team-card-role">' + esc(m.role || '') + '</p><p class="team-card-meta">' + esc(meta) + '</p></div>'
+          + (canEdit ? '<span class="project-card-actions"><button type="button" class="dv-widget-icon-btn" data-edit-team="' + esc(m.id) + '" title="Edit" aria-label="Edit team member"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 0L7 19l-4 1 1-4Z"/></svg></button><button type="button" class="dv-widget-icon-btn danger" data-delete-team="' + esc(m.id) + '" title="Remove" aria-label="Remove team member"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button></span>' : '')
           + '</div>';
       }).join('');
-      if (byId('teamSubhead')) byId('teamSubhead').textContent = TEAM.length + ' member' + (TEAM.length === 1 ? '' : 's') + ' in acme-corp';
+      if (byId('teamSubhead')) byId('teamSubhead').textContent = live
+        ? rows.length + ' active Odoo employee' + (rows.length === 1 ? '' : 's')
+        : rows.length + ' local member' + (rows.length === 1 ? '' : 's');
+      if (byId('teamRetry')) byId('teamRetry').addEventListener('click', loadOdooTeam);
       byId('teamGrid').querySelectorAll('[data-edit-team]').forEach(function (b) {
-        b.addEventListener('click', function (e) { e.stopPropagation(); openTeamModal(TEAM.filter(function (m) { return m.id === b.getAttribute('data-edit-team'); })[0]); });
+        b.addEventListener('click', function (e) { e.stopPropagation(); openTeamModal(TEAM.filter(function (m) { return String(m.id) === b.getAttribute('data-edit-team'); })[0]); });
       });
       byId('teamGrid').querySelectorAll('[data-delete-team]').forEach(function (b) {
         b.addEventListener('click', function (e) {
@@ -76,8 +119,13 @@
       });
     }
     renderTeam();
+    document.querySelectorAll('[data-view="team"]').forEach(function (link) { link.addEventListener('click', loadOdooTeam); });
+    document.addEventListener('dv:odoo-config-saved', loadOdooTeam);
+    document.addEventListener('dv:odoo-disconnected', renderTeam);
+    document.addEventListener('dv:session-changed', loadOdooTeam);
 
     function openTeamModal(member) {
+      if (teamIsLive()) { toast('The connected Odoo employee directory is read-only here.'); return; }
       if (!can('manageTeam')) { toast('You do not have permission to manage the team.'); return; }
       editingTeamId = member ? member.id : null;
       byId('teamModalTitle').textContent = member ? 'Edit member' : 'Invite a member';
@@ -90,6 +138,7 @@
     }
     function closeTeamModal() { byId('teamModal').classList.remove('open'); }
     function saveTeamFromModal() {
+      if (teamIsLive()) { toast('Local team editing is disabled while the live Odoo directory is active.'); return; }
       var name = byId('teamNameInput').value.trim();
       if (!name) { toast('Give the member a name.'); return; }
       var fields = {
@@ -151,7 +200,12 @@
         .concat(candidates.map(function (c) { return [c.name, c.role, c.stage, c.source, c.days]; }));
       if (F) F.download(filename, F.csv(rows));
       else {
-        var csv = rows.map(function (r) { return r.map(function (c) { var v = String(c == null ? '' : c); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\n');
+        var csv = rows.map(function (r) { return r.map(function (c) {
+          var v = String(c == null ? '' : c);
+          var negativeNumber = /^\s*-\d+(?:\.\d*)?(?:[eE][+-]?\d+)?\s*$/.test(v) || /^\s*-\.\d+(?:[eE][+-]?\d+)?\s*$/.test(v);
+          if (/^\s*[=+@\t\r]/.test(v) || (/^\s*-/.test(v) && !negativeNumber)) v = "'" + v;
+          return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+        }).join(','); }).join('\r\n');
         var url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
         var a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
       }
@@ -162,8 +216,14 @@
       if (!window.XLSX) { toast('Excel export library did not load.'); return; }
       var orders = (window.DASHVIEW_OV && window.DASHVIEW_OV.ORDERS) || [];
       if (!orders.length) { toast('Connect Odoo first — nothing to export yet.'); return; }
+      var safe = window.DVFmt && window.DVFmt.safeSpreadsheetValue || function (v) {
+        if (typeof v === 'number') return v;
+        var text = String(v == null ? '' : v);
+        var negativeNumber = /^\s*-\d+(?:\.\d*)?(?:[eE][+-]?\d+)?\s*$/.test(text) || /^\s*-\.\d+(?:[eE][+-]?\d+)?\s*$/.test(text);
+        return /^\s*[=+@\t\r]/.test(text) || (/^\s*-/.test(text) && !negativeNumber) ? "'" + text : text;
+      };
       var ws = XLSX.utils.json_to_sheet(orders.map(function (o) {
-        return { Order: o.id, Customer: o.customer, Status: o.state, Revenue: o.revenue, Date: o.date };
+        return { Order: safe(o.id), Customer: safe(o.customer), Status: safe(o.state), Revenue: safe(o.revenue), Date: safe(o.date) };
       }));
       var wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, (sheetName || 'Orders').slice(0, 31));
@@ -171,8 +231,14 @@
     }
     function exportTeamXLSX() {
       if (!window.XLSX) { toast('Excel export library did not load.'); return; }
+      var safe = window.DVFmt && window.DVFmt.safeSpreadsheetValue || function (v) {
+        if (typeof v === 'number') return v;
+        var text = String(v == null ? '' : v);
+        var negativeNumber = /^\s*-\d+(?:\.\d*)?(?:[eE][+-]?\d+)?\s*$/.test(text) || /^\s*-\.\d+(?:[eE][+-]?\d+)?\s*$/.test(text);
+        return /^\s*[=+@\t\r]/.test(text) || (/^\s*-/.test(text) && !negativeNumber) ? "'" + text : text;
+      };
       var ws = XLSX.utils.json_to_sheet(TEAM.map(function (m) {
-        return { Name: m.name, Role: m.role, Status: m.status, Projects: m.projects, Email: m.email || '' };
+        return { Name: safe(m.name), Role: safe(m.role), Status: safe(m.status), Projects: safe(m.projects), Email: safe(m.email || '') };
       }));
       ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 12 }, { wch: 10 }, { wch: 26 }];
       var wb = XLSX.utils.book_new();

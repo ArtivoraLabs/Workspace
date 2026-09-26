@@ -114,6 +114,9 @@
 .tk-actions { white-space: nowrap; text-align: right; } .tk-icon { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink-70); cursor: pointer; margin-left: 4px; } .tk-icon:hover { border-color: var(--signal); color: var(--signal-bright); } .tk-icon.danger:hover { color: var(--danger); border-color: var(--danger); }
 .tk-err { min-height: 18px; margin: 8px 0 0; color: var(--danger); font-size: 12.5px; }
 .tk-modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); } .tk-modal-actions { display: flex; gap: 10px; margin-top: var(--sp-5); } .tk-modal-actions .btn-primary { flex: 1; }
+.tk-source-info { margin: -5px 0 12px; color: var(--ink-50); font-size: 12px; }
+.tk-page { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 14px 0; color: var(--ink-50); font-size: 12px; }
+.team-source-note { margin: -4px 0 14px; color: var(--ink-50); font-size: 12px; }
 @media (max-width: 900px) { .tk-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* -- Fixes found in browser testing --------------------------------------------- */
@@ -121,3 +124,64 @@
 .dash-main [hidden] { display: none !important; }
 #odooLiveInsights { display: grid; gap: 14px; }
 #ovBanner, #auditBanner, #odooLiveConnectBanner { margin-bottom: 16px; }
+
+/* Odoo connection status and accessible operation feedback */
+#odooLiveStatus.is-disconnected { color: var(--ink-50); }
+#odooLiveStatus.is-connecting .dot { background: var(--signal); animation: olxStatusBlink 1s ease-in-out infinite alternate; }
+@keyframes olxStatusBlink { to { opacity: .3; } }
+#odooLiveConnectBanner { background: var(--danger-10); border-color: var(--danger-10); }
+#odooLiveConnectBanner[hidden] { display: none !important; }
+#odooLiveConnectBanner p { overflow-wrap: anywhere; }
+.odoo-live-checkpoints { margin-bottom: 14px; }
+.odoo-action-feedback {
+  margin: 12px 0; padding: 12px 14px; border-radius: var(--r-md);
+  border: 1px solid var(--line-strong); background: var(--paper-soft); color: var(--ink-70);
+  font-size: var(--fs-sm); overflow-wrap: anywhere;
+}
+.odoo-action-feedback[data-state="success"] { border-color: rgba(79,180,119,.38); color: #4fb477; }
+.odoo-action-feedback[data-state="error"] { border-color: var(--danger-10); background: var(--danger-10); color: var(--danger); }
+.odoo-action-feedback[hidden] { display: none !important; }
+.stg-status-pill.is-connecting::before { background: var(--signal); animation: olxStatusBlink 1s ease-in-out infinite alternate; }
+#view-odoo-live button:focus-visible,
+#view-odoo-live select:focus-visible,
+#view-odoo-live input:focus-visible,
+#stg-odoo input:focus-visible {
+  outline: 3px solid var(--signal);
+  outline-offset: 2px;
+}
+#view-odoo-live button:disabled { cursor: not-allowed; opacity: .58; }
+#view-odoo-live .table-wrap:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
+
+@media (max-width: 760px) {
+  #view-odoo-live > .ov-head { align-items: flex-start; }
+  #view-odoo-live > .ov-head .ov-head-actions { width: 100%; }
+  #view-odoo-live > .ov-head .ov-head-actions > * { flex: 1 1 auto; }
+  .olx-select-bar { align-items: stretch; }
+  .olx-model { min-width: min(100%, 240px); max-width: none; width: 100%; }
+  .olx-crumb { width: 100%; }
+  #odooLiveTabs { width: 100%; }
+  #odooLiveTabs button { flex: 1; min-height: 42px; }
+  .odoo-live-filterbar > * { min-width: 0; }
+  .odoo-live-filterbar .pro-select { flex: 1 1 145px; }
+  .odoo-live-filterbar .data-search { flex: 1 1 100%; min-width: 100%; margin-left: 0 !important; }
+  .odoo-live-pop, .odoo-live-pop--wide { position: fixed; top: auto; left: 12px; right: 12px; bottom: 12px; z-index: 100; width: auto; max-height: min(70vh, 520px); overflow: auto; }
+  .odoo-live-exec-row { grid-template-columns: minmax(90px, 1fr) 2fr 72px; gap: 8px; }
+  .odoo-live-exec-row .exec-label { white-space: normal; overflow-wrap: anywhere; }
+}
+@media (max-width: 480px) {
+  #odooLiveConnectBanner { align-items: stretch; }
+  #odooLiveConnectBanner .btn { justify-content: center; width: 100%; }
+  .olx-kpis { grid-template-columns: 1fr; gap: 8px; }
+  .olx-kpi { padding: 12px; }
+  .odoo-live-exec-row { grid-template-columns: 1fr auto; }
+  .odoo-live-exec-row .exec-bar-track { grid-column: 1 / -1; grid-row: 2; }
+  .odoo-live-exec-row .exec-value { grid-column: 2; grid-row: 1; }
+  .odoo-live-pagination { align-items: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #odooLiveStatus.is-live .dot,
+  #odooLiveStatus.is-connecting .dot,
+  .stg-status-pill.is-connecting::before,
+  .olx-refresh.is-spinning svg,
+  .odoo-live-pop { animation: none !important; }
+}

@@ -53,3 +53,29 @@
   .hr-toolbar input.hr-field { min-width: 0; flex: 1 1 100%; }
   .hr-table td { padding: 11px 10px; }
 }
+
+/* The People source is always visible so sample, live, locked and failed
+   states cannot be mistaken for the same directory. */
+.ppl-source-banner {
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--card);
+  border-color: var(--card-line);
+  color: var(--ink-70);
+}
+.ppl-source-banner p { margin: 0; line-height: 1.5; }
+.ppl-source-banner[data-source-state="error"],
+.ppl-source-banner[data-source-state="setup"] { border-color: var(--danger); }
+.ppl-source-banner[data-source-state="loading"],
+.ppl-source-banner[data-source-state="refreshing"] { border-color: var(--signal); }
+.ppl-source-actions { display: flex; flex: none; gap: 8px; flex-wrap: wrap; }
+.ppl-source-actions [hidden] { display: none; }
+.ppl-source-banner .hr-btn { white-space: nowrap; text-decoration: none; }
+.odoo-live-status.is-loading .dot { background: var(--signal); }
+.odoo-live-status.is-loading { border-color: var(--signal-10); }
+
+@media (max-width: 760px) {
+  .ppl-source-banner { align-items: flex-start; flex-direction: column; }
+  .ppl-source-actions { width: 100%; }
+}

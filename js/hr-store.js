@@ -174,9 +174,26 @@
     };
   }
 
+  function copyRows(rows) {
+    return rows.map(function (row) { return Object.assign({}, row); });
+  }
+  function clearLiveDeviceAssignments() {
+    if (!state || !state.devices) return;
+    state.devices.forEach(function (device) {
+      if (/^o\d+$/.test(String(device.assigned || ''))) {
+        device.assigned = null;
+        device.status = 'In stock';
+      }
+    });
+  }
+
   /* ── Persistence ──────────────────────────────────────────────────────── */
   var state = null;
   var listeners = [];
+  var peopleSource = {
+    status: 'demo', employeeStatus: 'demo', candidateStatus: 'demo',
+    lastSynced: null, employeeError: '', candidateError: ''
+  };
 
   function load() {
     var base = defaults();
@@ -185,16 +202,56 @@
       if (!raw) return base;
       var saved = JSON.parse(raw);
       if (!saved || saved.v !== base.v) return base;
+      var scrubbed = false;
       // Shallow-merge so a newer seed key (added in a later build) still
       // appears for someone carrying an older saved workspace.
       Object.keys(saved).forEach(function (k) { base[k] = saved[k]; });
+      /* Older builds persisted live Odoo rows. Do not restore those PII-bearing
+         records from a browser profile; live records are session-only now. */
+      if ((base.team || []).some(function (e) { return /^o\d+$/.test(String(e.id)); })) {
+        base.team = copyRows(TEAM);
+        scrubbed = true;
+      }
+      if ((base.candidates || []).some(function (c) { return /^oc\d+$/.test(String(c.id)); })) {
+        base.candidates = copyRows(CANDIDATES);
+        scrubbed = true;
+      }
+      (base.devices || []).forEach(function (device) {
+        if (/^o\d+$/.test(String(device.assigned || ''))) {
+          device.assigned = null;
+          device.status = 'In stock';
+          scrubbed = true;
+        }
+      });
+      if (base._liveProjectCount != null || base._liveHasPay != null) scrubbed = true;
+      delete base._liveProjectCount;
+      delete base._liveHasPay;
       if (!base.workLog || !Object.keys(base.workLog).length) base.workLog = seedWorkLog();
+      if (scrubbed) {
+        try { localStorage.setItem(KEY, JSON.stringify(base)); } catch (e) {}
+      }
       return base;
     } catch (e) { return base; }
   }
 
   function persist() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    try {
+      var saved = JSON.parse(JSON.stringify(state));
+      if (peopleSource.status !== 'demo') {
+        saved.team = copyRows(TEAM);
+        saved.candidates = copyRows(CANDIDATES);
+        saved.spotlightId = 'e1';
+        saved.devices = saved.devices.map(function (device) {
+          if (/^o\d+$/.test(String(device.assigned || ''))) {
+            return Object.assign({}, device, { assigned: null, status: 'In stock' });
+          }
+          return device;
+        });
+        delete saved._liveProjectCount;
+        delete saved._liveHasPay;
+      }
+      localStorage.setItem(KEY, JSON.stringify(saved));
+    } catch (e) {}
   }
 
   function emit(reason) {
@@ -216,9 +273,66 @@
       return s;
     },
 
+    peopleSource: function () {
+      return Object.assign({}, peopleSource);
+    },
+    setPeopleData: function (status, data) {
+      data = data || {};
+      peopleSource = {
+        status: status,
+        employeeStatus: data.employeeStatus || status,
+        candidateStatus: data.candidateStatus || status,
+        lastSynced: data.clearLastSynced || status === 'demo' || status === 'setup' || status === 'locked' || status === 'loading'
+          ? null
+          : data.lastSynced || (status === 'live' || status === 'partial'
+            ? new Date().toISOString() : peopleSource.lastSynced),
+        employeeError: data.employeeError || '',
+        candidateError: data.candidateError || '',
+        error: data.error || data.employeeError || data.candidateError || ''
+      };
+      if (status === 'demo') {
+        state.team = copyRows(TEAM);
+        state.candidates = copyRows(CANDIDATES);
+        state.spotlightId = 'e1';
+        delete state._liveProjectCount;
+      } else if (status === 'refreshing') {
+        // Keep the last successful in-memory snapshot visible while refreshing.
+      } else {
+        state.team = copyRows(data.team || []);
+        state.candidates = copyRows(data.candidates || []);
+        if (!state.team.some(function (e) { return e.id === state.spotlightId; })) {
+          state.spotlightId = state.team[0] ? state.team[0].id : null;
+        }
+        if (typeof data.projectCount === 'number') state._liveProjectCount = data.projectCount;
+        else delete state._liveProjectCount;
+      }
+      if (status !== 'demo' && status !== 'refreshing' &&
+          !(status === 'live' || status === 'partial' && data.employeeStatus === 'live')) {
+        clearLiveDeviceAssignments();
+      }
+      emit('people-data');
+      return state;
+    },
+
     reset: function () {
+      var sourceStatus = peopleSource.status;
+      var liveTeam = state && state.team, liveCandidates = state && state.candidates;
       try { localStorage.removeItem(KEY); } catch (e) {}
       state = defaults();
+      if (sourceStatus === 'live' || sourceStatus === 'partial' || sourceStatus === 'refreshing') {
+        state.team = liveTeam || [];
+        state.candidates = liveCandidates || [];
+        state.spotlightId = state.team[0] ? state.team[0].id : null;
+      } else if (sourceStatus !== 'demo') {
+        state.team = [];
+        state.candidates = [];
+        state.spotlightId = null;
+      } else {
+        peopleSource = {
+          status: 'demo', employeeStatus: 'demo', candidateStatus: 'demo',
+          lastSynced: null, employeeError: '', candidateError: ''
+        };
+      }
       persist();
       emit('reset');
       return state;
@@ -343,19 +457,32 @@
     },
 
     /* ── Derived headline stats ───────────────────────────────────────────
-       Real counts from whatever's currently loaded — the seeded demo team
-       when Odoo isn't connected, or the live hr.employee/hr.applicant sync
-       once it is (see js/people-odoo-live.js). "Projects" comes from a
-       best-effort live project.project count; falls back to the tracked
-       candidate pipeline size when Project isn't installed / not synced. */
+       Counts are omitted while a configured Odoo connection is loading or
+       unavailable; sample counts are used only in explicitly labeled demo
+       mode. */
     stats: function () {
       var s = this.get();
-      var active = s.team.filter(function (e) { return e.status !== 'Offboarded'; }).length;
+      var source = peopleSource.status;
+      if (source !== 'demo' && source !== 'live' && source !== 'refreshing') {
+        if (source === 'partial') {
+          var partialSource = peopleSource;
+          return {
+            employees: partialSource.employeeStatus === 'live'
+              ? s.team.filter(function (e) { return e.status === 'Active'; }).length : null,
+            hirings: partialSource.candidateStatus === 'live'
+              ? s.candidates.filter(function (c) { return c.stage !== 'Hired'; }).length : null,
+            projects: (typeof s._liveProjectCount === 'number') ? s._liveProjectCount : null
+          };
+        }
+        return { employees: null, hirings: null, projects: null };
+      }
+      var active = s.team.filter(function (e) { return e.status === 'Active'; }).length;
       var open = s.candidates.filter(function (c) { return c.stage !== 'Hired'; }).length;
       return {
         employees: active,
         hirings: open,
-        projects: (typeof s._liveProjectCount === 'number') ? s._liveProjectCount : s.candidates.length
+        projects: (typeof s._liveProjectCount === 'number') ? s._liveProjectCount :
+          (source === 'demo' ? s.candidates.length : null)
       };
     },
 

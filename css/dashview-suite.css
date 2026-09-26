@@ -15,17 +15,23 @@
 .dv-signin-banner p { font-size: var(--fs-xs); color: var(--ink-70); margin: 0; }
 .dv-signin-banner p b { color: var(--ink); }
 
-/* ── Demo role picker (auth modal) ──────────────────────────────────────── */
-.dv-demo-role-row { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-5); }
-.dv-demo-role-btn {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px;
-  background: var(--paper-soft); border: 1px solid var(--line); color: var(--ink-70);
-  font-size: var(--fs-xs); font-weight: 700; padding: 10px 8px; border-radius: var(--r-sm);
-  cursor: pointer; transition: border-color var(--t-fast), color var(--t-fast);
-}
-.dv-demo-role-btn:hover { border-color: var(--line-strong); color: var(--ink); }
 .dv-role-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dv-role-pill { font-size: 10px; font-weight: 700; border: 1px solid; border-radius: var(--r-full); padding: 1px 7px; }
+.dv-users-modal-card,.dv-password-modal-card { width: min(560px, calc(100vw - 28px)); max-height: min(88vh, 820px); overflow: auto; }
+.dv-users-modal-card h3,.dv-password-modal-card h3 { margin-bottom: 8px; }
+.dv-users-modal-card > p:not(.eyebrow) { color: var(--ink-50); font-size: var(--fs-xs); line-height: 1.55; margin-bottom: var(--sp-4); }
+.dv-users-list { display: grid; gap: 8px; margin: var(--sp-4) 0; }
+.dv-user-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; background: var(--paper-soft); border: 1px solid var(--line); border-radius: var(--r-sm); }
+.dv-user-row strong,.dv-user-row small { display: block; }
+.dv-user-row strong { font-size: var(--fs-xs); }
+.dv-user-row small { color: var(--ink-50); font-size: 11px; overflow-wrap: anywhere; }
+.dv-create-user-form,.dv-password-modal-card form { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: var(--sp-4); }
+.dv-create-user-form h4 { margin-bottom: 4px; }
+.dv-create-user-form label,.dv-password-modal-card label { font-size: var(--fs-xs); font-weight: 600; color: var(--ink-70); }
+.dv-create-user-form input,.dv-create-user-form select,.dv-password-modal-card input { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); color: var(--ink); background: var(--paper); font: inherit; }
+.dv-create-user-form input:focus,.dv-create-user-form select:focus,.dv-password-modal-card input:focus { outline: 2px solid var(--signal); outline-offset: 1px; }
+.dv-create-user-form .settings-note,.dv-password-modal-card .settings-note { font-size: 11px; line-height: 1.5; }
+.formula-error[role="status"] { color: var(--danger,#c7402a); font-size: var(--fs-xs); }
 
 /* ── Account dropdown menu ──────────────────────────────────────────────── */
 .dv-account-menu {

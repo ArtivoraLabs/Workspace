@@ -128,7 +128,19 @@
   }
   function isoDaysAgo(n) { var d = new Date(Date.now() - n * 864e5); return d.toISOString().slice(0, 19).replace('T', ' '); }
   function csv(rows) {
-    return rows.map(function (r) { return r.map(function (c) { var v = String(c == null ? '' : c); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','); }).join('\n');
+    return rows.map(function (r) { return r.map(function (c) {
+      var v = String(c == null ? '' : c);
+      v = safeSpreadsheetValue(v);
+      return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }).join(','); }).join('\r\n');
+  }
+  function safeSpreadsheetValue(value) {
+    if (typeof value === 'number') return value;
+    var v = String(value == null ? '' : value);
+    var negativeNumber = /^\s*-\d+(?:\.\d*)?(?:[eE][+-]?\d+)?\s*$/.test(v) ||
+      /^\s*-\.\d+(?:[eE][+-]?\d+)?\s*$/.test(v);
+    if (/^\s*[=+@\t\r]/.test(v) || (/^\s*-/.test(v) && !negativeNumber)) return "'" + v;
+    return v;
   }
   function download(name, text) {
     var url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
@@ -162,5 +174,5 @@
   api.currency().then(function (c) { cur = c; }, function () {});
   ['dv:unlocked', 'dv:odoo-config-saved'].forEach(function (ev) { document.addEventListener(ev, function () { memo = {}; api.currency().then(function (c) { cur = c; }); }); });
 
-  window.DVFmt = { esc: esc, num: num, money: money, stripHtml: stripHtml, when: when, isoDaysAgo: isoDaysAgo, csv: csv, download: download, PALETTE: PALETTE, chart: chart, theme: theme, resizeCharts: resizeCharts, getChart: getChart, setCurrency: function (c) { cur = c; } };
+  window.DVFmt = { esc: esc, num: num, money: money, stripHtml: stripHtml, when: when, isoDaysAgo: isoDaysAgo, csv: csv, safeSpreadsheetValue: safeSpreadsheetValue, download: download, PALETTE: PALETTE, chart: chart, theme: theme, resizeCharts: resizeCharts, getChart: getChart, setCurrency: function (c) { cur = c; } };
 })();

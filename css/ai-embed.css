@@ -136,6 +136,41 @@
 .ai-embed-content .ai-kpi-delta.up{color:#3f9b5f;opacity:1}
 .ai-embed-content .ai-kpi-delta.down{color:#c8503c;opacity:1}
 .ai-embed-content .ai-chart-value { flex: 0 0 auto; font-family: var(--f-mono); font-size: 11px; font-weight: 600; color: var(--ink); min-width: 50px; text-align: right; }
+.ai-embed-content .ai-dashboard-artifact{margin:16px 0;padding:18px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--paper);color:var(--ink)}
+.ai-embed-content .ai-dashboard-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.ai-embed-content .ai-dashboard-head h2{font:700 1.2rem var(--f-display);margin:0 0 5px}
+.ai-embed-content .ai-dashboard-meta,.ai-embed-content .ai-dashboard-notes{font-size:.78rem;line-height:1.55;color:var(--ink-70);overflow-wrap:anywhere}
+.ai-embed-content .ai-dashboard-actions{display:flex;gap:7px;flex-wrap:wrap}
+.ai-embed-content .ai-dashboard-actions button{padding:7px 10px;border:1px solid var(--line);border-radius:var(--r-full);color:var(--ink);font-size:.75rem}
+.ai-embed-content .ai-dashboard-metric{padding:12px 0;border-top:1px solid var(--line)}
+.ai-embed-content .ai-dashboard-metric h3{font:600 .94rem var(--f-display);margin:0 0 10px}
+.ai-embed-content .ai-dashboard-bars{display:grid;gap:8px;margin:0 0 12px}
+.ai-embed-content .ai-dashboard-bar-row{display:grid;grid-template-columns:minmax(90px,1fr) minmax(90px,2fr) minmax(55px,auto);align-items:center;gap:8px;font-size:.78rem}
+.ai-embed-content .ai-dashboard-bar-label{overflow-wrap:anywhere}
+.ai-embed-content .ai-dashboard-bar-track{height:11px;border-radius:var(--r-full);background:var(--signal-10);overflow:hidden}
+.ai-embed-content .ai-dashboard-bar-fill{display:block;height:100%;border-radius:inherit;background:linear-gradient(120deg,var(--signal),var(--signal-bright))}
+.ai-embed-content .ai-dashboard-line{display:block;width:100%;max-height:220px;margin:8px 0 14px;overflow:visible;color:var(--ink)}
+.ai-embed-content .ai-dashboard-line line{stroke:var(--line);stroke-width:1}
+.ai-embed-content .ai-dashboard-line path{fill:none;stroke:var(--signal);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.ai-embed-content .ai-dashboard-line circle{fill:var(--signal)}
+.ai-embed-content .ai-dashboard-line text{fill:currentColor;font:11px var(--f-body)}
+.ai-embed-content .ai-dashboard-table{width:100%;border-collapse:collapse;font-size:.74rem;margin:8px 0}
+.ai-embed-content .ai-dashboard-table th,.ai-embed-content .ai-dashboard-table td{text-align:left;border:1px solid var(--line);padding:6px 8px}
+.ai-embed-content .ai-dashboard-table th{background:var(--signal-10)}
+.ai-embed-content .ai-dashboard-notes{margin-top:12px}
+.ai-embed-content .ai-dashboard-notes h3{font:600 .82rem var(--f-display);color:var(--ink);margin:9px 0 4px}
+.ai-embed-content .ai-dashboard-readout{white-space:pre-wrap;font-size:.8rem;line-height:1.6;color:var(--ink-70)}
+@media print{
+  @page{size:A4;margin:14mm}
+  body.ai-dashboard-printing,body.ai-dashboard-printing *{visibility:hidden!important}
+  body.ai-dashboard-printing .ai-dashboard-artifact,body.ai-dashboard-printing .ai-dashboard-artifact *{visibility:visible!important}
+  body.ai-dashboard-printing .ai-dashboard-artifact{position:absolute;left:0;top:0;width:100%;padding:0;border:0;background:#fff!important;color:#1c2321!important}
+  body.ai-dashboard-printing #view-ai,body.ai-dashboard-printing .main-content,body.ai-dashboard-printing .ai-embed,body.ai-dashboard-printing .ai-embed-messages{display:block!important;position:static!important;height:auto!important;max-height:none!important;overflow:visible!important}
+  body.ai-dashboard-printing .ai-dashboard-actions{display:none!important}
+  body.ai-dashboard-printing .ai-dashboard-meta,body.ai-dashboard-printing .ai-dashboard-notes{color:#46504b!important}
+  body.ai-dashboard-printing .ai-dashboard-readout{color:#1c2321!important}
+  body.ai-dashboard-printing .ai-dashboard-metric{break-inside:avoid}
+}
 
 .ai-embed-time { font-family: var(--f-mono); font-size: 10px; color: var(--ink-30); margin-top: var(--sp-2); }
 

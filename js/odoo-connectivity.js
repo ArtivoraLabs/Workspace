@@ -165,24 +165,24 @@
     var html = '<div class="odoo-checkpoints compact">' +
       '<div class="odoo-checkpoints-head">' +
         '<h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Connectivity checkpoints</h4>' +
-        '<span class="odoo-checkpoints-summary"><b>' + sum.ok + '</b> / ' + sum.total + ' verified &middot; <button type="button" class="odoo-checkpoints-toggle" id="odooLiveCpToggle">' + (expanded ? 'Hide full checklist' : 'View full checklist') + '</button></span>' +
+        '<span class="odoo-checkpoints-summary"><b>' + sum.ok + '</b> / ' + sum.total + ' verified &middot; <button type="button" class="odoo-checkpoints-toggle" id="odooLiveCpToggle" aria-controls="odooLiveOpsChecklist" aria-expanded="' + (expanded ? 'true' : 'false') + '">' + (expanded ? 'Hide full checklist' : 'View full checklist') + '</button></span>' +
       '</div>' +
       '<div class="odoo-checkpoint-list">' + renderList(live, ctx) + '</div>' +
       '</div>';
 
-    if (expanded) {
-      var ops = CHECKPOINTS.filter(function (c) { return c.kind === 'ops'; });
-      html += '<div class="odoo-checkpoints" style="margin-top:10px;">' +
+    var ops = CHECKPOINTS.filter(function (c) { return c.kind === 'ops'; });
+    html += '<div id="odooLiveOpsChecklist" class="odoo-checkpoints" style="margin-top:10px;"' + (expanded ? '' : ' hidden') + '>' +
         '<p class="odoo-panel-sub" style="margin-bottom:8px;font-weight:700;color:var(--ink-70);">Production / director-scale checklist \u2014 confirm on the server</p>' +
         '<div class="odoo-checkpoint-list">' + renderList(ops, ctx) + '</div>' +
       '</div>';
-    }
 
     mount.innerHTML = html;
     var toggle = byId('odooLiveCpToggle');
     if (toggle) toggle.addEventListener('click', function () {
       mount.setAttribute('data-expanded', expanded ? '0' : '1');
       renderLiveStrip();
+      var next = byId('odooLiveCpToggle');
+      if (next) next.focus();
     });
   }
 
@@ -192,8 +192,10 @@
   ready(function () {
     renderAll();
     document.addEventListener('dv:session-changed', renderAll);
+    document.addEventListener('dv:odoo-disconnected', renderAll);
+    document.addEventListener('dv:odoo-config-saved', renderAll);
     window.addEventListener('storage', function (e) {
-      if (e.key === 'dashview_odoo_config' || e.key === 'dashview_odoo_connected' || e.key === 'al_api_token') renderAll();
+      if (e.key === 'dashview_odoo_config' || e.key === 'dashview_odoo_connected') renderAll();
     });
     document.querySelectorAll('[data-view="odoo-live"], [data-view="settings"]').forEach(function (link) {
       link.addEventListener('click', function () { setTimeout(renderAll, 0); });

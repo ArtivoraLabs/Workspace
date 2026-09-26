@@ -44,13 +44,29 @@
 
   function card(inner) { return '<div class="hr-card">' + inner + '</div>'; }
 
-  function downloadCSV(name, rows) {
-    var csv = rows.map(function (r) {
-      return r.map(function (c) {
-        var v = String(c == null ? '' : c);
-        return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  function safeCSVCell(value) {
+    if (value == null) return '';
+    if (typeof value === 'number' && isFinite(value)) return String(value);
+    value = String(value);
+    var trimmed = value.trim();
+    var negativeNumber = /^-(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(trimmed);
+    if (!negativeNumber && (/^[\t\r=+@]/.test(value) || /^\s*[=+@-]/.test(value))) return "'" + value;
+    return value;
+  }
+
+  function stringifyCSV(rows) {
+    return rows.map(function (row) {
+      return row.map(function (cell) {
+        var value = safeCSVCell(cell);
+        return /[",\r\n]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value;
       }).join(',');
-    }).join('\n');
+    }).join('\r\n');
+  }
+
+  global.HRCSV = { safeCell: safeCSVCell, stringify: stringifyCSV };
+
+  function downloadCSV(name, rows) {
+    var csv = stringifyCSV(rows);
     var url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     var a = document.createElement('a');
     a.href = url; a.download = name;
@@ -62,16 +78,18 @@
   /* ══ People ════════════════════════════════════════════════════════════ */
   function renderPeople() {
     var st = S.get();
+    var source = S.peopleSource();
+    var dataState = source.employeeStatus || source.status;
     var depts = ['All'].concat(st.team.map(function (e) { return e.dept; })
       .filter(function (d, i, a) { return a.indexOf(d) === i; }).sort());
 
     var rows = st.team.filter(function (e) {
       var q = ui.peopleQuery.toLowerCase();
-      var hit = !q || (e.name + ' ' + e.role + ' ' + e.dept + ' ' + e.email).toLowerCase().indexOf(q) > -1;
+      var hit = !q || (e.name + ' ' + e.role + ' ' + e.dept).toLowerCase().indexOf(q) > -1;
       return hit && (ui.peopleDept === 'All' || e.dept === ui.peopleDept);
     }).sort(function (a, b) {
-      if (ui.peopleSort === 'pay') return b.pay - a.pay;
-      if (ui.peopleSort === 'start') return a.start.localeCompare(b.start);
+      if (ui.peopleSort === 'dept') return a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name);
+      if (ui.peopleSort === 'role') return a.role.localeCompare(b.role) || a.name.localeCompare(b.name);
       return a.name.localeCompare(b.name);
     });
 
@@ -82,41 +100,54 @@
       '</div>';
 
     var tools = viewToggle +
-      '<input class="hr-field" id="pplSearch" type="search" placeholder="Search name or role" value="' + esc(ui.peopleQuery) + '"/>' +
+      '<input class="hr-field" id="pplSearch" type="search" aria-label="Search employees" placeholder="Search name, role or department" value="' + esc(ui.peopleQuery) + '"/>' +
       '<select class="hr-field" id="pplDept" aria-label="Filter by department">' +
         depts.map(function (d) { return '<option value="' + esc(d) + '"' + (d === ui.peopleDept ? ' selected' : '') + '>' + (d === 'All' ? 'All departments' : esc(d)) + '</option>'; }).join('') +
       '</select>' +
       '<select class="hr-field" id="pplSort" aria-label="Sort people">' +
-        [['name', 'Sort: Name'], ['pay', 'Sort: Highest paid'], ['start', 'Sort: Longest serving']].map(function (o) {
+        [['name', 'Sort: Name'], ['dept', 'Sort: Department'], ['role', 'Sort: Role']].map(function (o) {
           return '<option value="' + o[0] + '"' + (ui.peopleSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
         }).join('') +
       '</select>' +
       '<button class="hr-btn hr-btn--quiet" id="pplExport">' + I.svg('download') + 'Export</button>';
 
-    var empty = '<div class="hr-empty"><div class="hr-empty-title">No one matches that search</div>' +
-        '<div class="hr-empty-note">Clear the filters to see the full directory.</div></div>';
+    var hasPeopleFilter = !!ui.peopleQuery || ui.peopleDept !== 'All';
+    var emptyTitle = dataState === 'loading' ? 'Loading employee records from Odoo' :
+      dataState === 'refreshing' ? 'Refreshing employee records from Odoo' :
+      dataState === 'error' ? 'Employee records are unavailable' :
+      dataState === 'setup' ? 'Connect Odoo to load employees' :
+      dataState === 'locked' ? 'Workspace locked' :
+      hasPeopleFilter ? 'No employees match those filters' :
+      dataState === 'live' ? 'No employee records returned by Odoo' : 'No sample employees available';
+    var emptyNote = dataState === 'error' ? (source.employeeError || source.error || 'Check the Odoo connection and try again.') :
+      dataState === 'loading' || dataState === 'refreshing' ? 'The directory will update when the request completes.' :
+      dataState === 'live' ? 'Odoo returned no hr.employee records for this user.' :
+      dataState === 'setup' ? 'Complete Odoo setup; sample records are not shown while a connection is configured.' :
+      dataState === 'locked' ? 'Unlock the workspace to reload its Odoo connection.' :
+      hasPeopleFilter ? 'Clear the filters to see the full directory.' : 'No sample employee records are available.';
+    var empty = '<div class="hr-empty" role="status"><div class="hr-empty-title">' + esc(emptyTitle) + '</div>' +
+        '<div class="hr-empty-note">' + esc(emptyNote) + '</div></div>';
 
     var body;
     if (!rows.length) {
       body = empty;
     } else if (ui.peopleView === 'grid') {
       body = '<div class="hr-people-grid">' + rows.map(function (e) {
-        var tag = e.status === 'Active' ? 'hr-tag--ok' : e.status === 'On leave' ? 'hr-tag--warn' : '';
+        var tag = e.status === 'Active' ? 'hr-tag--ok' : '';
         return '<div class="hr-people-card">' +
           '<div class="hr-people-card-top">' + av(e, 44) + '<span class="hr-tag ' + tag + '">' + esc(e.status) + '</span></div>' +
           '<div><div class="hr-people-card-name">' + esc(e.name) + '</div>' +
           '<div class="hr-people-card-role">' + esc(e.role) + '</div></div>' +
           '<div class="hr-people-card-meta"><span>' + esc(e.dept) + '</span><span>' + esc(e.type) + '</span></div>' +
-          '<div class="hr-people-card-foot"><span class="hr-people-card-pay">' + U.money(e.pay) + '</span>' +
-          '<button class="hr-btn hr-btn--quiet" data-spot="' + e.id + '">Spotlight</button></div>' +
+          '<div class="hr-people-card-foot"><span></span><button class="hr-btn hr-btn--quiet" data-spot="' + e.id + '">Spotlight</button></div>' +
           '</div>';
       }).join('') + '</div>';
     } else {
       body =
         '<div class="hr-tablewrap"><table class="hr-table">' +
-        '<thead><tr><th>Name</th><th>Department</th><th>Contract</th><th>Status</th><th class="hr-num">Monthly</th><th></th></tr></thead><tbody>' +
+        '<thead><tr><th>Name</th><th>Department</th><th>Employment type</th><th>Status</th><th></th></tr></thead><tbody>' +
         rows.map(function (e) {
-          var tag = e.status === 'Active' ? 'hr-tag--ok' : e.status === 'On leave' ? 'hr-tag--warn' : '';
+          var tag = e.status === 'Active' ? 'hr-tag--ok' : '';
           return '<tr>' +
             '<td><span class="hr-person">' + av(e, 34) +
               '<span><span class="hr-person-name">' + esc(e.name) + '</span>' +
@@ -124,23 +155,31 @@
             '<td>' + esc(e.dept) + '</td>' +
             '<td>' + esc(e.type) + '</td>' +
             '<td><span class="hr-tag ' + tag + '">' + esc(e.status) + '</span></td>' +
-            '<td class="hr-num">' + U.money(e.pay) + '</td>' +
             '<td class="hr-num"><button class="hr-btn hr-btn--quiet" data-spot="' + e.id + '">Spotlight</button></td>' +
             '</tr>';
         }).join('') + '</tbody></table></div>';
     }
 
     var active = st.team.filter(function (e) { return e.status === 'Active'; }).length;
-    var payroll = st.team.reduce(function (a, e) { return a + e.pay; }, 0);
-
-    var pplSub = st.team.length + ' people in the directory' + (global.__pplOdooLive ? ' · Live from Odoo' : '');
+    var countsReady = dataState === 'demo' || dataState === 'live' || dataState === 'refreshing';
+    var employeeCount = countsReady ? String(st.team.length) : '—';
+    var activeCount = countsReady ? String(active) : '—';
+    var departmentCount = countsReady ? String(depts.length - 1) : '—';
+    var pplSub = dataState === 'demo'
+      ? 'Sample workspace data · not from Odoo'
+      : dataState === 'live'
+        ? 'Source: Odoo hr.employee · last synced ' + (source.lastSynced ? new Date(source.lastSynced).toLocaleString() : 'just now')
+        : dataState === 'refreshing'
+          ? 'Refreshing Odoo hr.employee records…'
+          : dataState === 'error'
+            ? 'Odoo hr.employee unavailable · ' + (source.employeeError || source.error || 'sync failed')
+            : 'Odoo hr.employee · ' + dataState;
     byId('view-people').innerHTML =
       head('People', pplSub, tools) +
       '<div class="hr-tiles">' +
-        tile('Directory', String(st.team.length), 'tracked in this workspace') +
-        tile('Active', String(active), st.team.length - active + ' on leave or notice') +
-        tile('Monthly payroll', U.money(payroll), U.money(payroll * 12) + ' annualised') +
-        tile('Departments', String(depts.length - 1), 'across the company') +
+        tile('Employees', employeeCount, dataState === 'demo' ? 'sample data · not from Odoo' : 'from hr.employee') +
+        tile('Active', activeCount, 'active employee records') +
+        tile('Departments', departmentCount, 'represented in the directory') +
       '</div>' + card(body);
 
     on(byId('pplSearch'), 'input', function (e) {
@@ -163,8 +202,8 @@
       });
     });
     on(byId('pplExport'), 'click', function () {
-      downloadCSV('people.csv', [['Name', 'Role', 'Department', 'Contract', 'Status', 'Monthly', 'Started', 'Email']]
-        .concat(rows.map(function (e) { return [e.name, e.role, e.dept, e.type, e.status, e.pay, e.start, e.email]; })));
+      downloadCSV('people.csv', [['Name', 'Role', 'Department', 'Employment type', 'Status']]
+        .concat(rows.map(function (e) { return [e.name, e.role, e.dept, e.type, e.status]; })));
     });
     byId('view-people').querySelectorAll('[data-spot]').forEach(function (b) {
       on(b, 'click', function () {
@@ -178,6 +217,9 @@
   /* ══ Hiring ════════════════════════════════════════════════════════════ */
   function renderHiring() {
     var st = S.get();
+    var source = S.peopleSource();
+    var dataState = source.candidateStatus || source.status;
+    var countsReady = dataState === 'demo' || dataState === 'live' || dataState === 'refreshing';
     var stages = S.STAGES;
 
     var board = stages.map(function (stage) {
@@ -201,20 +243,39 @@
 
     var offers = st.candidates.filter(function (c) { return c.stage === 'Offer'; }).length;
     var hired = st.candidates.filter(function (c) { return c.stage === 'Hired'; }).length;
-    var avgDays = Math.round(st.candidates.reduce(function (a, c) { return a + c.days; }, 0) / st.candidates.length);
+    var avgDays = st.candidates.length
+      ? Math.round(st.candidates.reduce(function (a, c) { return a + c.days; }, 0) / st.candidates.length)
+      : '—';
 
-    var hireSub = global.__pplOdooLive
-      ? 'Live from Odoo (hr.applicant) · read-only — move a candidate\u2019s stage in Odoo'
-      : 'Drag a card between columns, or use the arrows';
+    var hireSub = dataState === 'demo'
+      ? 'Sample pipeline · not from Odoo'
+      : dataState === 'live'
+        ? 'Source: Odoo hr.applicant · mapped pipeline · read-only · last synced ' + (source.lastSynced ? new Date(source.lastSynced).toLocaleString() : 'just now')
+        : dataState === 'refreshing'
+          ? 'Refreshing Odoo hr.applicant records…'
+          : 'Odoo hr.applicant · ' + dataState;
+    var hiringEmpty = !st.candidates.length
+      ? '<div class="hr-empty" role="status"><div class="hr-empty-title">' +
+        (dataState === 'live' ? 'No applicant records returned by Odoo' :
+          dataState === 'loading' || dataState === 'refreshing' ? 'Loading applicants from Odoo' :
+          dataState === 'error' ? 'Applicant records are unavailable' :
+          dataState === 'locked' ? 'Workspace locked' : 'No sample applicants available') +
+        '</div><div class="hr-empty-note">' +
+        (dataState === 'error' ? esc(source.candidateError || source.error || 'Check the Odoo connection and try again.') :
+          dataState === 'live' ? 'Odoo returned no hr.applicant records for this user.' :
+          dataState === 'demo' ? 'Connect Odoo to load real applicant records.' :
+          'Applicant information will appear here when available.') +
+        '</div></div>'
+      : '';
     byId('view-hiring').innerHTML =
       head('Hiring', hireSub) +
       '<div class="hr-tiles">' +
-        tile('In pipeline', String(st.candidates.length - hired), 'active candidates') +
-        tile('At offer', String(offers), 'awaiting signature') +
-        tile('Hired', String(hired), 'this cycle') +
-        tile('Avg. time in stage', avgDays + ' d', 'across the pipeline') +
+        tile('In pipeline', countsReady ? String(st.candidates.length - hired) : '—', 'active candidates') +
+        tile('At offer', countsReady ? String(offers) : '—', 'awaiting signature') +
+        tile('Hired', countsReady ? String(hired) : '—', 'this cycle') +
+        tile('Avg. applicant age', countsReady && avgDays !== '—' ? avgDays + ' d' : '—', 'days since record creation') +
       '</div>' +
-      '<div class="hr-board">' + board + '</div>';
+      hiringEmpty + '<div class="hr-board">' + board + '</div>';
 
     /* In live mode the board is read-only: candidates come from Odoo and any
        local move would just be overwritten by the next 60s sync, which is
@@ -375,6 +436,21 @@
   /* ══ Salary ════════════════════════════════════════════════════════════ */
   function renderSalary() {
     var st = S.get();
+    var source = S.peopleSource();
+    if (source.status !== 'demo') {
+      var note = source.status === 'live' || source.status === 'refreshing'
+        ? 'Contract wages are not requested from Odoo or displayed in this workspace.'
+        : source.status === 'error'
+          ? 'Odoo sync failed; compensation records are not displayed. ' + (source.error || '')
+          : source.status === 'locked'
+            ? 'Unlock the workspace to continue.'
+            : 'Sample compensation is hidden while Odoo is configured or unavailable.';
+      byId('view-salary').innerHTML =
+        head('Compensation', 'Odoo contract compensation is sensitive payroll data and is not loaded here.') +
+        '<div class="hr-empty" role="status"><div class="hr-empty-title">No compensation data loaded</div>' +
+        '<div class="hr-empty-note">' + esc(note) + '</div></div>';
+      return;
+    }
     var team = st.team.slice().sort(function (a, b) { return b.pay - a.pay; });
     var total = team.reduce(function (a, e) { return a + e.pay; }, 0);
     var median = (function () {
@@ -413,9 +489,7 @@
           '</div>';
       }).join('');
 
-    var salSub = global.__pplOdooLive
-      ? (st._liveHasPay ? 'Live from Odoo (hr.contract wage)' : 'Live headcount from Odoo — wage needs Payroll access for this API user, so pay shows as \u2014')
-      : 'Payroll for the tracked directory';
+    var salSub = 'Sample compensation · not from Odoo';
     byId('view-salary').innerHTML =
       head('Salary', salSub,
         '<button class="hr-btn hr-btn--quiet" id="salExport">' + I.svg('download') + 'Export</button>') +
@@ -588,8 +662,8 @@
     });
     on(byId('setExport'), 'click', function () {
       var team = S.get().team;
-      downloadCSV('people.csv', [['Name', 'Role', 'Department', 'Contract', 'Status', 'Monthly', 'Started', 'Email']]
-        .concat(team.map(function (e) { return [e.name, e.role, e.dept, e.type, e.status, e.pay, e.start, e.email]; })));
+      downloadCSV('people.csv', [['Name', 'Role', 'Department', 'Employment type', 'Status']]
+        .concat(team.map(function (e) { return [e.name, e.role, e.dept, e.type, e.status]; })));
       toast('Directory exported');
     });
     on(byId('setReset'), 'click', function () {

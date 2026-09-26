@@ -72,17 +72,46 @@
     setTimeout(function () { el.classList.remove('show'); setTimeout(function () { el.remove(); }, 300); }, 3200);
   }
 
+  function setImportFeedback(message, kind) {
+    var el = byId('studioImportFeedback');
+    var view = byId('view-studio');
+    if (!el) return;
+    el.textContent = message || '';
+    el.hidden = !message;
+    el.classList.toggle('is-loading', kind === 'loading');
+    el.classList.toggle('is-error', kind === 'error');
+    el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    if (view) view.setAttribute('aria-busy', kind === 'loading' ? 'true' : 'false');
+  }
+
   function closeAllPopovers() {
     document.querySelectorAll('.field-popover, .slicer-dropdown, .col-menu-popover').forEach(function (el) { el.remove(); });
     document.querySelectorAll('.field-row.is-open, .slicer-btn.open').forEach(function (el) { el.classList.remove('is-open', 'open'); });
-    document.querySelectorAll('.studio-dropdown.open').forEach(function (el) { el.classList.remove('open'); });
+    document.querySelectorAll('.studio-dropdown.open').forEach(function (el) {
+      el.classList.remove('open');
+      var button = el.querySelector(':scope > button[aria-expanded]');
+      if (button) button.setAttribute('aria-expanded', 'false');
+    });
     openFieldName = null;
   }
   document.addEventListener('click', function (e) {
     if (e.target.closest('.field-popover, .field-row, .slicer-dropdown, .slicer-btn, .col-menu-popover, #columnsMenuBtn, .studio-dropdown')) return;
     closeAllPopovers();
   });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAllPopovers(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    closeAllPopovers();
+    var rail = byId('fieldsRail');
+    var toggle = byId('fieldsToggleBtn');
+    if (rail && rail.classList.contains('open')) {
+      rail.classList.remove('open');
+      if (toggle) {
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-label', 'Show fields panel');
+        toggle.focus();
+      }
+    }
+  });
 
   /* ======================================================================
      Icons (small inline SVG set, shared across the page)
@@ -158,11 +187,32 @@
 
   function switchTab(tab) {
     state.activeTab = tab;
-    document.querySelectorAll('.studio-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === tab); });
+    document.querySelectorAll('.studio-tab').forEach(function (b) {
+      var active = b.dataset.tab === tab;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', active ? 'true' : 'false');
+      b.tabIndex = active ? 0 : -1;
+    });
     ['overview', 'data', 'pivot', 'hierarchy'].forEach(function (t) { var p = byId('panel-' + t); if (p) p.style.display = t === tab ? '' : 'none'; });
     renderFieldsList(); // pivot tab shows extra R/C/V/F buttons on field rows
     renderActiveTab();
   }
+
+  on(byId('studioTabs'), 'keydown', function (e) {
+    var tab = e.target.closest('.studio-tab');
+    if (!tab) return;
+    var tabs = Array.prototype.slice.call(byId('studioTabs').querySelectorAll('.studio-tab'));
+    var index = tabs.indexOf(tab);
+    var nextIndex = index;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') nextIndex = (index + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') nextIndex = 0;
+    else if (e.key === 'End') nextIndex = tabs.length - 1;
+    else return;
+    e.preventDefault();
+    tabs[nextIndex].focus();
+    switchTab(tabs[nextIndex].dataset.tab);
+  });
 
   function updateSummaryStrip() {
     var ds = state.dataset;
@@ -1453,7 +1503,13 @@
     var file = fileList[0];
     if (!file) return;
     var ext = file.name.split('.').pop().toLowerCase();
-    showToast('Reading ' + file.name + '…', 'info');
+    if (['csv', 'tsv', 'xlsx', 'xls', 'json'].indexOf(ext) === -1) {
+      var unsupported = 'Choose a CSV, TSV, XLSX, XLS, or JSON file.';
+      setImportFeedback(unsupported, 'error');
+      showToast(unsupported, 'error');
+      return;
+    }
+    setImportFeedback('Reading ' + file.name + '…', 'loading');
     if (ext === 'json') {
       var reader = new FileReader();
       reader.onload = function (e) {
@@ -1463,7 +1519,16 @@
           if (!rows || !rows.length) throw new Error('Expected a JSON array of objects.');
           var columns = Array.from(rows.reduce(function (set, r) { Object.keys(r).forEach(function (k) { set.add(k); }); return set; }, new Set()));
           ingest(columns, rows, file.name);
-        } catch (err) { showToast('Could not read that JSON file: ' + err.message, 'error'); }
+        } catch (err) {
+          var message = 'Could not read that JSON file: ' + err.message;
+          setImportFeedback(message, 'error');
+          showToast(message, 'error');
+        }
+      };
+      reader.onerror = function () {
+        var message = 'Could not read that JSON file. Try another file.';
+        setImportFeedback(message, 'error');
+        showToast(message, 'error');
       };
       reader.readAsText(file);
       return;
@@ -1473,17 +1538,37 @@
       reader.onload = function (e) {
         try {
           var wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
-          if (wb.SheetNames.length > 1) openSheetPicker(wb, file.name);
+          if (wb.SheetNames.length > 1) {
+            setImportFeedback('', '');
+            openSheetPicker(wb, file.name);
+          }
           else ingestSheet(wb, wb.SheetNames[0], file.name);
-        } catch (err) { showToast('Could not read that file: ' + err.message, 'error'); }
+        } catch (err) {
+          var message = 'Could not read that file: ' + err.message;
+          setImportFeedback(message, 'error');
+          showToast(message, 'error');
+        }
+      };
+      reader.onerror = function () {
+        var message = 'Could not read that file. Try another file.';
+        setImportFeedback(message, 'error');
+        showToast(message, 'error');
       };
       reader.readAsArrayBuffer(file);
-    }).catch(function (err) { showToast(err.message, 'error'); });
+    }).catch(function (err) {
+      var message = err && err.message ? err.message : 'Could not load the spreadsheet reader.';
+      setImportFeedback(message, 'error');
+      showToast(message, 'error');
+    });
   }
   function ingestSheet(wb, sheetName, fileName) {
     var ws = wb.Sheets[sheetName];
     var json = XLSX.utils.sheet_to_json(ws, { defval: '' });
-    if (!json.length) { showToast('That sheet looks empty.', 'error'); return; }
+    if (!json.length) {
+      setImportFeedback('That sheet looks empty. Choose a sheet with a header row and at least one data row.', 'error');
+      showToast('That sheet looks empty.', 'error');
+      return;
+    }
     ingest(Object.keys(json[0]), json, fileName);
   }
   function openSheetPicker(wb, fileName) {
@@ -1503,7 +1588,11 @@
 
   function ingest(columns, rawRows, fileName) {
     var ds = Studio.buildDataset(columns, rawRows);
-    if (!ds.rowCount) { showToast('No usable rows found in that file.', 'error'); return; }
+    if (!ds.rowCount) {
+      setImportFeedback('No usable rows were found in that file. Check that it contains a header and data rows.', 'error');
+      showToast('No usable rows found in that file.', 'error');
+      return;
+    }
     state.dataset = ds;
     state.workbookId = null;
     state.workbookName = fileName ? fileName.replace(/\.[^.]+$/, '') : 'Untitled workbook';
@@ -1520,6 +1609,7 @@
     pickAutoSlicerFields();
     byId('emptyState').style.display = 'none';
     byId('studioMain').style.display = 'flex';
+    setImportFeedback('', '');
 
     // Auto-build a starter dashboard from the top suggestions right away — a fresh
     // import should show real charts immediately, not an empty grid waiting on a
@@ -1705,9 +1795,22 @@
       showToast(err && err.message ? err.message : 'Could not generate the report.', 'error');
     }).then(function () { btn.disabled = false; btn.textContent = 'Generate report'; });
   });
-  function closeAllDropdowns() { document.querySelectorAll('.studio-dropdown.open').forEach(function (d) { d.classList.remove('open'); }); }
+  function closeAllDropdowns() {
+    document.querySelectorAll('.studio-dropdown.open').forEach(function (d) {
+      d.classList.remove('open');
+      var button = d.querySelector(':scope > button[aria-expanded]');
+      if (button) button.setAttribute('aria-expanded', 'false');
+    });
+  }
   document.querySelectorAll('.studio-dropdown > button').forEach(function (btn) {
-    on(btn, 'click', function (e) { e.stopPropagation(); var dd = btn.closest('.studio-dropdown'); var wasOpen = dd.classList.contains('open'); closeAllDropdowns(); dd.classList.toggle('open', !wasOpen); });
+    on(btn, 'click', function (e) {
+      e.stopPropagation();
+      var dd = btn.closest('.studio-dropdown');
+      var wasOpen = dd.classList.contains('open');
+      closeAllDropdowns();
+      dd.classList.toggle('open', !wasOpen);
+      if (btn.hasAttribute('aria-expanded')) btn.setAttribute('aria-expanded', wasOpen ? 'false' : 'true');
+    });
   });
 
   // NOTE: the click handler on #themeToggleBtn lives in js/shell.js only (it owns
@@ -1840,7 +1943,17 @@
   on(byId('confirmOkBtn'), 'click', function () { var fn = pendingConfirm; pendingConfirm = null; closeModal('confirmModal'); if (fn) fn(); });
   on(byId('confirmCancelBtn'), 'click', function () { pendingConfirm = null; closeModal('confirmModal'); });
 
-  on(byId('fieldsToggleBtn'), 'click', function () { byId('fieldsRail').classList.toggle('open'); });
+  on(byId('fieldsToggleBtn'), 'click', function () {
+    var rail = byId('fieldsRail');
+    var open = !rail.classList.contains('open');
+    rail.classList.toggle('open', open);
+    byId('fieldsToggleBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+    byId('fieldsToggleBtn').setAttribute('aria-label', open ? 'Hide fields panel' : 'Show fields panel');
+    if (open) {
+      var search = byId('fieldSearchInput');
+      if (search) search.focus();
+    }
+  });
 
   /* ======================================================================
      Boot

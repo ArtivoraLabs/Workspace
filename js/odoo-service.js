@@ -1,15 +1,15 @@
 /* ==========================================================================
    DashView — Odoo integration service
    ==========================================================================
-   DO mode (Cloudflare Worker / any proxy URL set):
-     → Real Odoo calls through the proxy. No Node.js server needed.
-     → Set proxyUrl in settings (e.g. https://dashview-proxy.you.workers.dev)
+   Worker mode:
+     → Read-only Odoo calls through the explicitly configured Worker URL.
 
-   No sample data: a Worker URL is required. Until it is set, nothing is shown.
+   No sample data: configure the read-only Worker, or sign in to the
+   authenticated Node.js API for its Odoo endpoints.
 
-   PRODUCTION PATH (optional Node.js backend):
-     → Leave proxyUrl pointing to http://localhost:4000 (or your server).
-     → The server/src/routes/odoo.routes.js handles auth + JWT session.
+   Authenticated Node.js API:
+     → Odoo reads and mutations use AL_API methods, AL_API's configured API base,
+       and its session bearer token. This path is never inferred from the host.
    ========================================================================== */
 (function () {
   'use strict';
@@ -44,39 +44,68 @@
   function isConnected() { return !!loadJSON(CONNECTED_KEY, false); }
   function getConfig()   { return window.DVSec ? window.DVSec.cfg() : loadJSON(CONFIG_KEY, {}); }
   function storeConfig(c) { return window.DVSec ? window.DVSec.saveCfg(c) : (saveJSON(CONFIG_KEY, c), Promise.resolve()); }
+  function hasAuthenticatedApi() {
+    return !!(window.AL_API && typeof window.AL_API.isConnected === 'function' && window.AL_API.isConnected());
+  }
 
-  /* ── Proxy (real Odoo) call ──────────────────────────────────────────────
-     Used when cfg.proxyUrl is set.
-     Works with:
-       • cloudflare-worker.js (workers.cloudflare.com — free, recommended)
-       • server/src/index.js  (local Node.js — needs JWT session via AL_API)
+  /* ── Explicit Odoo routing ────────────────────────────────────────────────
+     Authenticated server calls use AL_API so its configured API base and
+     session bearer token are authoritative. The configured proxy URL is only
+     used for the Worker’s read-only endpoints; hostnames never select a path.
   ──────────────────────────────────────────────────────────────────────── */
-  function proxyPost(proxyUrl, endpointPath, body) {
+  function proxyPost(proxyUrl, endpointPath, body, configOverride) {
     var base = String(proxyUrl).replace(/\/+$/, '');
-    /* Cloudflare Worker uses a single endpoint + body.endpoint field.
-       Local Node.js server uses /api/odoo/<path> + JWT header.           */
-    var isWorker = !/localhost|127\.0\.0\.1/.test(base);
-    var url = isWorker
-      ? base                         // one URL, body.endpoint selects action
-      : base + '/api/odoo/' + endpointPath.replace(/^\/+/,'');
+    var cfg = configOverride || getConfig();
+    var endpoint = String(endpointPath || '').replace(/^\/+|\/+$/g, '');
+    var api = window.AL_API;
+    if (api && typeof api.isConnected === 'function' && api.isConnected()) {
+      if (endpoint === 'test' && typeof api.odooTest === 'function') return api.odooTest(cfg);
+      if (endpoint === 'records' && typeof api.odooRecords === 'function')
+        return api.odooRecords(cfg, body.model, body).then(function (result) { return result; });
+      if (endpoint === 'read-group' && typeof api.odooReadGroup === 'function')
+        return api.odooReadGroup(cfg, body.model, body).then(function (groups) { return { ok: true, groups: groups }; });
+      if (endpoint === 'fields' && typeof api.odooFields === 'function')
+        return api.odooFields(cfg, body.model).then(function (fields) { return { ok: true, fields: fields }; });
+      if (endpoint === 'models' && typeof api.odooModels === 'function')
+        return api.odooModels(cfg, body.module).then(function (models) { return { ok: true, models: models }; });
+      if (endpoint === 'modules' && typeof api.odooModules === 'function')
+        return api.odooModules(cfg).then(function (modules) { return { ok: true, modules: modules }; });
+    }
 
-    var cfg = getConfig();
+    /* Never mistake a configured AL_API URL for a Worker just because it is
+       hosted remotely. Even without a session, use the API client (which will
+       return its normal authentication error) rather than sending Worker JSON. */
+    var apiBase = api && typeof api.base === 'function' ? String(api.base() || '').replace(/\/+$/, '') : '';
+    var configuredApiUrl = String(window.AL_API_BASE || apiBase || '').replace(/\/+$/, '');
+    var normalizedProxy = base.replace(/\/api$/i, '');
+    var normalizedApi = configuredApiUrl.replace(/\/api$/i, '');
+    if (normalizedApi && normalizedProxy === normalizedApi) {
+      var unauthenticated = endpoint === 'test' && api && api.odooTest ? api.odooTest(cfg) :
+        endpoint === 'records' && api && api.odooRecords ? api.odooRecords(cfg, body.model, body) :
+        endpoint === 'read-group' && api && api.odooReadGroup ? api.odooReadGroup(cfg, body.model, body) :
+        null;
+      if (unauthenticated) return unauthenticated;
+      return Promise.reject(new Error('Sign in to DashView to use the authenticated Odoo API.'));
+    }
+
+    var workerReadEndpoints = ['test', 'modules', 'models', 'fields', 'records', 'read-group', 'diagnose', 'batch'];
+    if (workerReadEndpoints.indexOf(endpoint) === -1)
+      return Promise.reject(new Error('This operation is not available through the read-only Odoo Worker.'));
     var payload = Object.assign({}, body, {
       url: cfg.url, db: cfg.db, username: cfg.user || cfg.username, apiKey: cfg.apiKey
     });
-    if (isWorker) payload.endpoint = endpointPath;
+    payload.endpoint = endpoint;
 
-    var headers = { 'Content-Type': 'application/json' };
-    /* Attach JWT if present (local backend path) */
-    try { var tok = localStorage.getItem('al_api_token'); if (tok && !isWorker) headers['Authorization'] = 'Bearer ' + tok; } catch(e) {}
-
-    return fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(payload) })
+    return fetch(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       .then(function (r) {
         return r.text().then(function (t) {
           var d = null;
           try { d = JSON.parse(t); } catch (e) {}
           if (!d) throw new Error('Proxy returned HTTP ' + r.status + ' (not JSON) — check the Proxy URL is your Worker URL.');
-          if (!d.ok) { var er = new Error((d.error || 'Proxy error') + ' [HTTP ' + r.status + ']'); er.data = d; er.status = r.status; throw er; }
+          if (!d.ok || !r.ok) {
+            var er = new Error((d.error || 'Proxy returned HTTP ' + r.status) + ' [HTTP ' + r.status + ']');
+            er.data = d; er.status = r.status; throw er;
+          }
           return d;
         });
       })
@@ -115,7 +144,7 @@
     });
     merged.url      = cleanOdooUrl(merged.url);
     merged.proxyUrl = String(cfg.proxyUrl || '').trim();
-    if (!merged.proxyUrl) return Promise.resolve({ ok: false, error: 'Worker URL is required. DashView no longer ships sample data — deploy cloudflare-worker.js and paste its URL.' });
+    if (!merged.proxyUrl && !hasAuthenticatedApi()) return Promise.resolve({ ok: false, error: 'Sign in to DashView or configure a read-only Worker URL to connect Odoo.' });
 
     {
       var missing = [];
@@ -124,16 +153,19 @@
       if (!merged.user)   missing.push('Username / email');
       if (!merged.apiKey) missing.push('API key');
       if (missing.length) return Promise.resolve({ ok: false, error: 'Missing: ' + missing.join(', ') + '.' });
-      if (!/^https?:\/\//i.test(merged.proxyUrl)) {
+      if (merged.proxyUrl && !/^https?:\/\//i.test(merged.proxyUrl)) {
         return Promise.resolve({ ok: false, error: 'Proxy URL must start with https:// (your Worker URL).' });
       }
-      var proxyHost = '';
-      try { proxyHost = new URL(merged.proxyUrl).hostname.toLowerCase(); }
-      catch (e) { return Promise.resolve({ ok: false, error: 'Proxy URL is not a valid URL.' }); }
-      if (/(^|\.)cloudflare\.com$/.test(proxyHost)) {
-        return Promise.resolve({ ok: false, error: 'That is the Cloudflare website, not your Worker. Your Worker URL ends in .workers.dev.' });
+      if (merged.proxyUrl) {
+        var proxyHost = '';
+        try { proxyHost = new URL(merged.proxyUrl).hostname.toLowerCase(); }
+        catch (e) { return Promise.resolve({ ok: false, error: 'Proxy URL is not a valid URL.' }); }
+        if (/(^|\.)cloudflare\.com$/.test(proxyHost)) {
+          return Promise.resolve({ ok: false, error: 'That is the Cloudflare website, not your Worker. Your Worker URL ends in .workers.dev.' });
+        }
       }
-      /* Real Odoo via proxy (credentials are saved encrypted when a passcode is set) */
+      /* Credentials are saved encrypted when a passcode is set. */
+      saveJSON(CONNECTED_KEY, false);
       return storeConfig(merged).then(function () { return proxyPost(merged.proxyUrl, 'test', {}); })
         .then(function (res) {
           saveJSON(CONNECTED_KEY, true);
@@ -144,13 +176,39 @@
     }
   }
 
-  function disconnect() { saveJSON(CONNECTED_KEY, false); if (window.DVSec) window.DVSec.log('Odoo disconnected', '', 'review'); }
+  function disconnect() {
+    saveJSON(CONNECTED_KEY, false);
+    if (window.DVSec) window.DVSec.log('Odoo disconnected', '', 'review');
+    try { document.dispatchEvent(new CustomEvent('dv:odoo-disconnected')); } catch (e) {}
+  }
 
-  function testConnection() {
-    var cfg = getConfig();
-    if (cfg.proxyUrl) {
+  function testConnection(input) {
+    var saved = getConfig(), cfg = Object.assign({}, saved);
+    if (input) {
+      cfg.url = cleanOdooUrl(input.url == null ? saved.url || '' : input.url);
+      cfg.db = String(input.db == null ? saved.db || '' : input.db).trim();
+      cfg.user = String(input.user == null && input.username == null ? saved.user || saved.username || '' : (input.user == null ? input.username : input.user)).trim();
+      cfg.username = cfg.user;
+      cfg.apiKey = String(input.apiKey || saved.apiKey || '').trim();
+      cfg.proxyUrl = String(input.proxyUrl == null ? saved.proxyUrl || '' : input.proxyUrl).trim();
+    }
+    var missing = [];
+    if (!cfg.url) missing.push('Odoo URL');
+    if (!cfg.db) missing.push('database');
+    if (!cfg.user && !cfg.username) missing.push('username / email');
+    if (!cfg.apiKey) missing.push('API key');
+    if (!cfg.proxyUrl && !hasAuthenticatedApi()) missing.push('Worker URL (or sign in to DashView)');
+    if (missing.length) return Promise.resolve({ ok: false, error: 'Add ' + missing.join(', ') + ' in Settings before testing.' });
+    if (cfg.proxyUrl && !/^https:\/\//i.test(cfg.proxyUrl)) return Promise.resolve({ ok: false, error: 'Proxy URL must use HTTPS. Paste the HTTPS URL of your Worker.' });
+    if (cfg.proxyUrl || hasAuthenticatedApi()) {
+      try {
+        var proxyHost = new URL(cfg.proxyUrl).hostname.toLowerCase();
+        if (/(^|\.)cloudflare\.com$/.test(proxyHost)) return Promise.resolve({ ok: false, error: 'That is the Cloudflare website, not your Worker. Use your Worker URL ending in .workers.dev.' });
+      } catch (e) { return Promise.resolve({ ok: false, error: 'Proxy URL is not a valid URL.' }); }
+    }
+    if (cfg.proxyUrl || hasAuthenticatedApi()) {
       var t0 = Date.now();
-      return proxyPost(cfg.proxyUrl, 'test', {})
+      return proxyPost(cfg.proxyUrl, 'test', {}, cfg)
         .then(function (res) {
           saveJSON(LAST_TESTED_KEY, Date.now());
           return { ok: true, latencyMs: res.latencyMs || (Date.now() - t0), live: true };
@@ -163,7 +221,7 @@
   function fetchModel(modelName, opts) {
     opts = opts || {};
     var cfg = getConfig();
-    if (cfg.proxyUrl) {
+    if (cfg.proxyUrl || hasAuthenticatedApi()) {
       /* Real Odoo */
       return proxyPost(cfg.proxyUrl, 'records', {
         model: modelName, limit: opts.limit || 50,
@@ -181,7 +239,7 @@
         return { ok: true, model: modelName, fields: fields, rows: arrRows, total: res.total, live: true };
       });
     }
-    return Promise.reject(new Error('Odoo is not connected. Add your Worker URL in Settings → Odoo.'));
+    return Promise.reject(new Error('Odoo is not connected. Configure a read-only Worker or sign in to DashView.'));
   }
 
   /* Aggregate totals via Odoo's read_group — for reporting/analytics-style
@@ -190,7 +248,7 @@
   function fetchReadGroup(modelName, opts) {
     opts = opts || {};
     var cfg = getConfig();
-    if (!cfg.proxyUrl) return Promise.reject(new Error('Odoo is not connected. Add your Worker URL in Settings → Odoo.'));
+    if (!cfg.proxyUrl && !hasAuthenticatedApi()) return Promise.reject(new Error('Odoo is not connected. Configure a read-only Worker or sign in to DashView.'));
     return proxyPost(cfg.proxyUrl, 'read-group', {
       model: modelName,
       domain: opts.domain || [],
@@ -230,16 +288,41 @@
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   }
 
+  function showActionState(kind, message) {
+    var el = byId('odooActionFeedback');
+    if (!el) return;
+    var cfg = getConfig(), keys = [
+      cfg.apiKey, cfg.user || cfg.username, byId('odooKey') && byId('odooKey').value,
+      byId('odooUser') && byId('odooUser').value
+    ];
+    (keys || []).forEach(function (key) { if (key) message = String(message).split(String(key)).join('[redacted]'); });
+    el.hidden = !message;
+    el.textContent = message || '';
+    el.setAttribute('data-state', kind || 'info');
+    el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+    el.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
+  }
+
+  function readSettingsConfig() {
+    return {
+      url: byId('odooUrl') ? byId('odooUrl').value.trim() : '',
+      db: byId('odooDb') ? byId('odooDb').value.trim() : '',
+      user: byId('odooUser') ? byId('odooUser').value.trim() : '',
+      apiKey: byId('odooKey') ? byId('odooKey').value.trim() : '',
+      proxyUrl: byId('odooProxyUrl') ? byId('odooProxyUrl').value.trim() : ''
+    };
+  }
+
   function refreshStatusTag() {
     var tag = byId('odooStatusTag');
     var connected = isConnected();
     var cfg = getConfig();
-    var live = !!(cfg.proxyUrl);
+    var live = !!(cfg.proxyUrl || hasAuthenticatedApi());
     if (tag) {
-      tag.classList.remove('is-configured', 'is-live', 'is-connecting');
-      if (connected && live)  { tag.textContent = '● Live — connected to ' + (cfg.url || 'Odoo'); tag.classList.add('is-live'); }
-      else if (connected)     { tag.textContent = 'Worker URL missing'; tag.classList.add('is-configured'); }
-      else if (cfg.url)       { tag.textContent = 'Configured, not connected'; tag.classList.add('is-configured'); }
+      tag.classList.remove('configured', 'live', 'is-configured', 'is-live', 'is-connecting');
+      if (connected && live)  { tag.textContent = 'Live — connected to ' + (cfg.url || 'Odoo'); tag.classList.add('live'); }
+      else if (connected)     { tag.textContent = 'Connection unavailable'; tag.classList.add('configured'); }
+      else if (cfg.url)       { tag.textContent = 'Configured, not connected'; tag.classList.add('configured'); }
       else                    { tag.textContent = 'Not connected'; }
     }
     var meta = byId('odooConnMeta');
@@ -253,7 +336,7 @@
         if (byId('odooMetaTested')) byId('odooMetaTested').textContent = formatTestedAt(loadJSON(LAST_TESTED_KEY, null));
       }
     }
-    if (disBtn) disBtn.style.display = connected ? '' : 'none';
+    if (disBtn) disBtn.hidden = !connected;
   }
 
   function initSettingsPanel() {
@@ -268,47 +351,65 @@
     if (byId('odooConnectBtn')) {
       byId('odooConnectBtn').addEventListener('click', function () {
         if (window.DVAuth && !window.DVAuth.can('manageOdoo')) { toast('Only Admins can connect Odoo.'); return; }
-        var newCfg = {
-          url:      (byId('odooUrl')      ? byId('odooUrl').value.trim()      : ''),
-          db:       (byId('odooDb')       ? byId('odooDb').value.trim()       : ''),
-          user:     (byId('odooUser')     ? byId('odooUser').value.trim()     : ''),
-          apiKey:   (byId('odooKey')      ? byId('odooKey').value.trim()      : ''),
-          proxyUrl: (byId('odooProxyUrl') ? byId('odooProxyUrl').value.trim() : '')
-        };
-        if (!newCfg.url || !newCfg.db) { toast('Add at least the Odoo URL and database name.'); return; }
-        var btn = byId('odooConnectBtn'); var prev = btn.textContent;
-        btn.textContent = 'Connecting…'; btn.disabled = true;
+        var newCfg = readSettingsConfig();
+        if (!newCfg.url || !newCfg.db || !newCfg.user || (!newCfg.apiKey && !getConfig().apiKey) || (!newCfg.proxyUrl && !hasAuthenticatedApi())) {
+          showActionState('error', 'Complete the Odoo connection details and configure a read-only Worker or sign in to DashView.');
+          return;
+        }
+        var btn = byId('odooConnectBtn'), testBtn = byId('odooTestBtn'), prev = btn.textContent;
+        btn.textContent = 'Connecting…'; btn.disabled = true; btn.setAttribute('aria-busy', 'true');
+        if (testBtn) testBtn.disabled = true;
+        showActionState('pending', 'Connecting to Odoo through your configured proxy…');
         var tag = byId('odooStatusTag');
-        if (tag) { tag.textContent = 'Connecting…'; tag.classList.add('is-connecting'); }
+        if (tag) { tag.textContent = 'Connecting…'; tag.classList.remove('configured', 'live', 'is-configured', 'is-live'); tag.classList.add('is-connecting'); }
         connect(newCfg).then(function (res) {
-          btn.textContent = prev; btn.disabled = false;
-          if (!res.ok) { toast('❌ ' + res.error); refreshStatusTag(); return; }
+          btn.textContent = prev; btn.disabled = false; btn.removeAttribute('aria-busy');
+          if (testBtn) testBtn.disabled = false;
+          if (!res.ok) {
+            showActionState('error', res.error || 'Connection failed. Check the settings and try again.');
+            refreshStatusTag();
+            try { document.dispatchEvent(new CustomEvent('dv:odoo-config-saved')); } catch (e) {}
+            return;
+          }
           saveJSON(LAST_TESTED_KEY, Date.now());
           refreshStatusTag();
-          toast('✓ Live Odoo connected (UID ' + res.uid + ')');
+          showActionState('success', 'Connected to Odoo successfully. Live data is ready to browse.');
           /* Tell the Live Odoo view to reload with the new config */
           try { document.dispatchEvent(new CustomEvent('dv:odoo-config-saved')); } catch(e) {}
+        }, function () {
+          btn.textContent = prev; btn.disabled = false; btn.removeAttribute('aria-busy');
+          if (testBtn) testBtn.disabled = false;
+          refreshStatusTag();
+          showActionState('error', 'Could not save the connection settings. Check browser storage and try again.');
         });
       });
     }
 
     if (byId('odooTestBtn')) {
       byId('odooTestBtn').addEventListener('click', function () {
-        var btn = byId('odooTestBtn'); var prev = btn.textContent;
-        btn.textContent = 'Testing…'; btn.disabled = true;
-        testConnection().then(function (res) {
-          btn.textContent = prev; btn.disabled = false;
+        var btn = byId('odooTestBtn'), connectBtn = byId('odooConnectBtn'), prev = btn.textContent;
+        btn.textContent = 'Testing…'; btn.disabled = true; btn.setAttribute('aria-busy', 'true');
+        if (connectBtn) connectBtn.disabled = true;
+        showActionState('pending', 'Testing the current settings without saving them…');
+        testConnection(readSettingsConfig()).then(function (res) {
+          btn.textContent = prev; btn.disabled = false; btn.removeAttribute('aria-busy');
+          if (connectBtn) connectBtn.disabled = false;
           refreshStatusTag();
-          toast(res.ok
-            ? '✓ Live Odoo reachable — ' + res.latencyMs + ' ms'
-            : '❌ ' + res.error);
+          showActionState(res.ok ? 'success' : 'error', res.ok
+            ? 'Connection test passed in ' + res.latencyMs + ' ms. Settings were not saved.'
+            : (res.error || 'Connection test failed. Check the settings and try again.'));
+        }, function () {
+          btn.textContent = prev; btn.disabled = false; btn.removeAttribute('aria-busy');
+          if (connectBtn) connectBtn.disabled = false;
+          refreshStatusTag();
+          showActionState('error', 'Connection test failed unexpectedly. Check the proxy and try again.');
         });
       });
     }
 
     if (byId('odooDisconnectBtn')) {
       byId('odooDisconnectBtn').addEventListener('click', function () {
-        disconnect(); refreshStatusTag(); toast('Disconnected from Odoo.');
+        disconnect(); refreshStatusTag(); showActionState('info', 'Disconnected. Your saved settings remain in this browser; connect again when you are ready.');
       });
     }
   }

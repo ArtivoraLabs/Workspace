@@ -52,10 +52,10 @@
   function setPass() {
     var p1 = $('secPass1').value, p2 = $('secPass2').value, on = S.hasPasscode(), btn = $('secSetBtn');
     if (p1 !== p2) return msg('The two passcodes do not match.', true);
-    if (p1.length < 6) return msg('Use at least 6 characters (12+ is recommended).', true);
+    if (p1.length < 12) return msg('Use at least 12 characters.', true);
     btn.disabled = true; msg('Securing…');
     var run = on ? S.changePasscode($('secCur').value, p1) : S.setPasscode(p1);
-    run.then(function () { ['secPass1', 'secPass2', 'secCur'].forEach(function (id) { $(id).value = ''; }); meter(); msg(on ? 'Passcode changed.' : 'Passcode enabled — your Odoo API key is now encrypted on this device.'); document.dispatchEvent(new CustomEvent('dv:odoo-config-saved')); all(); })
+    run.then(function () { ['secPass1', 'secPass2', 'secCur'].forEach(function (id) { $(id).value = ''; }); meter(); msg(on ? 'Passcode changed.' : 'Passcode enabled. Re-enter your Odoo API key in Settings → Odoo if prompted.'); document.dispatchEvent(new CustomEvent('dv:odoo-config-saved')); all(); })
       .catch(function (e) { msg(e.message || 'Could not set passcode.', true); }).then(function () { btn.disabled = false; });
   }
 
@@ -63,7 +63,7 @@
     $('secPass1').addEventListener('input', meter);
     $('secSetBtn').addEventListener('click', setPass);
     $('secRemoveBtn').addEventListener('click', function () {
-      if (!confirm('Turn off the passcode? Your Odoo API key will be stored unencrypted again.')) return;
+      if (!confirm('Turn off the passcode? Forget saved Odoo credentials first; API keys are never stored unencrypted.')) return;
       S.removePasscode($('secCur').value).then(function () { $('secCur').value = ''; msg('Passcode disabled.'); all(); }).catch(function (e) { msg(e.message, true); });
     });
     $('secLockBtn').addEventListener('click', function () { S.lock('Manual lock from Settings'); });
@@ -71,7 +71,8 @@
     $('secRedact').addEventListener('change', function () { S.setConf({ redact: this.checked }); S.log('Backup redaction ' + (this.checked ? 'enabled' : 'disabled'), '', this.checked ? 'ok' : 'review'); all(); });
     $('secForgetBtn').addEventListener('click', function () {
       if (!confirm('Remove the saved Odoo credentials from this browser?')) return;
-      localStorage.removeItem('dashview_odoo_config'); localStorage.removeItem('dashview_odoo_connected'); S.log('Odoo credentials removed', '', 'review');
+      if (!S.forgetCredentials()) return msg('Could not remove Odoo credentials from browser storage.', true);
+      S.log('Odoo credentials removed', '', 'review');
       document.dispatchEvent(new CustomEvent('dv:odoo-config-saved')); toast('Odoo credentials removed.'); all();
     });
     $('secWipeBtn').addEventListener('click', function () {

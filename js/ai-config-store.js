@@ -123,7 +123,7 @@
   function callDashView(messages, cfg) {
     var headers = { 'Content-Type': 'application/json' };
     var tok = '';
-    try { tok = localStorage.getItem('al_api_token') || ''; } catch (e) {}
+    try { tok = sessionStorage.getItem('al_api_token') || ''; } catch (e) {}
     if (cfg.apiKey) headers['X-API-Key'] = cfg.apiKey;
     else if (tok) headers['Authorization'] = 'Bearer ' + tok;
 

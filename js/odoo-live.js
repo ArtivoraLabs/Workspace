@@ -38,17 +38,50 @@
   function setStatus(mode, text) {
     var pill = byId('odooLiveStatus'), label = byId('odooLiveStatusText');
     if (!pill || !label) return;
-    pill.classList.remove('is-live', 'is-error');
+    pill.classList.remove('is-live', 'is-error', 'is-connecting', 'is-disconnected');
     if (mode === 'live') pill.classList.add('is-live');
     if (mode === 'error') pill.classList.add('is-error');
+    if (mode === 'connecting' || mode === 'testing') pill.classList.add('is-connecting');
+    if (mode === 'disconnected') pill.classList.add('is-disconnected');
+    pill.setAttribute('data-state', mode);
     label.textContent = text;
   }
+  function safeError(e) {
+    var message = String(e && e.message || 'Odoo request failed.');
+    var cfg = C.cfg();
+    [cfg.apiKey, cfg.username].forEach(function (secret) {
+      if (secret) message = message.split(String(secret)).join('[redacted]');
+    });
+    if (/401|403|auth|credential|login|uid/i.test(message)) return 'Authentication was refused. Verify the database name, username and Odoo API key.';
+    if (/429|rate.?limit/i.test(message)) return 'Odoo is receiving too many requests. Wait a moment, then retry.';
+    if (/access.?denied|access rights|permission|forbidden/i.test(message)) return 'This Odoo user cannot read the selected app or model. Ask an Odoo administrator to grant read access.';
+    if (/cannot reach|failed to fetch|networkerror|load failed/i.test(message)) return 'Could not reach the configured proxy. Check its URL, deployment and allowed site origins.';
+    return message;
+  }
+  function showLiveError(e) {
+    var banner = byId('odooLiveConnectBanner'), text = byId('odooLiveConnectBannerText'), retry = byId('odooLiveRetryBtn');
+    if (banner && text) {
+      text.innerHTML = '<strong>Connection issue.</strong> ' + esc(safeError(e));
+      banner.hidden = false;
+    }
+    if (retry) retry.hidden = false;
+    setStatus('error', 'Connection error');
+  }
   function renderBanner() {
-    var s = C.state(), banner = byId('odooLiveConnectBanner'), text = byId('odooLiveConnectBannerText');
-    if (s === 'ok') { banner.hidden = true; return true; }
+    var s = C.state(), banner = byId('odooLiveConnectBanner'), text = byId('odooLiveConnectBannerText'), retry = byId('odooLiveRetryBtn');
+    var connected = window.DVOdoo && window.DVOdoo.isConnected && window.DVOdoo.isConnected();
+    if (s === 'ok' && connected) {
+      banner.hidden = true;
+      if (retry) retry.hidden = true;
+      return true;
+    }
     banner.hidden = false;
-    text.innerHTML = '<strong>' + (s === 'locked' ? 'Workspace locked.' : s === 'noproxy' ? 'Worker URL missing.' : 'Odoo not connected.') + '</strong> ' + esc(C.message(s));
-    setStatus('error', s === 'locked' ? 'Locked' : 'Not connected');
+    var message = s === 'ok'
+      ? 'Connect from Settings before browsing live records. Your saved credentials remain in this browser.'
+      : C.message(s);
+    text.innerHTML = '<strong>' + (s === 'locked' ? 'Workspace locked.' : s === 'noproxy' ? 'Proxy URL missing.' : s === 'ok' ? 'Odoo is disconnected.' : 'Odoo is not configured.') + '</strong> ' + esc(message);
+    if (retry) retry.hidden = true;
+    setStatus('disconnected', s === 'locked' ? 'Locked' : 'Not connected');
     byId('odooLiveConn').innerHTML = '';
     return false;
   }
@@ -135,7 +168,7 @@
       if (seq !== state.seq) return;
       state.models = models; fillModelSelect();
       if (models.length) selectModel(models[0].model); else showEmpty('This module has no readable data models.');
-    }).catch(function (e) { showEmpty(e.message); });
+    }).catch(function (e) { showEmpty(safeError(e)); });
   }
 
   /* -- Model + fields ------------------------------------------------------- */
@@ -146,11 +179,11 @@
     C.fields(model).then(function (f) {
       if (state.activeModel !== model) return;
       state.fields = f; populateControls(); refreshTab();
-    }).catch(function (e) { showEmpty(e.message); });
+    }).catch(function (e) { showEmpty(safeError(e)); });
   }
   function showEmpty(msg) {
     setStatus('error', 'Error');
-    byId('odooLiveKpis').innerHTML = ''; byId('odooLiveCharts').innerHTML = '<div class="olx-empty">' + esc(msg) + '</div>';
+    byId('odooLiveKpis').innerHTML = ''; byId('odooLiveCharts').innerHTML = '<div class="olx-empty" role="alert">' + esc(safeError({ message: msg })) + '</div>';
   }
   function populateControls() {
     var f = state.fields, names = Object.keys(f);
@@ -167,7 +200,12 @@
   /* -- Tabs ----------------------------------------------------------------- */
   function showTab(tab) {
     state.tab = tab;
-    document.querySelectorAll('#odooLiveTabs button').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === tab); });
+    document.querySelectorAll('#odooLiveTabs [role="tab"]').forEach(function (b) {
+      var selected = b.getAttribute('data-tab') === tab;
+      b.classList.toggle('active', selected);
+      b.setAttribute('aria-selected', selected ? 'true' : 'false');
+      b.tabIndex = selected ? 0 : -1;
+    });
     byId('odooLiveInsights').hidden = tab !== 'insights'; byId('odooLiveRecords').hidden = tab !== 'records';
     refreshTab();
   }
@@ -233,7 +271,7 @@
         F.chart('olxc-' + id, chartConfig(spec, rows, isMoney));
         if (leg) leg.innerHTML = spec.type === 'doughnut' ? legend(rows, isMoney) : '';
       });
-    }).catch(function (e) { body.innerHTML = '<div class="olx-empty-s is-error">Not available: ' + esc(e.message) + '</div>'; if (leg) leg.innerHTML = ''; });
+    }).catch(function (e) { body.innerHTML = '<div class="olx-empty-s is-error" role="alert">Not available: ' + esc(safeError(e)) + '</div>'; if (leg) leg.innerHTML = ''; });
   }
   function fillKpi(i, spec) {
     var el = byId('olxk-' + i); if (!el) return;
@@ -243,7 +281,7 @@
       if (spec.kind === 'count') { main = F.num(r.count || 0); if (spec.measure) sub = F.money(r.sum, true) + ' · ' + sub; }
       else main = spec.kind === 'money' ? F.money(r.sum, r.sum >= 1e5) : F.num(r.sum, 1);
       el.querySelector('.olx-k-val').textContent = main; el.querySelector('.olx-k-sub').textContent = sub; el.classList.remove('is-loading');
-    }).catch(function (e) { el.classList.remove('is-loading'); el.classList.add('is-error'); el.querySelector('.olx-k-val').textContent = 'n/a'; el.querySelector('.olx-k-sub').textContent = e.message; });
+    }).catch(function (e) { el.classList.remove('is-loading'); el.classList.add('is-error');     el.querySelector('.olx-k-val').textContent = 'n/a'; el.querySelector('.olx-k-sub').textContent = safeError(e); });
   }
   function loadInsights() {
     state.dirty.insights = false;
@@ -270,7 +308,12 @@
   }
 
   /* -- Records explorer ------------------------------------------------------- */
-  function closePops() { ['odooLiveColumnsPop', 'odooLiveViewsPop'].forEach(function (id) { if (byId(id)) byId(id).hidden = true; }); }
+  function closePops() {
+    [['odooLiveColumnsPop', 'odooLiveColumnsBtn'], ['odooLiveViewsPop', 'odooLiveViewsBtn']].forEach(function (pair) {
+      if (byId(pair[0])) byId(pair[0]).hidden = true;
+      if (byId(pair[1])) byId(pair[1]).setAttribute('aria-expanded', 'false');
+    });
+  }
   function eligible() { return Object.keys(state.fields).filter(function (k) { return DISPLAYABLE[state.fields[k].type]; }); }
   function defaultColumns() {
     var el = eligible(), out = PREFER.filter(function (n) { return el.indexOf(n) > -1; });
@@ -306,9 +349,10 @@
     var s = String(v); return esc(s.length > 80 ? s.slice(0, 80) + '…' : s);
   }
   function failTable(e) {
-    setStatus('error', 'Error');
+    showLiveError(e);
     byId('odooLiveTable').querySelector('thead').innerHTML = '';
-    byId('odooLiveTable').querySelector('tbody').innerHTML = '<tr><td class="odoo-live-table-state is-error">' + esc((e && e.message) || 'Odoo request failed.') + '</td></tr>';
+    byId('odooLiveTable').setAttribute('aria-busy', 'false');
+    byId('odooLiveTable').querySelector('tbody').innerHTML = '<tr><td class="odoo-live-table-state is-error" role="alert">' + esc(safeError(e)) + '</td></tr>';
   }
   function loadRecords() {
     if (!state.activeModel || !renderBanner()) return;
@@ -316,14 +360,17 @@
     var cols = displayFields(), t0 = Date.now();
     byId('odooLiveTable').querySelector('thead').innerHTML = '';
     byId('odooLiveTable').querySelector('tbody').innerHTML = '<tr><td class="odoo-live-table-state">Fetching live records…</td></tr>';
+    byId('odooLiveTable').setAttribute('aria-busy', 'true');
     setStatus('connecting', 'Syncing…');
     C.records(state.activeModel, { domain: buildDomain(), fields: cols, limit: PAGE_SIZE, offset: state.page * PAGE_SIZE, order: 'id desc' }).then(function (res) {
       state.total = res.total || 0; state.records = res.rows || []; state.columns = cols; state.lastSynced = new Date();
+      byId('odooLiveTable').setAttribute('aria-busy', 'false');
       setStatus('live', 'Live · ' + (Date.now() - t0) + ' ms'); renderTable(); renderPagination(); renderConn();
     }).catch(failTable);
   }
   function renderTable() {
     var thead = byId('odooLiveTable').querySelector('thead'), tbody = byId('odooLiveTable').querySelector('tbody');
+    byId('odooLiveTable').setAttribute('aria-busy', 'false');
     if (!state.records.length) { thead.innerHTML = ''; tbody.innerHTML = '<tr><td class="odoo-live-table-state">No matching records.</td></tr>'; return; }
     thead.innerHTML = '<tr>' + state.columns.map(function (c) { return '<th>' + esc((state.fields[c] && state.fields[c].string) || c) + '</th>'; }).join('') + '</tr>';
     tbody.innerHTML = state.records.map(function (r) { return '<tr>' + state.columns.map(function (c) { return '<td>' + cell(r[c], state.fields[c]) + '</td>'; }).join('') + '</tr>'; }).join('');
@@ -373,6 +420,8 @@
   function loadModules(force) {
     if (!renderBanner()) return;
     if (force) C.reset();
+    byId('odooLiveConnectBanner').hidden = true;
+    if (byId('odooLiveRetryBtn')) byId('odooLiveRetryBtn').hidden = true;
     byId('odooLiveModuleSelect').disabled = true;
     byId('odooLiveModuleSelect').innerHTML = '<option>Loading modules…</option>';
     setStatus('connecting', 'Syncing…');
@@ -381,7 +430,11 @@
       state.modules = mods; setStatus('live', 'Live'); fillModuleSelect(); renderConn();
       var keep = state.activeModule && mods.some(function (m) { return m.technicalName === state.activeModule; }) ? state.activeModule : defaultModule();
       if (keep) selectModule(keep);
-    }).catch(function (e) { setStatus('error', 'Connection error'); byId('odooLiveModuleSelect').innerHTML = '<option>' + esc(e.message) + '</option>'; });
+    }).catch(function (e) {
+      setStatus('error', 'Connection error');
+      byId('odooLiveModuleSelect').innerHTML = '<option value="">Could not load apps</option>';
+      showLiveError(e);
+    });
   }
   function refresh(force) {
     if (!renderBanner()) return;
@@ -393,18 +446,32 @@
   function init() {
     renderBanner();
     byId('odooLiveRefreshBtn').addEventListener('click', function () { var b = this; b.classList.add('is-spinning'); refresh(); setTimeout(function () { b.classList.remove('is-spinning'); }, 700); });
+    if (byId('odooLiveRetryBtn')) byId('odooLiveRetryBtn').addEventListener('click', function () { this.disabled = true; refresh('all'); var b = this; setTimeout(function () { b.disabled = false; }, 1500); });
     byId('odooLiveModuleSelect').addEventListener('change', function () { if (this.value) selectModule(this.value); });
     byId('odooLiveModelSelect').addEventListener('change', function () { if (this.value) selectModel(this.value); });
-    document.querySelectorAll('#odooLiveTabs button').forEach(function (b) { b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); }); });
+    document.querySelectorAll('#odooLiveTabs button').forEach(function (b) {
+      b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); });
+      b.addEventListener('keydown', function (e) {
+        var tabs = [].slice.call(document.querySelectorAll('#odooLiveTabs [role="tab"]')), i = tabs.indexOf(b), next = null;
+        if (e.key === 'ArrowRight') next = (i + 1) % tabs.length;
+        if (e.key === 'ArrowLeft') next = (i + tabs.length - 1) % tabs.length;
+        if (e.key === 'Home') next = 0;
+        if (e.key === 'End') next = tabs.length - 1;
+        if (next !== null) { e.preventDefault(); tabs[next].focus(); tabs[next].click(); }
+      });
+    });
     ['odooLiveGroupBy', 'odooLiveMeasure', 'odooLiveChartType'].forEach(function (id) { byId(id).addEventListener('change', runBuilder); });
     byId('odooLiveAddFilterBtn').addEventListener('click', function () {
       var field = byId('odooLiveFilterField').value, value = byId('odooLiveFilterValue').value.trim(); if (!field || !value) return;
       state.filters.push({ field: field, value: value }); byId('odooLiveFilterValue').value = ''; state.page = 0; renderChips(); loadRecords();
     });
+    byId('odooLiveFilterValue').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !byId('odooLiveAddFilterBtn').disabled) { e.preventDefault(); byId('odooLiveAddFilterBtn').click(); }
+    });
     byId('odooLiveQuickSearch').addEventListener('input', debounce(function () { state.page = 0; loadRecords(); }, 400));
-    byId('odooLiveColumnsBtn').addEventListener('click', function (e) { e.stopPropagation(); var p = byId('odooLiveColumnsPop'), was = p.hidden; closePops(); if (was && !this.disabled) { renderColumnsPop(); p.hidden = false; } });
+    byId('odooLiveColumnsBtn').addEventListener('click', function (e) { e.stopPropagation(); var p = byId('odooLiveColumnsPop'), was = p.hidden; closePops(); if (was && !this.disabled) { renderColumnsPop(); p.hidden = false; this.setAttribute('aria-expanded', 'true'); } });
     byId('odooLiveColumnsReset').addEventListener('click', function () { delete state.columnPrefs[state.activeModel]; saveJSON(COLUMNS_KEY, state.columnPrefs); renderColumnsPop(); loadRecords(); });
-    byId('odooLiveViewsBtn').addEventListener('click', function (e) { e.stopPropagation(); var p = byId('odooLiveViewsPop'), was = p.hidden; closePops(); if (was && !this.disabled) { renderViewsPop(); p.hidden = false; } });
+    byId('odooLiveViewsBtn').addEventListener('click', function (e) { e.stopPropagation(); var p = byId('odooLiveViewsPop'), was = p.hidden; closePops(); if (was && !this.disabled) { renderViewsPop(); p.hidden = false; this.setAttribute('aria-expanded', 'true'); } });
     byId('odooLiveViewSaveBtn').addEventListener('click', function () {
       if (!state.activeModel) return; var inp = byId('odooLiveViewName');
       var v = { id: 'v' + Date.now().toString(36), name: (inp.value.trim() || state.activeModel + ' view'), model: state.activeModel, filters: state.filters.slice() };
@@ -413,6 +480,7 @@
     byId('odooLiveExportBtn').addEventListener('click', exportCsv);
     document.querySelectorAll('.odoo-live-pop').forEach(function (p) { p.addEventListener('click', function (e) { e.stopPropagation(); }); });
     document.addEventListener('click', function (e) { if (!e.target.closest || !e.target.closest('.odoo-live-pop-wrap')) closePops(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePops(); });
     byId('odooLivePrevBtn').addEventListener('click', function () { if (state.page > 0) { state.page--; loadRecords(); } });
     byId('odooLiveNextBtn').addEventListener('click', function () { state.page++; loadRecords(); });
 
@@ -423,6 +491,8 @@
     window.addEventListener('storage', function (e) { if (e.key === 'dashview_odoo_config' || e.key === 'dashview_odoo_connected') resetAndRefresh(); });
     ['dv:odoo-config-saved', 'dv:unlocked'].forEach(function (ev) { document.addEventListener(ev, resetAndRefresh); });
     document.addEventListener('dv:locked', function () { state.modules = []; renderBanner(); });
+    document.addEventListener('dv:odoo-disconnected', function () { state.modules = []; state.models = []; state.activeModel = null; C.reset(); renderBanner(); });
+    document.addEventListener('dv:session-changed', renderBanner);
     document.addEventListener('dv:theme', function () { state.dirty.insights = true; if (byId('view-odoo-live').classList.contains('active')) refreshTab(); });
     if (byId('view-odoo-live').classList.contains('active')) refresh();
     document.querySelectorAll('[data-view="odoo-live"]').forEach(function (l) { l.addEventListener('click', function () { setTimeout(function () { refresh(); F.resizeCharts(byId('view-odoo-live')); }, 0); }); });

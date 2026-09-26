@@ -16,6 +16,10 @@
                    pivot tables with repeating headers, and a running
                    header/footer with page numbers.
 
+   Odoo AI dashboards use the same PDF stack via composeAIDashboardPdf /
+   generateAIDashboardPdf, with vector charts, exact returned-value tables,
+   the model's evidence narrative, and explicit source/method/limitations.
+
    This file is deliberately framework-free and side-effect-free at parse
    time: it exposes a small `DVReportEngine` API and does nothing until
    called. The "compose*" functions take the library constructor as an
@@ -58,7 +62,8 @@ var DVReportEngine = (function () {
      ====================================================================== */
   function pad2(n) { return n < 10 ? '0' + n : String(n); }
   function stamp(d) {
-    d = d || new Date();
+    d = d ? (d instanceof Date ? d : new Date(d)) : new Date();
+    if (isNaN(d.getTime())) return 'Date unavailable';
     var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var h = d.getHours(), ampm = h >= 12 ? 'PM' : 'AM'; h = h % 12; if (h === 0) h = 12;
     return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear() + ' · ' + h + ':' + pad2(d.getMinutes()) + ' ' + ampm;
@@ -323,6 +328,8 @@ var DVReportEngine = (function () {
       ['Generated', stamp(payload.generatedAt)],
       ['Rows included', (payload.filteredRows != null ? payload.filteredRows.toLocaleString() : '—') + (payload.totalRows && payload.totalRows !== payload.filteredRows ? ' of ' + payload.totalRows.toLocaleString() + ' total' : '')],
     ];
+    if (payload.source) meta.push(['Source', payload.source]);
+    if (payload.currency) meta.push(['Currency', payload.currency]);
     doc.setFontSize(10.5);
     meta.forEach(function (m) {
       doc.setFont('helvetica', 'bold'); pdfSetMuted(doc);
@@ -399,9 +406,15 @@ var DVReportEngine = (function () {
       var paras = text.split(/\n{2,}/);
       paras.forEach(function (p) {
         var lines = doc.splitTextToSize(p.trim(), PAGE.w - PAGE.margin * 2);
-        if (y + lines.length * 13 > PAGE.h - PAGE.margin) { doc.addPage(); y = sectionHeading(doc, 'AI insights (continued)', 60); }
-        doc.text(lines, PAGE.margin, y);
-        y += lines.length * 13 + 10;
+        var offset = 0;
+        while (offset < lines.length) {
+          var room = Math.floor((PAGE.h - PAGE.margin - y - 10) / 13);
+          if (room < 1) { doc.addPage(); y = sectionHeading(doc, 'AI insights (continued)', 60); room = Math.floor((PAGE.h - PAGE.margin - y - 10) / 13); }
+          var chunk = lines.slice(offset, offset + room);
+          doc.text(chunk, PAGE.margin, y);
+          y += chunk.length * 13 + 10;
+          offset += chunk.length;
+        }
       });
     }
     if (snap) {
@@ -416,6 +429,96 @@ var DVReportEngine = (function () {
       try { doc.addImage(snap, 'PNG', PAGE.margin, sy, w, h, undefined, 'FAST'); }
       catch (e) { doc.setFont('helvetica', 'italic'); doc.setFontSize(10); pdfSetMuted(doc); doc.text('Snapshot could not be embedded.', PAGE.margin, sy + 20); }
     }
+    return doc;
+  }
+
+  function buildAIDashboardCharts(doc, payload) {
+    (payload.metrics || []).forEach(function (metric) {
+      doc.addPage();
+      var y = sectionHeading(doc, metric.title || 'Metric', 60);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); pdfSetMuted(doc);
+      doc.text('Source: ' + String(metric.model || 'Odoo') + ' · ' + String(metric.measure || ''), PAGE.margin, y);
+      y += 24;
+      var rows = (metric.rows || []).slice(0, 24), left = PAGE.margin + 130;
+      var chartW = PAGE.w - PAGE.margin * 2 - 150, rowH = Math.min(30, Math.max(18, (PAGE.h - y - PAGE.margin - 30) / Math.max(rows.length, 1)));
+      var max = Math.max.apply(null, rows.map(function (r) { return Math.abs(Number(r.value) || 0); })) || 1;
+      if (metric.chartType === 'line' && rows.length > 1) {
+        var values = rows.map(function (r) { return Number(r.value) || 0; });
+        var low = Math.min.apply(null, values), high = Math.max.apply(null, values), span = high - low || 1;
+        var step = Math.ceil(rows.length / 6), maxIndex = values.indexOf(high);
+        var points = rows.map(function (r, i) {
+          return { x: left + i * chartW / (rows.length - 1), y: y + 12 + (1 - (values[i] - low) / span) * 48 };
+        });
+        doc.setDrawColor(RGB.border[0], RGB.border[1], RGB.border[2]);
+        doc.line(left, y + 68, left + chartW, y + 68);
+        points.forEach(function (point, i) {
+          if (i) { doc.setDrawColor(RGB.accent[0], RGB.accent[1], RGB.accent[2]); doc.setLineWidth(2); doc.line(points[i - 1].x, points[i - 1].y, point.x, point.y); }
+          if (doc.circle) { doc.setFillColor(RGB.accent[0], RGB.accent[1], RGB.accent[2]); doc.circle(point.x, point.y, 2.5, 'F'); }
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); pdfSetInk(doc);
+          if (i === maxIndex || i === rows.length - 1) doc.text(String(rows[i].value), point.x, point.y - 5, { align: 'center' });
+          if (i % step === 0 || i === rows.length - 1) doc.text(doc.splitTextToSize(String(rows[i].label || ''), 70).slice(0, 1), point.x, y + 82, { align: 'center' });
+        });
+      } else {
+        rows.forEach(function (r, i) {
+          var ry = y + i * rowH;
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); pdfSetInk(doc);
+          doc.text(doc.splitTextToSize(String(r.label || ''), 122).slice(0, 1), PAGE.margin, ry + 10);
+          doc.setFillColor(RGB.band[0], RGB.band[1], RGB.band[2]);
+          doc.rect(left, ry + 2, chartW, 10, 'F');
+          doc.setFillColor(RGB.accent[0], RGB.accent[1], RGB.accent[2]);
+          doc.rect(left, ry + 2, Math.max(1, chartW * Math.abs(Number(r.value) || 0) / max), 10, 'F');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); pdfSetInk(doc);
+          doc.text(String(r.value), left + chartW + 8, ry + 10);
+        });
+      }
+    });
+  }
+
+  function buildAIDashboardDetails(doc, payload) {
+    doc.addPage();
+    var y = sectionHeading(doc, 'Source, method & limitations', 60);
+    function newDetailsPage() {
+      doc.addPage();
+      y = sectionHeading(doc, 'Source, method & limitations (continued)', 60);
+    }
+    function detailBlock(label, content) {
+      doc.setFont('helvetica', 'normal'); pdfSetInk(doc);
+      var lines = doc.splitTextToSize(String(content), PAGE.w - PAGE.margin * 2 - 105);
+      if (y + Math.max(18, lines.length * 13 + 6) > PAGE.h - PAGE.margin) newDetailsPage();
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); pdfSetMuted(doc);
+      doc.text(label.toUpperCase(), PAGE.margin, y);
+      doc.setFont('helvetica', 'normal'); pdfSetInk(doc);
+      doc.text(lines, PAGE.margin + 105, y);
+      y += Math.max(18, lines.length * 13 + 6);
+    }
+    var parts = [
+      ['Source', payload.source || 'Live Odoo query results'],
+      ['Generated', stamp(payload.generatedAt)],
+      ['Method', (payload.methods || []).join('\n') || 'Read-only Odoo query results']
+    ];
+    parts.forEach(function (part) { detailBlock(part[0], part[1]); });
+    var limitations = payload.limitations || [];
+    if (limitations.length) detailBlock('Limitations', limitations.join('\n'));
+    return doc;
+  }
+
+  function composeAIDashboardPdf(jsPDFCtor, payload) {
+    payload = payload || {};
+    var doc = new jsPDFCtor({ unit: 'pt', format: 'a4', compress: true });
+    buildCoverPage(doc, payload);
+    if (payload.kpis && payload.kpis.length) {
+      buildKpiSection(doc, { kpis: payload.kpis.map(function (k) { return { label: k.label, value: k.value }; }) });
+    }
+    if (payload.insightsText) buildInsightsSection(doc, { insightsText: payload.insightsText });
+    buildAIDashboardCharts(doc, payload);
+    (payload.metrics || []).forEach(function (metric) {
+      tableSection(doc, 'Evidence: ' + (metric.title || metric.model || 'Metric'),
+        ['Group', 'Value', 'Records'], (metric.rows || []).slice(0, MAX_PDF_ROWS).map(function (row) {
+          return [String(row.label || ''), String(row.value), row.count == null ? '—' : String(row.count)];
+        }));
+    });
+    buildAIDashboardDetails(doc, payload);
+    addHeaderFooter(doc, payload);
     return doc;
   }
 
@@ -567,12 +670,19 @@ var DVReportEngine = (function () {
       doc.save(sanitizeFilename(payload.workbookName) + ' - Report.pdf');
     });
   }
+  function generateAIDashboardPdf(payload) {
+    return loadPdfLib().then(function () {
+      var doc = composeAIDashboardPdf(window.jspdf.jsPDF, payload);
+      doc.save(sanitizeFilename(payload.title || 'Odoo dashboard') + ' - DashView.pdf');
+    });
+  }
 
   return {
     BRAND: BRAND,
     // pure / testable
     composeWorkbook: composeWorkbook,
     composePdfDocument: composePdfDocument,
+    composeAIDashboardPdf: composeAIDashboardPdf,
     numFmtForType: numFmtForType,
     excelValue: excelValue,
     // browser entry points
@@ -580,6 +690,7 @@ var DVReportEngine = (function () {
     loadPdfLib: loadPdfLib,
     generateExcelReport: generateExcelReport,
     generatePdfReport: generatePdfReport,
+    generateAIDashboardPdf: generateAIDashboardPdf,
   };
 })();
 

@@ -1,31 +1,6 @@
-/* ==========================================================================
-   DashView — Auth + Role service (PROTOTYPE / MOCK)
-   ==========================================================================
-   This is a client-side, zero-backend mock of a real auth system, built so
-   the rest of the app (widget builder, Odoo panel, sharing, TV mode) has a
-   real permission model to check against today, and a clean seam to swap in
-   real authentication later.
-
-   What's real: session state, role-based permission checks (window.DVAuth.can),
-   and every UI element that reads them.
-   What's mock: there is no server, no password hashing, no verified identity.
-   "Passwords" are checked against a plaintext seed list in localStorage —
-   this is exactly as secure as it sounds, i.e. not at all. Never reuse a
-   real password here.
-
-   TO WIRE UP REAL AUTH LATER:
-   - Replace `login()`'s body with a fetch() to /server (see js/dashview-api.js
-     for the existing pattern — it already does real JWT auth against
-     server/src/routes/auth.routes.js).
-   - Replace the seeded USERS list with a real `/me` lookup.
-   - Keep the same `window.DVAuth` surface (can/currentUser/login/logout) so
-     nothing else in the app has to change.
-   ========================================================================== */
+/* DashView authentication UI. Authorization is enforced by the API, not this UI. */
 (function () {
   'use strict';
-
-  var USERS_KEY = 'dv_auth_users';
-  var SESSION_KEY = 'dv_auth_session';
 
   var ROLES = { ADMIN: 'admin', EDITOR: 'editor', VIEWER: 'viewer' };
 
@@ -48,44 +23,20 @@
     manageUsers: ['admin']
   };
 
-  var SEED_USERS = [
-    { email: 'admin@acme-corp.com', password: 'admin123', name: 'Amara Khan', role: ROLES.ADMIN, initials: 'AK' },
-    { email: 'editor@acme-corp.com', password: 'editor123', name: 'Jonah Price', role: ROLES.EDITOR, initials: 'JP' },
-    { email: 'viewer@acme-corp.com', password: 'viewer123', name: 'Sasha Lee', role: ROLES.VIEWER, initials: 'SL' }
-  ];
-
-  function loadJSON(key, fallback) {
-    try { var v = JSON.parse(localStorage.getItem(key)); return v === null || v === undefined ? fallback : v; }
-    catch (e) { return fallback; }
-  }
-  function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {} }
-
-  function seedUsers() {
-    var existing = loadJSON(USERS_KEY, null);
-    if (!existing || !existing.length) { saveJSON(USERS_KEY, SEED_USERS); return SEED_USERS; }
-    return existing;
-  }
-
-  function getUsers() { return seedUsers(); }
-
-  function getSession() { return loadJSON(SESSION_KEY, null); }
-  function setSession(sess) { saveJSON(SESSION_KEY, sess); render(); }
-
   function guestSession() {
-    return { email: 'guest@acme-corp.com', name: 'Guest', role: ROLES.VIEWER, initials: 'GU', guest: true };
+    return { email: '', name: 'Guest', role: ROLES.VIEWER, initials: 'GU', guest: true };
   }
 
-  // First-ever visit defaults to the workspace admin (Amara Khan) — this
-  // matches the workspace this app already presents everywhere else (audit
-  // log, team page, profile settings) so nothing else has to change. Signing
-  // out drops to an explicit Guest/Viewer session instead of erasing state,
-  // so the role-gating is easy to see without forcing a real login first.
   function currentUser() {
-    var sess = getSession();
-    if (sess) return sess;
-    var def = { email: 'admin@acme-corp.com', name: 'Amara Khan', role: ROLES.ADMIN, initials: 'AK' };
-    saveJSON(SESSION_KEY, def);
-    return def;
+    var user = window.AL_API && window.AL_API.user && window.AL_API.user();
+    if (!user) return guestSession();
+    var role = user.role === 'owner' || user.role === 'admin' ? ROLES.ADMIN : ROLES.VIEWER;
+    return Object.assign({}, user, {
+      orgRole: user.role,
+      role: role,
+      initials: String(user.name || user.email || 'U').trim().split(/\s+/).slice(0, 2).map(function (x) { return x[0]; }).join('').toUpperCase(),
+      guest: false
+    });
   }
 
   function can(perm) {
@@ -94,25 +45,16 @@
     return !!allowed && allowed.indexOf(role) > -1;
   }
 
-  function login(email, password) {
-    var users = getUsers();
-    var match = users.filter(function (u) { return u.email.toLowerCase() === String(email).toLowerCase(); })[0];
-    if (!match) return { ok: false, error: 'No account with that email in this demo workspace.' };
-    if (match.password !== password) return { ok: false, error: 'Incorrect password.' };
-    setSession({ email: match.email, name: match.name, role: match.role, initials: match.initials });
-    return { ok: true };
-  }
-
-  function loginAsDemo(role) {
-    var users = getUsers();
-    var match = users.filter(function (u) { return u.role === role; })[0];
-    if (!match) return { ok: false, error: 'Unknown role.' };
-    setSession({ email: match.email, name: match.name, role: match.role, initials: match.initials });
-    return { ok: true };
+  async function login(email, password) {
+    if (!window.AL_API) throw new Error('The account service is not loaded.');
+    await window.AL_API.login(email, password);
+    render();
+    return currentUser();
   }
 
   function logout() {
-    setSession(guestSession());
+    if (window.AL_API) window.AL_API.disconnect();
+    render();
   }
 
   /* ── Role gating: any element with [data-min-role] is hidden unless the
@@ -147,21 +89,21 @@
       '  <button type="button" class="modal-close" id="dvAuthClose" aria-label="Close">' +
       '    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>' +
       '  </button>' +
-      '  <p class="eyebrow" style="margin-bottom:var(--sp-2);">Prototype auth — not a real account system</p>' +
-      '  <h3>Sign in to acme-corp</h3>' +
-      '  <p>Three demo roles are seeded so you can see how the workspace changes per permission level. Pick one instantly, or sign in with its credentials below.</p>' +
-      '  <div class="dv-demo-role-row" id="dvDemoRoleRow">' +
-      '    <button type="button" class="dv-demo-role-btn" data-role="admin"><span class="dv-role-dot" style="background:' + ROLE_COLOR.admin + '"></span>Admin</button>' +
-      '    <button type="button" class="dv-demo-role-btn" data-role="editor"><span class="dv-role-dot" style="background:' + ROLE_COLOR.editor + '"></span>Editor</button>' +
-      '    <button type="button" class="dv-demo-role-btn" data-role="viewer"><span class="dv-role-dot" style="background:' + ROLE_COLOR.viewer + '"></span>Viewer</button>' +
-      '  </div>' +
+      '  <p class="eyebrow" style="margin-bottom:var(--sp-2);">Secure workspace access</p>' +
+      '  <h3 id="dvAuthTitle">Sign in to DashView</h3>' +
+      '  <p id="dvAuthIntro">Use your organization account. New organization? Create the first owner account.</p>' +
       '  <form id="dvAuthForm" novalidate>' +
-      '    <div class="field"><label for="dvAuthEmail">Email</label><input type="email" id="dvAuthEmail" placeholder="admin@acme-corp.com" autocomplete="username"/></div>' +
+      '    <div class="field"><label for="dvApiBase">Account API URL</label><input type="url" id="dvApiBase" autocomplete="url" placeholder="https://api.example.com/api"/></div>' +
+      '    <div class="field" id="dvOrgField" hidden><label for="dvOrgName">Organization</label><input type="text" id="dvOrgName" maxlength="120" autocomplete="organization"/></div>' +
+      '    <div class="field" id="dvNameField" hidden><label for="dvAuthName">Full name</label><input type="text" id="dvAuthName" maxlength="100" autocomplete="name"/></div>' +
+      '    <div class="field"><label for="dvAuthEmail">Email</label><input type="email" id="dvAuthEmail" maxlength="320" autocomplete="username"/></div>' +
       '    <div class="field"><label for="dvAuthPassword">Password</label><input type="password" id="dvAuthPassword" placeholder="••••••••" autocomplete="current-password"/></div>' +
+      '    <p class="settings-note" id="dvPasswordHelp">Use your organization password.</p>' +
       '    <p class="formula-error" id="dvAuthError" style="display:none;"></p>' +
       '    <button type="submit" class="btn btn-primary btn-block btn-lg" style="margin-top:var(--sp-3);">Sign in</button>' +
       '  </form>' +
-      '  <p class="settings-note" style="margin-top:var(--sp-4);">Demo credentials: <code>admin@acme-corp.com / admin123</code>, <code>editor@acme-corp.com / editor123</code>, <code>viewer@acme-corp.com / viewer123</code>.</p>' +
+      '  <button type="button" class="auth-guest-link" id="dvAuthModeToggle">Create organization account</button>' +
+      '  <p class="settings-note" style="margin-top:var(--sp-3);">Guest access is read-only. Accounts require the configured DashView API.</p>' +
       '</div>';
     document.body.appendChild(overlay);
 
@@ -169,21 +111,57 @@
     function byId(id) { return document.getElementById(id); }
     byId('dvAuthClose').addEventListener('click', close);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
-    document.querySelectorAll('#dvDemoRoleRow .dv-demo-role-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        loginAsDemo(btn.getAttribute('data-role'));
-        if (window.showToast) window.showToast('Signed in as ' + ROLE_LABEL[btn.getAttribute('data-role')] + ' (demo).');
-        close();
-      });
+    var authMode = 'login';
+    function setAuthMode(mode) {
+      authMode = mode;
+      var signup = mode === 'register';
+      byId('dvOrgField').hidden = !signup;
+      byId('dvNameField').hidden = !signup;
+      byId('dvAuthTitle').textContent = signup ? 'Create your organization' : 'Sign in to DashView';
+      byId('dvAuthIntro').textContent = signup ? 'This creates your workspace and grants you the first owner account.' : 'Use your organization account to continue.';
+      byId('dvAuthPassword').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+      byId('dvPasswordHelp').textContent = signup ? 'Choose a unique password with at least 12 characters.' : 'Use your organization password.';
+      byId('dvAuthForm').querySelector('button[type="submit"]').textContent = signup ? 'Create owner account' : 'Sign in';
+      byId('dvAuthModeToggle').textContent = signup ? 'Already have an account? Sign in' : 'Create organization account';
+    }
+    byId('dvApiBase').value = window.AL_API.base();
+    byId('dvAuthModeToggle').addEventListener('click', function () {
+      setAuthMode(authMode === 'login' ? 'register' : 'login');
+      byId('dvAuthError').style.display = 'none';
     });
-    byId('dvAuthForm').addEventListener('submit', function (e) {
+    byId('dvAuthForm').addEventListener('submit', async function (e) {
       e.preventDefault();
-      var res = login(byId('dvAuthEmail').value.trim(), byId('dvAuthPassword').value);
-      if (!res.ok) { byId('dvAuthError').textContent = res.error; byId('dvAuthError').style.display = 'block'; return; }
-      if (window.showToast) window.showToast('Signed in as ' + currentUser().name + '.');
-      close();
+      var submit = byId('dvAuthForm').querySelector('button[type="submit"]');
+      var password = byId('dvAuthPassword').value;
+      submit.disabled = true;
+      byId('dvAuthError').style.display = 'none';
+      try {
+        window.AL_API.setBase(byId('dvApiBase').value);
+        if (authMode === 'register') {
+          if (password.length < 12) throw new Error('Password must be at least 12 characters.');
+          await window.AL_API.register(byId('dvOrgName').value, byId('dvAuthName').value,
+            byId('dvAuthEmail').value.trim(), password);
+          render();
+          if (window.showToast) window.showToast('Organization owner account created.');
+        } else {
+          await login(byId('dvAuthEmail').value.trim(), password);
+          if (window.showToast) window.showToast('Signed in as ' + currentUser().name + '.');
+        }
+        close();
+      } catch (error) {
+        byId('dvAuthError').textContent = error.message || 'Could not authenticate. Check the API connection and try again.';
+        byId('dvAuthError').style.display = 'block';
+      } finally {
+        submit.disabled = false;
+      }
     });
-    window.__dvOpenAuthModal = function () { overlay.classList.add('open'); byId('dvAuthEmail').focus(); };
+    setAuthMode('login');
+    window.__dvOpenAuthModal = function () {
+      setAuthMode('login');
+      byId('dvApiBase').value = window.AL_API.base();
+      overlay.classList.add('open');
+      byId('dvAuthEmail').focus();
+    };
   }
 
   var menuBuilt = false;
@@ -210,12 +188,17 @@
       '  <div><p>' + escapeHtml(user.name) + '</p><span>' + escapeHtml(user.email) + '</span></div>' +
       '</div>' +
       '<div class="dv-account-menu-role"><span class="dv-role-dot" style="background:' + ROLE_COLOR[user.role] + '"></span>' + ROLE_LABEL[user.role] + (user.guest ? ' · Guest session' : '') + '</div>' +
-      '<button type="button" class="dv-account-menu-item" id="dvMenuSwitch">Switch demo account…</button>' +
-      (user.guest ? '' : '<button type="button" class="dv-account-menu-item" id="dvMenuSignout">Sign out</button>');
-    var switchBtn = document.getElementById('dvMenuSwitch');
-    if (switchBtn) switchBtn.addEventListener('click', function () { menu.classList.remove('open'); buildModal(); window.__dvOpenAuthModal(); });
+      (can('manageUsers') ? '<button type="button" class="dv-account-menu-item" id="dvMenuUsers">Manage organization users</button>' : '') +
+      (user.guest ? '' : '<button type="button" class="dv-account-menu-item" id="dvMenuPassword">Change password</button>') +
+      (user.guest ? '<button type="button" class="dv-account-menu-item" id="dvMenuSignin">Sign in / create account</button>' : '<button type="button" class="dv-account-menu-item" id="dvMenuSignout">Sign out</button>');
+    var signInBtn = document.getElementById('dvMenuSignin');
+    if (signInBtn) signInBtn.addEventListener('click', function () { menu.classList.remove('open'); window.__dvOpenAuthModal(); });
+    var usersBtn = document.getElementById('dvMenuUsers');
+    if (usersBtn) usersBtn.addEventListener('click', function () { menu.classList.remove('open'); openUsersModal(); });
+    var passwordBtn = document.getElementById('dvMenuPassword');
+    if (passwordBtn) passwordBtn.addEventListener('click', function () { menu.classList.remove('open'); openPasswordModal(); });
     var signoutBtn = document.getElementById('dvMenuSignout');
-    if (signoutBtn) signoutBtn.addEventListener('click', function () { menu.classList.remove('open'); logout(); if (window.showToast) window.showToast('Signed out — back to guest (Viewer) access.'); });
+    if (signoutBtn) signoutBtn.addEventListener('click', function () { menu.classList.remove('open'); logout(); if (window.showToast) window.showToast('Signed out. You are now in read-only guest mode.'); });
   }
 
   function escapeHtml(str) {
@@ -231,7 +214,8 @@
       var meta = block.querySelector('#dashUserMeta');
       if (avatar) { avatar.textContent = user.initials; avatar.style.background = ROLE_COLOR[user.role] + '22'; avatar.style.color = ROLE_COLOR[user.role]; }
       if (name) name.textContent = user.name;
-      if (meta) meta.innerHTML = 'acme-corp · <span class="dv-role-pill" style="color:' + ROLE_COLOR[user.role] + ';border-color:' + ROLE_COLOR[user.role] + '55;">' + ROLE_LABEL[user.role] + '</span>' + (user.guest ? ' · Guest' : '');
+      var org = user.orgName || (user.orgRole ? 'Organization' : 'Sample workspace');
+      if (meta) meta.innerHTML = escapeHtml(org) + ' · <span class="dv-role-pill" style="color:' + ROLE_COLOR[user.role] + ';border-color:' + ROLE_COLOR[user.role] + '55;">' + ROLE_LABEL[user.role] + '</span>' + (user.guest ? ' · Guest' : '');
     }
     var topAvatar = document.getElementById('dashTopUserAvatar');
     if (topAvatar) { topAvatar.textContent = user.initials; topAvatar.style.background = ROLE_COLOR[user.role] + '22'; topAvatar.style.color = ROLE_COLOR[user.role]; }
@@ -246,12 +230,128 @@
     document.dispatchEvent(new CustomEvent('dv:session-changed', { detail: currentUser() }));
   }
 
+  function openUsersModal() {
+    if (!can('manageUsers') || !window.AL_API) return;
+    var overlay = document.getElementById('dvUsersModal');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.id = 'dvUsersModal';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', 'dvUsersTitle');
+      overlay.innerHTML =
+        '<div class="modal-card dv-users-modal-card">' +
+        '<button type="button" class="modal-close" id="dvUsersClose" aria-label="Close user management">×</button>' +
+        '<p class="eyebrow">Organization access</p><h3 id="dvUsersTitle">Manage users</h3>' +
+        '<p>Owners can create admins or members. Admins can create members. Guest users remain read-only.</p>' +
+        '<div id="dvUsersFeedback" class="formula-error" role="status" aria-live="polite" hidden></div>' +
+        '<div id="dvUsersList" class="dv-users-list" aria-live="polite"></div>' +
+        '<form id="dvCreateUserForm" class="dv-create-user-form">' +
+        '<h4>Create account</h4>' +
+        '<label for="dvNewUserName">Full name</label><input id="dvNewUserName" maxlength="100" required autocomplete="name"/>' +
+        '<label for="dvNewUserEmail">Email</label><input id="dvNewUserEmail" type="email" maxlength="320" required autocomplete="email"/>' +
+        '<label for="dvNewUserRole">Role</label><select id="dvNewUserRole"><option value="member">Member · read-only</option><option value="admin">Admin · manage workspace</option></select>' +
+        '<label for="dvNewUserPassword">Initial password</label><input id="dvNewUserPassword" type="password" minlength="12" maxlength="256" required autocomplete="new-password"/>' +
+        '<p class="settings-note">Use a unique 12+ character password and share it through a secure channel. Ask the user to change it after sign-in.</p>' +
+        '<button class="btn btn-primary btn-block" type="submit">Create user</button></form></div>';
+      document.body.appendChild(overlay);
+      document.getElementById('dvUsersClose').addEventListener('click', function () { overlay.classList.remove('open'); });
+      overlay.addEventListener('click', function (event) { if (event.target === overlay) overlay.classList.remove('open'); });
+      document.getElementById('dvCreateUserForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        var feedback = document.getElementById('dvUsersFeedback');
+        feedback.hidden = false;
+        feedback.textContent = 'Creating account…';
+        try {
+          await window.AL_API.createOrgUser({
+            name: document.getElementById('dvNewUserName').value,
+            email: document.getElementById('dvNewUserEmail').value,
+            role: document.getElementById('dvNewUserRole').value,
+            password: document.getElementById('dvNewUserPassword').value
+          });
+          event.currentTarget.reset();
+          feedback.textContent = 'Account created. Share the initial password securely.';
+          await loadOrgUsers();
+        } catch (error) {
+          feedback.textContent = error.message || 'Could not create the account.';
+        }
+      });
+    }
+    overlay.classList.add('open');
+    loadOrgUsers();
+  }
+
+  async function loadOrgUsers() {
+    var list = document.getElementById('dvUsersList');
+    var feedback = document.getElementById('dvUsersFeedback');
+    if (!list) return;
+    list.textContent = 'Loading organization users…';
+    try {
+      var users = await window.AL_API.getOrgUsers();
+      list.innerHTML = users.map(function (user) {
+        return '<div class="dv-user-row"><span><strong>' + escapeHtml(user.name) + '</strong><small>' +
+          escapeHtml(user.email) + '</small></span><span class="dv-role-pill">' + escapeHtml(user.role) + '</span></div>';
+      }).join('') || '<p>No organization users yet.</p>';
+    } catch (error) {
+      list.textContent = error.message || 'Could not load users.';
+      if (feedback) feedback.hidden = false;
+    }
+  }
+
+  function openPasswordModal() {
+    if (!window.AL_API || currentUser().guest) return;
+    var overlay = document.getElementById('dvPasswordModal');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.id = 'dvPasswordModal';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', 'dvPasswordTitle');
+      overlay.innerHTML =
+        '<div class="modal-card dv-password-modal-card"><button type="button" class="modal-close" id="dvPasswordClose" aria-label="Close password dialog">×</button>' +
+        '<p class="eyebrow">Account security</p><h3 id="dvPasswordTitle">Change password</h3>' +
+        '<form id="dvPasswordForm"><label for="dvCurrentPassword">Current password</label><input id="dvCurrentPassword" type="password" autocomplete="current-password" required maxlength="256"/>' +
+        '<label for="dvNextPassword">New password</label><input id="dvNextPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="256"/>' +
+        '<p class="settings-note">Use a unique password with at least 12 characters.</p><p id="dvPasswordFeedback" role="status" aria-live="polite"></p>' +
+        '<button class="btn btn-primary btn-block" type="submit">Update password</button></form></div>';
+      document.body.appendChild(overlay);
+      document.getElementById('dvPasswordClose').addEventListener('click', function () { overlay.classList.remove('open'); });
+      overlay.addEventListener('click', function (event) { if (event.target === overlay) overlay.classList.remove('open'); });
+      document.getElementById('dvPasswordForm').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        var feedback = document.getElementById('dvPasswordFeedback');
+        try {
+          await window.AL_API.updatePassword(document.getElementById('dvCurrentPassword').value,
+            document.getElementById('dvNextPassword').value);
+          event.currentTarget.reset();
+          feedback.textContent = 'Password updated.';
+        } catch (error) {
+          feedback.textContent = error.message || 'Could not update the password.';
+        }
+      });
+    }
+    overlay.classList.add('open');
+    document.getElementById('dvCurrentPassword').focus();
+  }
+
   function ready(fn) { if (document.readyState !== 'loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
 
   ready(function () {
+    try { localStorage.removeItem('dv_auth_users'); localStorage.removeItem('dv_auth_session'); } catch (e) {}
     buildModal();
     buildMenu();
     render();
+    if (window.AL_API && window.AL_API.isConnected()) {
+      window.AL_API.me().then(function (user) {
+        window.AL_API.setUser(user);
+        render();
+      }).catch(function () {
+        window.AL_API.disconnect();
+        render();
+      });
+    }
     var block = document.getElementById('dashUserBlock');
     if (block) block.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -277,7 +377,7 @@
 
   window.DVAuth = {
     ROLES: ROLES, ROLE_LABEL: ROLE_LABEL, ROLE_COLOR: ROLE_COLOR,
-    currentUser: currentUser, can: can, login: login, loginAsDemo: loginAsDemo, logout: logout,
-    applyGates: applyGates, getUsers: getUsers
+    currentUser: currentUser, can: can, login: login, logout: logout,
+    applyGates: applyGates, openUsers: openUsersModal
   };
 })();

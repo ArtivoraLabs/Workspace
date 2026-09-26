@@ -111,12 +111,13 @@
     var stats = S.stats();
     byId('statRow').innerHTML = [
       { n: stats.employees, label: 'Employees', icon: 'users' },
-      { n: stats.hirings,   label: 'New hires', icon: 'userAdd' },
+      { n: stats.hirings,   label: 'Applicants', icon: 'userAdd' },
       { n: stats.projects,  label: 'Projects', icon: 'folder' }
     ].map(function (s) {
+      var known = typeof s.n === 'number' && isFinite(s.n);
       return '<div class="hr-stat">' +
         '<div class="hr-stat-top">' + I.svg(s.icon) +
-        '<span class="hr-stat-num" data-count="' + s.n + '">0</span></div>' +
+        '<span class="hr-stat-num"' + (known ? ' data-count="' + s.n + '"' : '') + '>' + (known ? '0' : '—') + '</span></div>' +
         '<div class="hr-stat-label">' + esc(s.label) + '</div></div>';
     }).join('');
     countUp();
@@ -144,7 +145,12 @@
   /* ══ Spotlight ═════════════════════════════════════════════════════════ */
   function renderSpotlight() {
     var emp = S.spotlight();
-    if (!emp) return;
+    if (!emp) {
+      byId('spotCard').innerHTML = '<div class="hr-empty" role="status"><div class="hr-empty-title">No employee spotlight</div>' +
+        '<div class="hr-empty-note">Employee records will appear here when Odoo data is available.</div></div>';
+      return;
+    }
+    var showSamplePay = S.peopleSource().status === 'demo';
     byId('spotCard').innerHTML =
       '<div class="hr-spot-art" style="background:linear-gradient(150deg,' + emp.tone[0] + ' 0%,' + emp.tone[1] + ' 100%)">' +
         '<span class="hr-spot-mono">' + esc(U.initials(emp.name)) + '</span>' +
@@ -156,7 +162,7 @@
       '<div class="hr-spot-body">' +
         '<div><div class="hr-spot-name">' + esc(emp.name) + '</div>' +
         '<div class="hr-spot-role">' + esc(emp.role) + '</div></div>' +
-        '<div class="hr-spot-pay">' + U.money(emp.pay) + '</div>' +
+        (showSamplePay ? '<div class="hr-spot-pay">Sample · ' + U.money(emp.pay) + '</div>' : '') +
       '</div>';
 
     var nav = byId('spotCard').querySelectorAll('[data-spot]');
@@ -326,21 +332,17 @@
   function renderDetail() {
     var emp = S.spotlight();
     var st = S.get();
+    if (!emp) {
+      byId('detailAcc').innerHTML = '<div class="hr-empty"><div class="hr-empty-title">Employee details unavailable</div>' +
+        '<div class="hr-empty-note">Connect to Odoo and refresh People data.</div></div>';
+      return;
+    }
     var mine = st.devices.filter(function (d) { return d.assigned === emp.id; });
 
     var pension = Math.round(emp.pay * 0.05);
     var employer = Math.round(emp.pay * 0.03);
 
     var sections = [
-      {
-        id: 'pension', title: 'Pension contributions',
-        body: '<dl style="margin:0">' +
-          kv('Employee (5%)', U.money(pension) + ' / mo') +
-          kv('Employer (3%)', U.money(employer) + ' / mo') +
-          kv('Scheme', 'NEST — Group Personal') +
-          kv('Combined', U.money(pension + employer) + ' / mo', true) +
-          '</dl>'
-      },
       {
         id: 'devices', title: 'Devices',
         body: mine.length
@@ -353,6 +355,18 @@
                 I.svg('dots', { fill: 'currentColor', stroke: 'none' }) + '</button></div>';
             }).join('')
           : '<p class="hr-empty-note" style="margin:6px 0">No hardware issued yet. Assign one from the Devices tab.</p>'
+      }
+    ];
+    if (S.peopleSource().status === 'demo') {
+      sections = sections.concat([
+      {
+        id: 'pension', title: 'Pension contributions · sample',
+        body: '<dl style="margin:0">' +
+          kv('Employee (5%)', U.money(pension) + ' / mo') +
+          kv('Employer (3%)', U.money(employer) + ' / mo') +
+          kv('Scheme', 'NEST — Group Personal') +
+          kv('Combined', U.money(pension + employer) + ' / mo', true) +
+          '</dl>'
       },
       {
         id: 'comp', title: 'Compensation Summary',
@@ -369,8 +383,8 @@
           ['Private medical', '28 days leave', 'Learning budget', 'Cycle to work', 'Remote stipend']
             .map(function (c) { return '<span class="hr-chip">' + c + '</span>'; }).join('') +
           '</div>'
-      }
-    ];
+      }]);
+    }
 
     byId('detailAcc').innerHTML = sections.map(function (s) {
       var open = !!accOpen[s.id];
@@ -703,6 +717,13 @@
   }
 
   S.subscribe(function (state, reason) {
+    if (reason === 'people-data') {
+      renderCmd(cmdInput.value);
+      ['people', 'hiring'].forEach(function (name) {
+        var panel = byId('view-' + name);
+        if (panel && panel.hidden && window.HRViews) window.HRViews.render(name);
+      });
+    }
     if (reason === 'timer') { renderTimer(); renderWeek(); return; }
     if (reason === 'tasks') { renderOnboarding(); return; }
     /* hr-views.js keeps the open secondary section in sync itself, so this

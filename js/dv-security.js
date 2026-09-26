@@ -24,7 +24,10 @@
   var locked = false;
 
   function load(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
-  function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  function saveRequired(k, v, message) {
+    if (!save(k, v)) throw new Error(message || 'Could not save securely in this browser.');
+  }
   function b64(buf) { var b = new Uint8Array(buf), s = ''; for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
   function unb64(s) { var r = atob(s), a = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; }
   function conf() { return Object.assign({ autoLock: 15, redact: true }, load(SEC_KEY, {})); }
@@ -43,6 +46,21 @@
     if (l.length > 300) l.length = 300;
     save(LOG_KEY, l);
   }
+  (function removeLegacyPlaintextKey() {
+    var raw = load(CFG_KEY, null);
+    if (!raw || typeof raw.apiKey !== 'string' || !raw.apiKey) return;
+    var protectedCopy = !!raw.apiKeyEnc && hasPin();
+    raw.apiKey = '';
+    if (!hasPin()) delete raw.apiKeyEnc;
+    try {
+      saveRequired(CFG_KEY, raw, 'Could not remove an unprotected Odoo API key from browser storage.');
+      if (!protectedCopy) save('dashview_odoo_connected', false);
+      log(protectedCopy ? 'Unencrypted Odoo key copy removed' : 'Unprotected Odoo key removed',
+        protectedCopy ? 'Encrypted vault copy retained.' : 'Set a passcode, then re-enter the API key.', 'review');
+    } catch (e) {
+      if (typeof console !== 'undefined' && console.error) console.error('DashView security: ' + e.message);
+    }
+  })();
 
   /* -- Crypto ------------------------------------------------------------- */
   function derive(pass, salt, iter) {
@@ -60,7 +78,8 @@
     if (!plain || !mem.key) return Promise.resolve();
     var iv = window.crypto.getRandomValues(new Uint8Array(12));
     return subtle.encrypt({ name: 'AES-GCM', iv: iv }, mem.key, enc.encode(plain)).then(function (ct) {
-      raw.apiKeyEnc = { iv: b64(iv), ct: b64(ct) }; raw.apiKey = ''; mem.apiKey = plain; save(CFG_KEY, raw);
+      raw.apiKeyEnc = { iv: b64(iv), ct: b64(ct) }; raw.apiKey = ''; mem.apiKey = plain;
+      saveRequired(CFG_KEY, raw, 'Could not store the encrypted Odoo API key.');
     });
   }
   function openKey() {
@@ -74,21 +93,36 @@
   /* -- Odoo config accessor (single source for all modules) ---------------- */
   function cfg() {
     var out = Object.assign({}, load(CFG_KEY, {}));
-    if (hasPin()) out.apiKey = mem.apiKey || '';
+    out.apiKey = hasPin() ? (mem.apiKey || '') : '';
     delete out.apiKeyEnc;
     return out;
   }
   function saveCfg(c) {
     var stored = Object.assign({}, c);
-    if (hasPin() && mem.key) {
+    if (c.apiKey && !hasPin()) {
+      return Promise.reject(new Error('Enable a workspace passcode before saving the Odoo API key.'));
+    }
+    if (hasPin()) {
+      if (!mem.key) return Promise.reject(new Error('Unlock the workspace before saving Odoo settings.'));
       mem.apiKey = c.apiKey || mem.apiKey;
       stored.apiKey = mem.apiKey || '';
-      save(CFG_KEY, stored);
+      try { saveRequired(CFG_KEY, stored, 'Could not save Odoo settings in this browser.'); }
+      catch (e) { return Promise.reject(e); }
       return sealKey();
     }
-    if (hasPin()) stored.apiKey = '';   /* locked vault: never write a plaintext key */
-    save(CFG_KEY, stored);
+    stored.apiKey = '';
+    try { saveRequired(CFG_KEY, stored, 'Could not save Odoo settings in this browser.'); }
+    catch (e) { return Promise.reject(e); }
     return Promise.resolve();
+  }
+  function forgetCredentials() {
+    try {
+      mem.apiKey = null;
+      localStorage.removeItem(CFG_KEY);
+      localStorage.removeItem('dashview_odoo_connected');
+      fire('dv:odoo-disconnected');
+      return true;
+    } catch (e) { return false; }
   }
 
   /* -- Session (survives page navigation inside this tab only) ------------- */
@@ -171,24 +205,38 @@
   }
   function setPasscode(pass) {
     if (!subtle) return Promise.reject(new Error('Secure storage needs HTTPS (or localhost).'));
-    if (String(pass || '').length < 6) return Promise.reject(new Error('Use at least 6 characters.'));
+    if (String(pass || '').length < 12) return Promise.reject(new Error('Use at least 12 characters.'));
     var salt = window.crypto.getRandomValues(new Uint8Array(16));
     return derive(pass, salt, ITER).then(function (d) {
       var had = hasPin();
-      setConf({ pin: { salt: b64(salt), iter: ITER, v: d.verifier }, attempts: { n: 0, until: 0 } });
+      var c = Object.assign(conf(), { pin: { salt: b64(salt), iter: ITER, v: d.verifier }, attempts: { n: 0, until: 0 } });
       mem.key = d.key;
-      return sealKey().then(persistSession).then(function () { log(had ? 'Passcode changed' : 'Passcode enabled'); });
+      return sealKey().then(function () {
+        try { saveRequired(SEC_KEY, c, 'Could not save the passcode verifier in this browser.'); }
+        catch (e) {
+          var raw = load(CFG_KEY, null);
+          if (raw && raw.apiKeyEnc) {
+            raw.apiKey = '';
+            delete raw.apiKeyEnc;
+            save(CFG_KEY, raw);
+          }
+          mem.key = null; mem.apiKey = null;
+          throw e;
+        }
+        return persistSession();
+      }).then(function () { log(had ? 'Passcode changed' : 'Passcode enabled'); });
     });
   }
   function changePasscode(current, next) { return unlock(current).then(function () { return setPasscode(next); }); }
   function removePasscode(current) {
     return unlock(current).then(function () {
       var raw = load(CFG_KEY, null);
-      if (raw && raw.apiKeyEnc) { raw.apiKey = mem.apiKey || ''; delete raw.apiKeyEnc; save(CFG_KEY, raw); }
-      var c = conf(); delete c.pin; delete c.attempts; save(SEC_KEY, c);
+      if (raw && raw.apiKeyEnc) throw new Error('Forget Odoo credentials before disabling the passcode. API keys are never stored unencrypted.');
+      var c = conf(); delete c.pin; delete c.attempts;
+      saveRequired(SEC_KEY, c, 'Could not update security settings in this browser.');
       mem.key = null; mem.apiKey = null;
       try { sessionStorage.removeItem('dv_sk'); } catch (e) {}
-      log('Passcode disabled', 'API key is stored unencrypted again', 'review');
+      log('Passcode disabled', 'No Odoo API key is stored on this device.', 'review');
     });
   }
   function strength(p) {
@@ -205,7 +253,7 @@
     if (Array.isArray(v)) return v.map(scrub);
     if (v && typeof v === 'object') {
       var o = {};
-      Object.keys(v).forEach(function (k) { o[k] = SECRET_RE.test(k) && typeof v[k] === 'string' ? '' : scrub(v[k]); });
+      Object.keys(v).forEach(function (k) { if (!SECRET_RE.test(k)) o[k] = scrub(v[k]); });
       return o;
     }
     return v;
@@ -213,7 +261,7 @@
   function redactBackup(dump) {
     var out = {};
     Object.keys(dump).forEach(function (k) {
-      if (k === SEC_KEY || k === LOG_KEY) return;
+      if (k === SEC_KEY || k === LOG_KEY || SECRET_RE.test(k)) return;
       try { out[k] = JSON.stringify(scrub(JSON.parse(dump[k]))); } catch (e) { out[k] = dump[k]; }
     });
     return out;
@@ -224,9 +272,11 @@
     var c = conf(), o = load(CFG_KEY, {}), items = [];
     var add = function (id, label, ok, weight, hint) { items.push({ id: id, label: label, ok: !!ok, weight: weight, hint: hint }); };
     var hasKey = !!(o.apiKey || o.apiKeyEnc);
+    var expectedKey = !!(o.url && o.db && (o.username || o.user));
     add('https', 'Page is served over HTTPS', location.protocol === 'https:' || /^(localhost|127\.0\.0\.1)$/.test(location.hostname), 15, 'Host the app on HTTPS (GitHub Pages / Cloudflare do this by default).');
     add('pin', 'Passcode lock is on', hasPin(), 25, 'Set a passcode below.');
-    add('vault', 'Odoo API key is encrypted at rest', !hasKey || !!o.apiKeyEnc, 20, 'Enable the passcode — it encrypts the stored API key.');
+    add('vault', 'Odoo API key is encrypted at rest', (!hasKey && !expectedKey) || !!o.apiKeyEnc, 20,
+      expectedKey && !hasKey ? 'Enable a passcode, then re-enter your Odoo API key.' : 'Enable the passcode — it encrypts the stored API key.');
     add('auto', 'Auto-lock after ≤ 15 min idle', hasPin() && c.autoLock > 0 && c.autoLock <= 15, 10, 'Pick 15 minutes or less.');
     add('redact', 'Backups exclude secrets', c.redact !== false, 10, 'Turn on “Exclude secrets from backups”.');
     add('tls', 'Worker and Odoo URLs use HTTPS', (!o.proxyUrl || /^https:/i.test(o.proxyUrl)) && (!o.url || /^https:/i.test(o.url)), 10, 'Use https:// for both URLs.');
@@ -241,7 +291,7 @@
     supported: !!subtle,
     hasPasscode: hasPin, isLocked: function () { return locked; },
     cfg: cfg, saveCfg: saveCfg, getConf: conf, setConf: setConf,
-    lock: lock, unlock: unlock, setPasscode: setPasscode, changePasscode: changePasscode, removePasscode: removePasscode,
+    lock: lock, unlock: unlock, setPasscode: setPasscode, changePasscode: changePasscode, removePasscode: removePasscode, forgetCredentials: forgetCredentials,
     strength: strength, log: log, getLog: function () { return load(LOG_KEY, []); }, clearLog: function () { save(LOG_KEY, []); },
     redactBackup: redactBackup, checkup: checkup
   };

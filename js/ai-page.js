@@ -30,6 +30,7 @@
   const ACTIVE_KEY = 'al_ai_active_id';
   const API_URL = 'https://api.anthropic.com/v1/messages';
   const ANTHROPIC_VERSION = '2023-06-01';
+  const ANALYTICS_EVIDENCE_RULES = 'This chat is not connected to live Odoo data. Never imply that local rules or this provider request fetched company records. For business analytics, use only figures explicitly supplied in the conversation; otherwise say that evidence is unavailable and ask the user to connect Odoo in the DashView Assistant. Never invent metrics, causes, comparisons, targets, or a live dashboard.';
 
   // ── Settings ────────────────────────────────────────────────
   function getSettings() {
@@ -235,7 +236,7 @@
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
     };
     const ctx = buildWorkspaceContext();
-    const sys = [settings.systemPrompt, ctx].filter(Boolean).join('\n\n');
+    const sys = [settings.systemPrompt, ANALYTICS_EVIDENCE_RULES, ctx].filter(Boolean).join('\n\n');
     if (sys) body.system = sys;
 
     const res = await fetch(API_URL, {
@@ -266,6 +267,7 @@
   }
   async function callGithubModels(messages, settings) {
     const chatMessages = messages.map((m) => ({ role: m.role, content: m.content }));
+    chatMessages.unshift({ role: 'system', content: ANALYTICS_EVIDENCE_RULES });
     if (settings.systemPrompt) chatMessages.unshift({ role: 'system', content: settings.systemPrompt });
     const ctx = buildWorkspaceContext();
     if (ctx) chatMessages.unshift({ role: 'system', content: ctx });
