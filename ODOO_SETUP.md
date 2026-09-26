@@ -70,6 +70,38 @@ server or your usual dev setup. Then:
 3. Use the **Executive breakdown** panel at the top of the model view for
    grouped totals.
 
+## Task assignments and Team
+
+The dashboard's **Task assignments** view reads paginated, searchable
+`project.task` records through the authenticated Node API. **Team** reads
+active `hr.employee` rows (name, job title, department, and linked Odoo
+user ID only). Both views show the data source and refresh time; a failed
+API/Odoo request is shown as an error, never replaced by fake live data.
+
+Task create, edit, stage changes, and completion use only authenticated
+`/api/odoo/tasks` Node routes. Those routes require a signed-in organization
+Owner or Admin, validate task IDs and bounded field values, and can only
+create/update `project.task` using the explicit title, description,
+assignee, due-date, priority, and stage mapping. There is no delete route.
+Odoo's model ACLs still apply. Writes never use the Cloudflare Worker or
+browser-to-Odoo JSON-RPC. They require both saved Odoo settings and a valid
+DashView API session; local browser tasks remain separately labelled and
+are not synchronized.
+
+The Audit log's Sign-ins tab has a separate Owner/Admin-authenticated
+`POST /api/odoo/audit/signins` endpoint. It can read only `res.users.log`
+fields `create_uid` and `create_date`, with supported periods up to 365 days,
+a 120-character user search, 100-row pages, and bounded offsets. It does not
+expose IP addresses, login names, session identifiers, or arbitrary model
+overrides. The generic model denylist and Cloudflare Worker remain unchanged;
+Odoo ACLs decide whether the configured Odoo user may read sign-in history.
+
+Set `ODOO_ALLOWED_HOSTS` on the Node API to the exact Odoo host before use,
+and configure `CORS_ORIGIN`, `JWT_SECRET`, and the DashView account API as
+described in `server/README.md`. Use an Odoo account with only the project
+and employee permissions the dashboard needs; do not use an administrator
+API key for routine task management.
+
 ## Going to production (CEO/director-scale deployment)
 
 - Host `server/` somewhere real (Render, Railway, a VPS/Docker) with
@@ -83,10 +115,10 @@ server or your usual dev setup. Then:
   SQLite (`better-sqlite3`) to Postgres, and consider caching frequent
   `read_group` aggregates (e.g. a 15-minute scheduled sync) so dashboards
   load instantly instead of hitting Odoo on every page view.
-- Add a server-side role check in `server/src/middleware/auth.js` so only
-  Admin/Owner roles can call the `/api/odoo/*` routes that carry Odoo
-  credentials (client-side gating exists today; the comment in
-  `odoo.routes.js` already flags this as a pre-production TODO).
+- `/api/odoo/*` routes require an authenticated Owner/Admin session
+  server-side. Task writes additionally use a task-specific role gate and
+  fixed `project.task` field mapping; never loosen this to a generic Odoo
+  `create`, `write`, or `unlink` endpoint.
 
 
 ## The AI shows no Odoo data — checklist

@@ -190,6 +190,15 @@ views.forEach(v => {
     return panel.hidden === false && panel.innerHTML.length > 400;
   });
 });
+check('custom asset, app and review data is labeled workspace-managed', () => {
+  w.hrShowView('devices');
+  const devices = $('#view-devices').textContent;
+  w.hrShowView('apps');
+  const apps = $('#view-apps').textContent;
+  w.hrShowView('reviews');
+  const reviews = $('#view-reviews').textContent;
+  return devices.includes('not from Odoo') && apps.includes('not from Odoo') && reviews.includes('not from Odoo');
+});
 
 check('people search filters rows', () => {
   w.hrShowView('people');
@@ -213,6 +222,9 @@ check('people filter clears', () => {
   box.dispatchEvent(new w.Event('input', { bubbles: true }));
   return $$('#view-people tbody tr').length === 12;
 });
+check('directory does not expose sample pay', () =>
+  !$('#view-people').textContent.includes('Monthly payroll') &&
+  !$('#view-people').textContent.includes('Sort: Highest paid'));
 check('spotlight button from directory works', () => {
   click($$('#view-people [data-spot]')[3]);
   return $('#view-dashboard').hidden === false;
@@ -295,17 +307,146 @@ check('every icon-only control is labelled', () => {
   });
   return bad.length === 0 ? true : 'unlabelled: ' + bad.length;
 });
-
-/* ── Report ───────────────────────────────────────────────────────────── */
-console.log('');
-const pad = Math.max(...results.map(r => r[1].length));
-results.forEach(([s, n, m]) => {
-  console.log(`${s === 'PASS' ? ' ok ' : 'FAIL'}  ${n.padEnd(pad)}  ${m}`);
+check('People CSV helper neutralises spreadsheet formulas and preserves negative numbers', () => {
+  const csv = w.HRCSV.stringify([
+    ['Value'],
+    ['=HYPERLINK("https://example.test","open")'],
+    ['+SUM(A1:A2)'],
+    ['@SUM(A1:A2)'],
+    ['\t=1+1'],
+    ['\r=1+1'],
+    ['-SUM(A1:A2)'],
+    ['-12.50'],
+    [-12.5]
+  ]);
+  return csv.includes(`"'=HYPERLINK(""https://example.test"",""open"")"`) &&
+    w.HRCSV.safeCell('+SUM(A1:A2)') === "'+SUM(A1:A2)" &&
+    w.HRCSV.safeCell('@SUM(A1:A2)') === "'@SUM(A1:A2)" &&
+    w.HRCSV.safeCell('\t=1+1') === "'\t=1+1" &&
+    w.HRCSV.safeCell('\r=1+1') === "'\r=1+1" &&
+    w.HRCSV.safeCell('-SUM(A1:A2)') === "'-SUM(A1:A2)" &&
+    w.HRCSV.safeCell('-12.50') === '-12.50' &&
+    w.HRCSV.safeCell(-12.5) === '-12.5';
 });
-const failed = results.filter(r => r[0] === 'FAIL');
-console.log(`\n${results.length - failed.length}/${results.length} passed`);
-if (errors.length) {
-  console.log('\n--- runtime errors ---');
-  errors.slice(0, 12).forEach(e => console.log(e));
+
+/* ── Odoo states, transient data and failure handling ─────────────────── */
+async function testOdooPeople() {
+  let connection = 'ok', isConfigured = true, failRequests = false, failModel = '';
+  const requests = [];
+  const resolvers = {};
+  w.DVOdooClient = {
+    state: () => connection,
+    cfg: () => isConfigured
+      ? { url: 'https://odoo.example.test', db: 'people-test', username: 'test', apiKey: 'mock', proxyUrl: 'https://worker.example.test' }
+      : {},
+    message: state => state === 'noproxy' ? 'Proxy URL missing' : 'Mock Odoo state',
+    reset() {},
+    records(model, opts) {
+      requests.push({ model, fields: opts.fields || [] });
+      if (failRequests || model === failModel) return Promise.reject(new Error('Mock Odoo request failed'));
+      return new Promise((resolve, reject) => { resolvers[model] = { resolve, reject }; });
+    },
+    count() {
+      return failRequests ? Promise.reject(new Error('Project model unavailable')) : Promise.resolve(3);
+    }
+  };
+  w.eval(fs.readFileSync(path.join(ROOT, 'js/people-odoo-live.js'), 'utf8'));
+  if (S.peopleSource().status === 'demo') {
+    w.PeopleOdooLive.refresh();
+  }
+
+  check('configured Odoo starts in loading state without sample rows', () =>
+    S.peopleSource().status === 'loading' && S.get().team.length === 0 &&
+    S.get().candidates.length === 0 && $('#pplOdooBannerText').textContent.includes('Loading'));
+  resolvers['hr.employee'].resolve({ rows: [{
+    id: 501, name: 'Live Ada Example', job_id: [12, 'Platform Engineer'],
+    department_id: [8, 'Engineering'], employee_type: 'employee', active: true
+  }] });
+  resolvers['hr.applicant'].resolve({ rows: [{
+    id: 701, partner_name: 'Live Candidate Example', job_id: [13, 'Analyst'],
+    stage_id: [2, 'Interview'], source_id: [3, 'Referral'], create_date: '2026-09-25 10:00:00'
+  }] });
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  check('live Odoo records replace the sample directory and pipeline', () =>
+    S.peopleSource().status === 'live' &&
+    S.get().team.length === 1 && S.get().team[0].name === 'Live Ada Example' &&
+    S.get().candidates.length === 1 && S.get().candidates[0].name === 'Live Candidate Example' &&
+    $('#pplOdooBannerText').textContent.includes('last synced'));
+  check('live People surfaces identify their Odoo models', () => {
+    w.hrShowView('people');
+    const directory = $('#view-people').textContent;
+    w.hrShowView('hiring');
+    return directory.includes('Odoo hr.employee') && $('#view-hiring').textContent.includes('Odoo hr.applicant');
+  });
+  check('Odoo directory filters live records', () => {
+    w.hrShowView('people');
+    const search = $('#pplSearch');
+    search.value = 'Live Ada';
+    search.dispatchEvent(new w.Event('input', { bubbles: true }));
+    return $$('#view-people tbody tr').length === 1;
+  });
+  check('Odoo requests never read contract wages', () =>
+    requests.every(r => r.model !== 'hr.contract' && !r.fields.includes('wage')) &&
+    !$('#view-people').textContent.includes('Monthly payroll'));
+
+  S.update('test-persist-live', s => { s.profile.workspace = 'Live test'; });
+  S.assignDevice('d5', 'o501');
+  const stored = w.localStorage.getItem('dashview-people-v1');
+  check('live employee and applicant PII is not persisted', () =>
+    !stored.includes('Live Ada Example') && !stored.includes('Live Candidate Example') &&
+    !stored.includes('o501') &&
+    JSON.parse(stored).team.every(e => !String(e.id).startsWith('o')) &&
+    JSON.parse(stored).candidates.every(c => !String(c.id).startsWith('oc')) &&
+    JSON.parse(stored).devices.find(d => d.id === 'd5').assigned === null);
+
+  failModel = 'hr.applicant';
+  w.PeopleOdooLive.refresh();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  check('an unavailable Odoo app does not hide successful employee records or show seed applicants', () =>
+    S.peopleSource().status === 'partial' && S.get().team.length === 1 &&
+    S.get().candidates.length === 0 && S.peopleSource().candidateStatus === 'error' &&
+    $('#pplOdooBannerText').textContent.includes('Hiring error'));
+
+  failModel = '';
+  failRequests = true;
+  w.PeopleOdooLive.refresh();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  check('failed live request shows an error and does not fall back to seeds', () =>
+    S.peopleSource().status === 'error' && S.get().team.length === 0 &&
+    S.get().candidates.length === 0 &&
+    $('#pplOdooBannerText').textContent.includes('No sample data is shown'));
+
+  d.dispatchEvent(new w.Event('dv:locked'));
+  check('locking clears transient Odoo employee and applicant records', () =>
+    S.peopleSource().status === 'locked' && S.get().team.length === 0 && S.get().candidates.length === 0 &&
+    !d.body.textContent.includes('Live Ada Example') && !d.body.textContent.includes('Live Candidate Example'));
+  connection = 'none';
+  isConfigured = false;
+  w.dispatchEvent(new w.StorageEvent('storage', { key: 'dashview_odoo_config' }));
+  check('disconnected state labels sample records instead of claiming Odoo data', () =>
+    S.peopleSource().status === 'demo' && S.get().team.length === 12 &&
+    $('#pplOdooBannerText').textContent.includes('not from Odoo'));
 }
-process.exit(failed.length || errors.length ? 1 : 0);
+
+function report() {
+  console.log('');
+  const pad = Math.max(...results.map(r => r[1].length));
+  results.forEach(([s, n, m]) => {
+    console.log(`${s === 'PASS' ? ' ok ' : 'FAIL'}  ${n.padEnd(pad)}  ${m}`);
+  });
+  const failed = results.filter(r => r[0] === 'FAIL');
+  console.log(`\n${results.length - failed.length}/${results.length} passed`);
+  if (errors.length) {
+    console.log('\n--- runtime errors ---');
+    errors.slice(0, 12).forEach(e => console.log(e));
+  }
+  dom.window.close();
+  process.exit(failed.length || errors.length ? 1 : 0);
+}
+
+testOdooPeople().then(report).catch(e => {
+  console.error(e);
+  dom.window.close();
+  process.exit(1);
+});

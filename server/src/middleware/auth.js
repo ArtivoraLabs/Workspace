@@ -5,13 +5,38 @@ function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
+  let payload;
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = payload; // { id, orgId, role, email }
-    next();
+    payload = jwt.verify(token, process.env.JWT_SECRET, {
+      algorithms: ['HS256'], issuer: 'dashview-api', audience: 'dashview-web'
+    });
   } catch (e) {
     return res.status(401).json({ error: 'Invalid or expired session' });
   }
+  if (!Number.isSafeInteger(payload.id) || !Number.isSafeInteger(payload.orgId) ||
+      !Number.isSafeInteger(payload.tokenVersion)) {
+    return res.status(401).json({ error: 'Invalid or expired session' });
+  }
+  const account = db.prepare(
+    'SELECT id, org_id, email, name, role, token_version FROM users WHERE id = ? AND org_id = ?'
+  ).get(payload.id, payload.orgId);
+  if (!account || account.token_version !== payload.tokenVersion) {
+    return res.status(401).json({ error: 'Session revoked. Sign in again.' });
+  }
+  req.user = {
+    id: account.id, orgId: account.org_id, email: account.email,
+    name: account.name, role: account.role, tokenVersion: account.token_version
+  };
+  next();
+}
+
+function requireOrgRole(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user || !allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
 }
 
 // Resolves :projectId from the URL, verifies the authenticated user
@@ -45,4 +70,4 @@ function requireProjectAccess(minRole) {
   };
 }
 
-module.exports = { requireAuth, requireProjectAccess };
+module.exports = { requireAuth, requireOrgRole, requireProjectAccess };

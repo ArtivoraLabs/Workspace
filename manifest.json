@@ -68,7 +68,7 @@
   "shortcuts": [
     {
       "name": "Dashboard",
-      "url": "dashboard.html#overview?source=shortcut"
+      "url": "dashboard.html?source=shortcut#overview"
     },
     {
       "name": "People",
@@ -76,7 +76,15 @@
     },
     {
       "name": "Data Studio",
-      "url": "dashboard.html#studio?source=shortcut"
+      "url": "dashboard.html?source=shortcut#studio"
+    },
+    {
+      "name": "Reports",
+      "url": "dashboard.html?source=shortcut#reports"
+    },
+    {
+      "name": "Odoo Live",
+      "url": "dashboard.html?source=shortcut#odoo-live"
     },
     {
       "name": "AI Assistant",

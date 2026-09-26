@@ -14,6 +14,25 @@ npm start               # http://localhost:4000
 
 `GET /api/health` should return `{"ok":true}` once it's up.
 
+## Accounts and organization roles
+
+The dashboard starts in read-only guest mode. It has no seeded admin or
+plaintext demo passwords. Configure the account API URL in the sign-in dialog
+(`https://api.example.com/api` in production; HTTP is accepted only for
+localhost), then create the first organization account. That first account is
+the organization **owner**.
+
+Owners and admins can open the account menu → **Manage organization users**.
+Owners may create admins or members; admins may create members only. New
+accounts receive an initial password entered by the owner/admin and can change
+it from the account menu after sign-in. Share initial passwords through a
+secure channel. API authorization is enforced on the server independently of
+the UI role gates.
+
+Registration and login are limited to eight attempts per IP and endpoint per
+15-minute window per server process. For multi-instance deployments, put a
+shared rate limiter at the gateway/load balancer as well.
+
 ## What's here
 
 - `src/index.js` — Express entrypoint, CORS, route mounting

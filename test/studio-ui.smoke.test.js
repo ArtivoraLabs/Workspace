@@ -80,6 +80,26 @@ function check(name, fn) {
     assert.notStrictEqual(document.getElementById('emptyState').style.display, 'none');
     assert.strictEqual(document.getElementById('studioMain').style.display, 'none');
   });
+  check('studio workbench exposes an accessible tablist and named dataset controls', () => {
+    assert.strictEqual(document.getElementById('studioTabs').getAttribute('role'), 'tablist');
+    assert.strictEqual(document.querySelectorAll('#studioTabs [role="tab"]').length, 4);
+    assert.strictEqual(document.querySelector('#tab-overview').getAttribute('aria-selected'), 'true');
+    assert.strictEqual(document.getElementById('workbookNameInput').labels.length, 1);
+    assert.ok(document.getElementById('fieldSearchInput').getAttribute('aria-label'));
+  });
+  check('unsupported file types show a persistent accessible import error', () => {
+    const input = document.getElementById('fileInput');
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [new window.File(['not a spreadsheet'], 'notes.txt', { type: 'text/plain' })]
+    });
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+    const feedback = document.getElementById('studioImportFeedback');
+    assert.strictEqual(feedback.hidden, false);
+    assert.strictEqual(feedback.getAttribute('role'), 'alert');
+    assert.match(feedback.textContent, /Choose a CSV, TSV, XLSX, XLS, or JSON file/);
+    assert.strictEqual(document.getElementById('view-studio').getAttribute('aria-busy'), 'false');
+  });
 
   console.log('\n== Import sample data ==');
   click('#sampleDataBtn');
@@ -87,6 +107,26 @@ function check(name, fn) {
   check('main workbench now visible, empty state hidden', () => {
     assert.strictEqual(document.getElementById('emptyState').style.display, 'none');
     assert.strictEqual(document.getElementById('studioMain').style.display, 'flex');
+    assert.strictEqual(document.getElementById('studioImportFeedback').hidden, true);
+  });
+  check('workbench tabs support arrow and Home keyboard navigation with correct ARIA state', () => {
+    const overviewTab = document.getElementById('tab-overview');
+    overviewTab.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    assert.strictEqual(document.activeElement.id, 'tab-data');
+    assert.strictEqual(document.getElementById('tab-data').getAttribute('aria-selected'), 'true');
+    assert.strictEqual(document.getElementById('panel-data').getAttribute('aria-labelledby'), 'tab-data');
+    document.getElementById('tab-data').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }));
+    assert.strictEqual(document.activeElement.id, 'tab-overview');
+    assert.strictEqual(document.getElementById('tab-overview').getAttribute('aria-selected'), 'true');
+  });
+  check('fields drawer announces its state and closes on Escape', () => {
+    click('#fieldsToggleBtn');
+    assert.ok(document.getElementById('fieldsRail').classList.contains('open'));
+    assert.strictEqual(document.getElementById('fieldsToggleBtn').getAttribute('aria-expanded'), 'true');
+    document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.ok(!document.getElementById('fieldsRail').classList.contains('open'));
+    assert.strictEqual(document.getElementById('fieldsToggleBtn').getAttribute('aria-expanded'), 'false');
+    assert.strictEqual(document.activeElement.id, 'fieldsToggleBtn');
   });
   check('fields rail populated with imported columns', () => {
     const rows = document.querySelectorAll('#fieldsList .field-row');

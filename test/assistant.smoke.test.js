@@ -72,11 +72,78 @@ async function main() {
     assert.strictEqual(document.getElementById('apiKeyInput'), null);
     assert.strictEqual(document.getElementById('apiModal'), null);
   });
-  check('sidebar shows a static "local engine, always on" badge, not an API-key state', () => {
+  check('sidebar shows an accurate local-engine state, not an API-key state', () => {
     const badge = document.getElementById('apiBadge');
     assert.ok(badge, 'expected the status badge to exist');
-    assert.ok(/local engine.*always on/i.test(badge.textContent));
+    assert.ok(/local engine.*on this device/i.test(badge.textContent));
     assert.ok(!badge.classList.contains('unconfigured'));
+  });
+  check('provider status is explicit and does not claim an untested hosted connection is live', () => {
+    assert.strictEqual(document.getElementById('aiRuntime').getAttribute('data-state'), 'local');
+    assert.ok(/local.*on this device/i.test(document.getElementById('providerStatusLabel').textContent));
+    assert.ok(/does not contact an AI provider/i.test(document.getElementById('providerDetailsText').textContent));
+  });
+  check('context disclosure explains local privacy and exposes the Odoo report action', () => {
+    assert.ok(/Data sent: none/i.test(document.getElementById('contextDetailsText').textContent));
+    assert.ok(document.getElementById('connectionReportBtn'));
+    assert.ok(/data & connection details/i.test(document.getElementById('contextDetailsBtn').textContent));
+    assert.ok(Array.from(document.querySelectorAll('.suggest-card')).some(card => card.getAttribute('data-prompt') === 'status'));
+    assert.strictEqual(document.querySelector('.attach-btn'), null, 'do not advertise an attachment control without file handling');
+  });
+  check('context disclosure opens from the composer with keyboard-friendly details', () => {
+    click('#contextDetailsBtn');
+    assert.strictEqual(document.getElementById('aiRuntime').open, true);
+    assert.strictEqual(document.getElementById('contextDetailsBtn').getAttribute('aria-expanded'), 'true');
+    document.getElementById('aiRuntime').open = false;
+    assert.strictEqual(document.getElementById('aiRuntime').open, false);
+  });
+  {
+    const artifact = {
+      version: 1, title: 'Board report', generatedAt: new Date().toISOString(),
+      source: 'Live Odoo query results', methods: ['q1: read-group sale.order'],
+      limitations: ['Only returned groups are shown.'],
+      metrics: [{ title: 'Revenue by month', model: 'sale.order', measure: 'amount_total:sum', chartType: 'bar', rows: [{ label: 'Sep', value: 120, count: 3 }] }],
+      kpis: []
+    };
+    const holder = document.createElement('div');
+    holder.innerHTML = dom.window.renderAIDashboard(artifact, 'Observed data, evidence, trade-offs and next steps.');
+    document.getElementById('messagesInner').appendChild(holder);
+    const section = holder.querySelector('.ai-dashboard-artifact');
+    check('dashboard artifact includes its metadata, executive read-out, visual, and accessible evidence table', () => {
+      assert.ok(section && /Live Odoo query results/.test(section.textContent));
+      assert.ok(section.querySelector('.ai-dashboard-bars') && section.querySelector('.ai-dashboard-table'));
+      assert.ok(/executive read-out/i.test(section.textContent) && /read-group sale.order/.test(section.textContent));
+    });
+    let printed = false;
+    dom.window.DVReportEngine.generateAIDashboardPdf = () => Promise.reject(new Error('simulated CDN unavailable'));
+    dom.window.print = () => { printed = true; dom.window.dispatchEvent(new dom.window.Event('afterprint')); };
+    section.querySelector('[data-ai-dashboard-export]').click();
+    await new Promise((r) => setTimeout(r, 30));
+    check('failed PDF library load uses an honest print-to-PDF fallback', () => {
+      assert.ok(printed);
+      assert.ok(Array.from(document.querySelectorAll('.toast')).some((el) => /choose.*Save as PDF/i.test(el.textContent)));
+      assert.ok(!document.body.classList.contains('ai-dashboard-printing'));
+    });
+  }
+  check('message field and conversation log have accessible names/roles', () => {
+    assert.ok(document.getElementById('chatInput').getAttribute('aria-label'));
+    assert.strictEqual(document.getElementById('messagesArea').getAttribute('role'), 'log');
+    assert.ok(document.getElementById('sendBtn').getAttribute('aria-label'));
+  });
+  check('hosted provider UI separates setup, untested, and successful response states', () => {
+    dom.window.DVAIConfig.set({ provider: 'anthropic', apiKey: '' });
+    dom.window.refreshAssistantStatus(true);
+    assert.strictEqual(document.getElementById('aiRuntime').getAttribute('data-state'), 'setup');
+    assert.ok(/setup needed/i.test(document.getElementById('providerStatusLabel').textContent));
+    dom.window.DVAIConfig.set({ provider: 'anthropic', apiKey: 'test-key-not-used' });
+    dom.window.refreshAssistantStatus(true);
+    assert.strictEqual(document.getElementById('aiRuntime').getAttribute('data-state'), 'ready');
+    assert.ok(/not been tested yet/i.test(document.getElementById('providerDetailsText').textContent));
+    assert.ok(/24 recent prior messages/i.test(document.getElementById('contextDetailsText').textContent));
+    dom.window.recordProviderOutcome('anthropic', 'connected');
+    assert.strictEqual(document.getElementById('aiRuntime').getAttribute('data-state'), 'connected');
+    dom.window.DVAIConfig.set({ provider: 'offline', apiKey: '' });
+    dom.window.refreshAssistantStatus(true);
   });
   check('page loads without ever prompting for or requiring an API key (composer usable immediately)', () => {
     const sendBtn = document.getElementById('sendBtn');
@@ -133,6 +200,22 @@ async function main() {
     check(`"${msg}" -> ${expectedTag}`, () => { assert.strictEqual(lastTopicTag(), expectedTag); });
   }
 
+  await send('Create a dashboard showing monthly sales and revenue');
+  check('offline analytics does not invent a live Odoo dashboard or claim live AI', () => {
+    assert.strictEqual(lastTopicTag(), 'Setup needed');
+    assert.ok(/offline engine/i.test(lastAssistantBubbleText()) && /Odoo data/i.test(lastAssistantBubbleText()));
+    assert.ok(!Array.from(document.querySelectorAll('.msg-row.ai')).slice(-1)[0].querySelector('.ai-dashboard-artifact'));
+  });
+  dom.window.DVAIConfig.set({ provider: 'anthropic', apiKey: 'test-key-not-used' });
+  await send('Show my company sales dashboard');
+  check('configured hosted AI still refuses analytics without live Odoo evidence', () => {
+    assert.strictEqual(fetchState.called, false, 'analytics should not be sent to a model without live Odoo evidence');
+    assert.strictEqual(lastTopicTag(), 'Live Odoo unavailable');
+    assert.ok(/Odoo is not connected|Live company data is unavailable/i.test(lastAssistantBubbleText()));
+    assert.ok(!Array.from(document.querySelectorAll('.msg-row.ai')).slice(-1)[0].querySelector('.ai-dashboard-artifact'));
+  });
+  dom.window.DVAIConfig.set({ provider: 'offline', apiKey: '' });
+
   console.log('\n== Real code debugging (no API) ==');
   await send('```js\nfunction total(items) {\n  var sum = 0\n  for (var i=0; i<items.length; i++ {\n    sum += items[i].price\n  }\n  return sum\n}\n```');
   check('pasted broken JS gets a real static-analysis reply with a health score', () => {
@@ -182,6 +265,11 @@ async function main() {
   }
 
   console.log('\n== Conversation persistence ==');
+  check('the active conversation is selected in localStorage so reopening does not create blank duplicates', () => {
+    const convos = JSON.parse(dom.window.localStorage.getItem('al_convos') || '{}');
+    const selected = dom.window.localStorage.getItem('al_active_convo_id');
+    assert.ok(selected && convos[selected], 'expected the active conversation id to refer to a saved thread');
+  });
   check('conversations persist to localStorage with real content', () => {
     const raw = dom.window.localStorage.getItem('al_convos');
     assert.ok(raw, 'expected conversations in localStorage');

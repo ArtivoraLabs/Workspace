@@ -10,14 +10,58 @@ both work with zero API keys, zero accounts, and zero network calls.**
 Everything — column typing, data cleaning, chart suggestions, chat replies,
 even code debugging — runs as deterministic JavaScript in your browser tab.
 
+## Production architecture
+
+DashView has three optional service layers:
+
+| Layer | Location | Responsibility |
+|---|---|---|
+| Static app | Root HTML/CSS/JS | Dashboard, People, Data Studio, and local AI |
+| Auth/API | [`server/`](./server/) | Accounts, projects, authenticated AI gateway, and role-protected Odoo proxy |
+| Odoo-aware AI | [`ai-service/`](./ai-service/) | Server-side model routing, read-only Odoo tools, metrics, audit, and rate limiting |
+
+For production, use the authenticated Node or FastAPI service with explicit
+CORS origins, a high-entropy `JWT_SECRET`, a dedicated read-only Odoo user,
+and an Odoo host/model allow-list. The Cloudflare Worker flow is available for
+low-trust or development deployments and must be configured with exact
+`ALLOWED_ORIGINS` and `ALLOWED_ODOO_HOSTS` values.
+
+The static workspace defaults to read-only guest access. Real accounts require
+the optional Node API: the first registered user becomes the organization
+owner, and owner/admin users can provision organization members. There are no
+bundled demo admin credentials.
+
+Dashboard JWTs are stored in `sessionStorage`, not persistent browser storage.
+Sign-in lasts across navigation in the same tab; sign in again when starting a
+fresh tab or browser session. Any legacy `al_api_token` in `localStorage` is
+removed at API-client initialization and is never reused.
+
 ---
 
 ## ✨ Features
 
 ### AI Assistant (`ai.html`)
-A chat interface backed by `js/ai-engine.js` — a local, rule-based engine,
-**not** a live language model, and it says so plainly if you ask. No API
-key, no account, no network calls; every reply is computed in this tab.
+A chat interface backed by `js/ai-engine.js` by default: a local, rule-based
+engine, **not** a live language model. It works without a key or network
+calls. Optionally choose a hosted provider (Claude, Grok, Groq, or the
+DashView backend) in Settings → AI Assistant. The status control distinguishes
+local mode, setup needed, configured-but-untested, in-progress, successful,
+and failed requests; it never claims a provider is connected before a reply.
+Existing conversations remain in browser storage when providers change, and
+the last active thread reopens instead of creating another empty thread.
+
+- **Practical prompts** — start with code debugging, DashView help, rollout
+  planning, business reporting when Odoo context is available, or an Odoo
+  connection report.
+- **Context & privacy disclosure** — inspect the selected provider/model, how
+  much recent conversation history a hosted request may include, whether
+  optional dashboard/Odoo context is enabled, and how local mode differs.
+  Context is sent only as part of a message request. Direct-provider
+  credentials are stored in this browser's settings; never publish a real key
+  in source code.
+- **Accessible, responsive controls** — keyboard-operable conversation
+  history and prompts, labeled composer/send controls, live response status,
+  and a compact mobile layout.
 
 - **Real code debugging** — paste a JS/JSON/HTML/Python snippet (a fenced
   code block, or just paste it with "debug this") and it runs genuine static
@@ -214,10 +258,10 @@ Runs every suite headless via `jsdom` — no browser, no network:
 - `data-health.smoke.test.js` — the cleaning flow specifically: dirty data
   triggers Data Health before Suggestions, every fix action really mutates
   the dataset, clean data skips straight through
-- `assistant.smoke.test.js` — the AI Assistant: confirms zero `fetch()`
-  calls ever fire, topic matching across every knowledge-base category, real
-  code debugging, identity/greeting/fallback handling, emotional support,
-  and the `?q=` deep-link handoff
+- `assistant.smoke.test.js` — the AI Assistant: confirms the default offline
+  path makes no `fetch()` calls, provider/context status and accessibility
+  affordances, topic matching across every knowledge-base category, real code
+  debugging, identity/greeting/fallback handling, and the `?q=` deep-link handoff
 - `people.smoke.test.js` — 64 checks against `people.html`. Boots the real
   page and drives the actual UI rather than calling internals: it clicks
   tasks and asserts the counter and phase bars move together, starts/pauses

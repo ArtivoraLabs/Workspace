@@ -26,6 +26,7 @@
 <link rel="stylesheet" href="css/pro-upgrade.css"/>
 <link rel="stylesheet" href="css/odoo-pro.css"/>
 <link rel="stylesheet" href="css/security.css"/>
+<link rel="stylesheet" href="css/studio-workspace.css"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <meta name="mobile-web-app-capable" content="yes"/>
@@ -171,44 +172,58 @@
       </section>
 
       <!-- ══════════════════════ DATA STUDIO ══════════════════════ -->
-      <section class="view-panel" id="view-studio">
+      <section class="view-panel" id="view-studio" aria-labelledby="studioPageTitle">
+
+        <div class="studio-page-head">
+          <div>
+            <p class="studio-eyebrow">ANALYTICS WORKSPACE</p>
+            <h1 id="studioPageTitle">Data Studio</h1>
+            <p>Explore your data, build a dashboard, and shape the story behind the numbers.</p>
+          </div>
+          <a class="studio-overview-link" href="#overview" data-view="overview">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+            Back to overview
+          </a>
+        </div>
 
         <div class="studio-toolbar">
           <div class="studio-toolbar-left">
+            <label class="visually-hidden" for="workbookNameInput">Workbook name</label>
             <input type="text" id="workbookNameInput" class="studio-workbook-name" value="Untitled workbook" maxlength="80" spellcheck="false"/>
-            <span class="studio-save-state" id="saveStateTag">No changes yet</span>
-            <span class="studio-dataset-tag" id="datasetTag"></span>
+            <span class="studio-save-state" id="saveStateTag" role="status" aria-live="polite">No changes yet</span>
+            <span class="studio-dataset-tag" id="datasetTag" aria-live="polite"></span>
           </div>
           <div class="studio-toolbar-right">
-            <button class="studio-icon-btn studio-fields-toggle" id="fieldsToggleBtn" type="button" aria-label="Toggle fields panel" style="color:var(--ink-50);">
+            <button class="studio-icon-btn studio-fields-toggle" id="fieldsToggleBtn" type="button" aria-label="Show fields panel" aria-controls="fieldsRail" aria-expanded="false" style="color:var(--ink-50);">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
             </button>
             <div class="studio-dropdown" id="workbooksDropdown">
-              <button class="btn btn-outline btn-sm" id="openWorkbooksBtn" type="button" title="My workbooks">
+              <button class="btn btn-outline btn-sm" id="openWorkbooksBtn" type="button" title="My workbooks" aria-haspopup="dialog">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
                 My workbooks
               </button>
             </div>
             <button class="btn btn-outline btn-sm" id="newWorkbookBtn" type="button">New</button>
             <div class="studio-dropdown" id="exportDropdown">
-              <button class="btn btn-outline btn-sm" id="exportDropdownBtn" type="button">
+              <button class="btn btn-outline btn-sm" id="exportDropdownBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="exportDropdownMenu">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3M7 10l5 5 5-5M4 21h16"/></svg>
                 Export
               </button>
-              <div class="studio-dropdown-menu">
-                <button class="studio-dropdown-item" id="exportCsvBtn" type="button">Data as CSV</button>
+              <div class="studio-dropdown-menu" id="exportDropdownMenu" role="menu">
+                <button class="studio-dropdown-item" id="exportCsvBtn" type="button" role="menuitem">Data as CSV</button>
                 <div class="studio-dropdown-sep"></div>
-                <button class="studio-dropdown-item" id="exportXlsxBtn" type="button">Excel report (.xlsx)</button>
-                <button class="studio-dropdown-item" id="exportPdfBtn" type="button">PDF report</button>
+                <button class="studio-dropdown-item" id="exportXlsxBtn" type="button" role="menuitem">Excel report (.xlsx)</button>
+                <button class="studio-dropdown-item" id="exportPdfBtn" type="button" role="menuitem">PDF report</button>
               </div>
             </div>
             <button class="btn btn-signal btn-sm" id="topbarImportBtn" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>
               Import file
             </button>
-            <input type="file" id="fileInput" accept=".csv,.tsv,.xlsx,.xls,.json" style="display:none;"/>
+            <input type="file" id="fileInput" accept=".csv,.tsv,.xlsx,.xls,.json" aria-label="Choose a data file" style="display:none;"/>
           </div>
         </div>
+        <div class="studio-import-feedback" id="studioImportFeedback" hidden role="status" aria-live="polite"></div>
 
         <!-- Empty state -->
         <div class="studio-empty" id="emptyState">
@@ -219,13 +234,19 @@
               <path d="M23 42h24"/>
               <path d="M27 42V32M35 42V24M43 42V16"/>
             </svg>
-            <h2>Drop a spreadsheet here</h2>
-            <p>DashView reads it, types every column, and drafts a full dashboard with KPIs, charts, a pivot table and a drill-down hierarchy — you review the suggestions and pick what stays.</p>
+            <p class="studio-empty-eyebrow">START WITH YOUR DATA</p>
+            <h2>Bring your data into focus</h2>
+            <p>Import a spreadsheet to get a clear view of the key metrics, patterns, and relationships in your data. Your original file is never changed.</p>
             <div class="studio-dropzone-actions">
               <button class="btn btn-primary btn-lg" id="emptyImportBtn" type="button">Choose a file</button>
               <button class="btn btn-outline btn-lg" id="sampleDataBtn" type="button">Try it with sample data</button>
             </div>
             <p class="studio-dropzone-formats">CSV · TSV · XLSX · XLS · JSON</p>
+            <ul class="studio-capability-list" aria-label="What you can do in Data Studio">
+              <li><span aria-hidden="true">01</span>Find trends with charts and KPIs</li>
+              <li><span aria-hidden="true">02</span>Filter, sort, and inspect rows</li>
+              <li><span aria-hidden="true">03</span>Build pivots and drill-downs</li>
+            </ul>
             <p class="studio-privacy-note">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="1.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
               Parsed entirely in this browser — no file, and no AI API call, ever leaves your machine.
@@ -236,10 +257,10 @@
         <!-- Main workbench -->
         <div class="studio-main" id="studioMain" style="display:none;">
 
-          <aside class="studio-fields-rail" id="fieldsRail">
+          <aside class="studio-fields-rail" id="fieldsRail" aria-label="Dataset fields">
             <div class="fields-rail-head">
               <h4>Fields <span class="tag" id="fieldCountTag" style="font-size:10px;"></span></h4>
-              <input type="text" id="fieldSearchInput" placeholder="Search fields…"/>
+              <input type="text" id="fieldSearchInput" placeholder="Search fields…" aria-label="Search dataset fields"/>
             </div>
             <div class="fields-list" id="fieldsList"></div>
             <div class="fields-rail-foot">
@@ -253,7 +274,7 @@
             <div class="studio-summary-strip">
               <p id="summaryText"></p>
               <div class="studio-summary-actions">
-                <button class="btn btn-outline btn-sm" id="reopenSuggestionsBtn" type="button">
+                <button class="btn btn-outline btn-sm" id="reopenSuggestionsBtn" type="button" aria-haspopup="dialog">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>
                   Suggestions
                 </button>
@@ -263,23 +284,23 @@
             <div class="drill-breadcrumb" id="drillBreadcrumb" style="display:none;"></div>
             <div class="studio-slicer-bar" id="slicerBar"></div>
 
-            <div class="studio-tabs" id="studioTabs">
-              <button class="studio-tab active" data-tab="overview" type="button">Overview</button>
-              <button class="studio-tab" data-tab="data" type="button">Data<span class="badge" id="dataTabBadge"></span></button>
-              <button class="studio-tab" data-tab="pivot" type="button">Pivot table</button>
-              <button class="studio-tab" data-tab="hierarchy" type="button">Hierarchy</button>
+            <div class="studio-tabs" id="studioTabs" role="tablist" aria-label="Workbook views">
+              <button class="studio-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview" tabindex="0" data-tab="overview" type="button">Overview</button>
+              <button class="studio-tab" id="tab-data" role="tab" aria-selected="false" aria-controls="panel-data" tabindex="-1" data-tab="data" type="button">Data<span class="badge" id="dataTabBadge"></span></button>
+              <button class="studio-tab" id="tab-pivot" role="tab" aria-selected="false" aria-controls="panel-pivot" tabindex="-1" data-tab="pivot" type="button">Pivot table</button>
+              <button class="studio-tab" id="tab-hierarchy" role="tab" aria-selected="false" aria-controls="panel-hierarchy" tabindex="-1" data-tab="hierarchy" type="button">Hierarchy</button>
             </div>
 
-            <div class="studio-tab-panel studio-print-target" id="panel-overview">
+            <div class="studio-tab-panel studio-print-target" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
               <div class="kpi-grid" id="overviewKpiGrid"></div>
               <div class="widget-grid" id="overviewWidgetGrid"></div>
             </div>
 
-            <div class="studio-tab-panel" id="panel-data" style="display:none;">
+            <div class="studio-tab-panel" id="panel-data" role="tabpanel" aria-labelledby="tab-data" tabindex="0" style="display:none;">
               <div class="data-toolbar">
                 <div class="data-search grow">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-                  <input type="text" id="dataSearchInput" placeholder="Search all rows…"/>
+                  <input type="text" id="dataSearchInput" placeholder="Search all rows…" aria-label="Search all rows"/>
                 </div>
                 <button class="btn btn-outline btn-sm" id="columnsMenuBtn" type="button">Columns</button>
                 <button class="btn btn-outline btn-sm" id="highlightToggleBtn" type="button">Highlight numbers</button>
@@ -287,7 +308,7 @@
                 <button class="btn btn-ghost btn-sm" id="deleteRowsBtn" type="button" style="display:none;color:var(--danger);">Delete selected</button>
                 <span class="data-count-tag" id="dataCountTag"></span>
               </div>
-              <div class="grid-scroll"><table class="data-grid" id="dataGridTable"><thead id="dataGridHead"></thead><tbody id="dataGridBody"></tbody></table></div>
+              <div class="grid-scroll"><table class="data-grid" id="dataGridTable" aria-label="Imported dataset rows"><thead id="dataGridHead"></thead><tbody id="dataGridBody"></tbody></table></div>
               <div class="data-pagination">
                 <select id="pageSizeSelect">
                   <option value="25">25 rows / page</option>
@@ -305,7 +326,7 @@
               </div>
             </div>
 
-            <div class="studio-tab-panel" id="panel-pivot" style="display:none;">
+            <div class="studio-tab-panel" id="panel-pivot" role="tabpanel" aria-labelledby="tab-pivot" tabindex="0" style="display:none;">
               <div class="pivot-wells">
                 <div class="pivot-well" id="pivotWellFilters" data-well="filters"><div class="pivot-well-title">Filters</div><div class="pivot-well-body"><p class="pivot-well-empty">Add a field from the rail (F)</p></div></div>
                 <div class="pivot-well" id="pivotWellRows" data-well="rows"><div class="pivot-well-title">Rows (nested)</div><div class="pivot-well-body"><p class="pivot-well-empty">Add a field from the rail (R)</p></div></div>
@@ -322,7 +343,7 @@
               <div class="pivot-table-wrap"><table class="pivot-table" id="pivotTable"></table></div>
             </div>
 
-            <div class="studio-tab-panel" id="panel-hierarchy" style="display:none;">
+            <div class="studio-tab-panel" id="panel-hierarchy" role="tabpanel" aria-labelledby="tab-hierarchy" tabindex="0" style="display:none;">
               <div class="hierarchy-controls">
                 <label class="visually-hidden" for="hLevel1">Level 1</label><select id="hLevel1"></select>
                 <label class="visually-hidden" for="hLevel2">Level 2</label><select id="hLevel2"></select>
@@ -398,7 +419,7 @@
       <section class="view-panel" id="view-odoo-live">
         <div class="ov-head">
           <div>
-            <h1>Odoo Live <span class="odoo-live-status" id="odooLiveStatus"><span class="dot"></span><span id="odooLiveStatusText">Not connected</span></span></h1>
+            <h1>Odoo Live <span class="odoo-live-status is-disconnected" id="odooLiveStatus" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><span id="odooLiveStatusText">Not connected</span></span></h1>
             <p id="odooLiveSub">Pick an installed app, then explore its models — insights and charts adapt to the app you choose.</p>
           </div>
           <div class="ov-head-actions">
@@ -413,10 +434,12 @@
             </button>
           </div>
         </div>
-        <div class="odoo-live-connect-banner" id="odooLiveConnectBanner" hidden>
+        <div class="odoo-live-connect-banner" id="odooLiveConnectBanner" role="region" aria-live="polite" aria-labelledby="odooLiveConnectBannerText" hidden>
           <p id="odooLiveConnectBannerText"></p>
+          <button class="btn btn-outline btn-sm" id="odooLiveRetryBtn" type="button" hidden>Retry connection</button>
           <a href="#settings" class="btn btn-primary btn-sm" data-view="settings">Open Settings</a>
         </div>
+        <div id="odooLiveCheckpoints" class="odoo-live-checkpoints"></div>
         <div class="olx-conn" id="odooLiveConn"></div>
         <div class="olx-shell">
           <div class="olx-main">
@@ -432,12 +455,12 @@
                 <select class="pro-select" id="odooLiveModelSelect" disabled><option value="">Select a module first</option></select>
                 <small id="odooLiveModelCount"></small>
               </div>
-              <div class="seg" id="odooLiveTabs" role="tablist">
-                <button type="button" data-tab="insights" class="active">Insights</button>
-                <button type="button" data-tab="records">Records</button>
+              <div class="seg" id="odooLiveTabs" role="tablist" aria-label="Odoo data views">
+                <button id="odooLiveInsightsTab" type="button" role="tab" aria-controls="odooLiveInsights" aria-selected="true" tabindex="0" data-tab="insights" class="active">Insights &amp; reports</button>
+                <button id="odooLiveRecordsTab" type="button" role="tab" aria-controls="odooLiveRecords" aria-selected="false" tabindex="-1" data-tab="records">Data browser</button>
               </div>
             </div>
-            <div id="odooLiveInsights">
+            <div id="odooLiveInsights" role="tabpanel" aria-labelledby="odooLiveInsightsTab">
               <div class="olx-kpis" id="odooLiveKpis"></div>
               <div class="olx-charts" id="odooLiveCharts"></div>
               <div class="panel olx-builder">
@@ -452,23 +475,23 @@
                 <div id="odooLiveBuilderBody"><div class="olx-empty-s">Pick a module to start.</div></div>
               </div>
             </div>
-            <div id="odooLiveRecords" hidden>
+            <div id="odooLiveRecords" role="tabpanel" aria-labelledby="odooLiveRecordsTab" hidden>
               <div class="panel">
                 <div class="odoo-live-filterbar">
-                  <select class="pro-select" id="odooLiveFilterField"><option value="">Filter field…</option></select>
-                  <input type="text" class="pro-select" id="odooLiveFilterValue" placeholder="contains…" style="width:160px" disabled/>
-                  <button class="btn btn-outline btn-sm" id="odooLiveAddFilterBtn" disabled>+ Add filter</button>
+                  <select class="pro-select" id="odooLiveFilterField" aria-label="Filter field"><option value="">Filter field…</option></select>
+                  <input type="text" class="pro-select" id="odooLiveFilterValue" aria-label="Filter value" placeholder="contains…" style="width:160px" disabled/>
+                  <button class="btn btn-outline btn-sm" id="odooLiveAddFilterBtn" type="button" disabled>+ Add filter</button>
                   <div class="odoo-live-pop-wrap">
-                    <button class="btn btn-outline btn-sm" id="odooLiveColumnsBtn" disabled title="Choose which fields to show">Columns</button>
-                    <div class="odoo-live-pop" id="odooLiveColumnsPop" hidden>
+                    <button class="btn btn-outline btn-sm" id="odooLiveColumnsBtn" type="button" aria-controls="odooLiveColumnsPop" aria-expanded="false" disabled title="Choose which fields to show">Columns</button>
+                    <div class="odoo-live-pop" id="odooLiveColumnsPop" aria-label="Choose visible columns" hidden>
                       <div class="odoo-live-pop-head">Show fields<span>Custom column set, saved per model</span></div>
                       <div class="odoo-live-pop-list" id="odooLiveColumnsList"></div>
                       <div class="odoo-live-pop-foot"><button class="btn btn-ghost btn-sm" id="odooLiveColumnsReset" type="button">Reset to default</button></div>
                     </div>
                   </div>
                   <div class="odoo-live-pop-wrap">
-                    <button class="btn btn-outline btn-sm" id="odooLiveViewsBtn" disabled title="Save or recall a filtered view">Views</button>
-                    <div class="odoo-live-pop odoo-live-pop--wide" id="odooLiveViewsPop" hidden>
+                    <button class="btn btn-outline btn-sm" id="odooLiveViewsBtn" type="button" aria-controls="odooLiveViewsPop" aria-expanded="false" disabled title="Save or recall a filtered view">Views</button>
+                    <div class="odoo-live-pop odoo-live-pop--wide" id="odooLiveViewsPop" aria-label="Saved data views" hidden>
                       <div class="odoo-live-pop-head">Saved views<span>Model &amp; filters — recalled in one click</span></div>
                       <div class="odoo-live-pop-list" id="odooLiveViewsList"></div>
                       <div class="odoo-live-pop-foot odoo-live-pop-foot--save">
@@ -477,19 +500,19 @@
                       </div>
                     </div>
                   </div>
-                  <button class="btn btn-outline btn-sm" id="odooLiveExportBtn" disabled title="Download this page as CSV">Export CSV</button>
+                  <button class="btn btn-outline btn-sm" id="odooLiveExportBtn" type="button" disabled title="Download this page as CSV">Export CSV</button>
                   <div class="data-search dv-odoo-search" style="margin-left:auto;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-                    <input type="text" placeholder="Quick search…" id="odooLiveQuickSearch" disabled/>
+                    <input type="search" placeholder="Quick search…" id="odooLiveQuickSearch" aria-label="Search visible records" disabled/>
                   </div>
                 </div>
                 <div class="odoo-live-chips" id="odooLiveChips"></div>
-                <div class="table-wrap"><table class="dash-table" id="odooLiveTable"><thead></thead><tbody></tbody></table></div>
+                <div class="table-wrap" tabindex="0" aria-label="Scrollable Odoo records"><table class="dash-table" id="odooLiveTable" aria-label="Odoo records"><thead></thead><tbody></tbody></table></div>
                 <div class="odoo-live-pagination">
                   <span class="p-info" id="odooLivePageInfo">–</span>
                   <div class="p-btns">
-                    <button class="btn btn-outline btn-sm" id="odooLivePrevBtn" disabled>← Prev</button>
-                    <button class="btn btn-outline btn-sm" id="odooLiveNextBtn" disabled>Next →</button>
+                    <button class="btn btn-outline btn-sm" id="odooLivePrevBtn" type="button" aria-label="Previous records page" disabled>← Prev</button>
+                    <button class="btn btn-outline btn-sm" id="odooLiveNextBtn" type="button" aria-label="Next records page" disabled>Next →</button>
                   </div>
                 </div>
               </div>
@@ -504,9 +527,13 @@
         <div class="ov-head">
           <div>
             <h1>Task assignments</h1>
-            <p>Who is working on what — assigned from your People directory</p>
+            <p>Live Odoo project tasks with separately stored local tasks</p>
           </div>
           <div class="ov-head-actions">
+            <div class="seg" id="tkSource" role="group" aria-label="Task data source">
+              <button type="button" class="active" data-source="odoo">Odoo</button>
+              <button type="button" data-source="local">Local tasks</button>
+            </div>
             <div class="seg" id="tkMode" role="group" aria-label="View">
               <button type="button" class="active" data-mode="people">By employee</button>
               <button type="button" data-mode="table">All tasks</button>
@@ -519,16 +546,21 @@
         <div class="tk-filters">
           <div class="data-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" id="tkSearch" placeholder="Search tasks or people…"/></div>
           <select class="pro-select" id="tkEmp" aria-label="Employee"><option value="">All employees</option></select>
-          <select class="pro-select" id="tkStatus" aria-label="Status"><option value="">All statuses</option><option value="todo">To do</option><option value="progress">In progress</option><option value="review">In review</option><option value="done">Done</option></select>
+          <select class="pro-select" id="tkStatus" aria-label="Stage"><option value="">All stages</option></select>
           <select class="pro-select" id="tkPriority" aria-label="Priority"><option value="">All priorities</option><option value="urgent">Urgent</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
         </div>
+        <p class="tk-source-info" id="tkSourceInfo" role="status" aria-live="polite"></p>
         <div id="tkBody"></div>
+        <div class="tk-page" id="tkPage" hidden>
+          <span id="tkPageInfo"></span>
+          <div><button class="btn btn-outline btn-sm" id="tkPrev" type="button">← Previous</button> <button class="btn btn-outline btn-sm" id="tkNext" type="button">Next →</button></div>
+        </div>
       </section>
 
       <!-- ══════════════════════ TEAM ══════════════════════ -->
       <section class="view-panel" id="view-team">
         <div class="ov-head">
-          <div><h1>Team</h1><p id="teamSubhead">8 members in acme-corp</p></div>
+          <div><h1>Team</h1><p id="teamSubhead">Team directory</p></div>
           <div class="ov-head-actions">
             <input type="file" id="teamImportFile" accept=".json" style="display:none"/>
             <button class="btn btn-outline btn-sm" id="teamImportBtn" data-require-perm="importExport" title="Import team from a JSON backup">Import</button>
@@ -545,6 +577,7 @@
             <button class="btn btn-signal btn-sm" id="inviteTeamBtn" data-require-perm="manageTeam">+ Invite member</button>
           </div>
         </div>
+        <p class="team-source-note" id="teamSourceNote" role="status" aria-live="polite"></p>
         <div class="team-grid" id="teamGrid"></div>
       </section>
 
@@ -563,7 +596,7 @@
       <section class="view-panel" id="view-audit-log">
         <div class="ov-head">
           <div>
-            <h1>Audit log <span class="odoo-live-status" id="auditStatus"><span class="dot"></span><span id="auditStatusText">Not connected</span></span></h1>
+            <h1>Audit log <span class="odoo-live-status" id="auditStatus"><span class="dot"></span><span id="auditStatusText" aria-live="polite">Not connected</span></span></h1>
             <p id="auditSub">Live from your Odoo</p>
           </div>
           <div class="ov-head-actions">
@@ -582,9 +615,9 @@
               <button type="button" data-src="signins">Sign-ins</button>
               <button type="button" data-src="local">Workspace security</button>
             </div>
-            <div class="data-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" id="auditSearch" placeholder="Search user, record or subject…"/></div>
+            <div class="data-search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input type="text" id="auditSearch" maxlength="120" placeholder="Search user, record or subject…"/></div>
             <select class="pro-select" id="auditPeriod" aria-label="Period">
-              <option value="1">Last 24 hours</option><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="0">All time</option>
+              <option value="1">Last 24 hours</option><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 365 days (maximum)</option>
             </select>
             <span id="auditTypeWrap"><select class="pro-select" id="auditType" aria-label="Message type"><option value="">All types</option><option value="comment">Messages</option><option value="notification">System &amp; tracked changes</option><option value="email">Emails</option></select></span>
           </div>
@@ -592,11 +625,11 @@
           <div class="table-wrap">
             <table class="dash-table">
               <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Record</th><th>Details</th><th>Type</th></tr></thead>
-              <tbody id="auditBody"></tbody>
+              <tbody id="auditBody" aria-live="polite" aria-relevant="all"></tbody>
             </table>
           </div>
           <div class="audit-pager">
-            <span id="auditPageInfo">–</span>
+            <span id="auditPageInfo" aria-live="polite" aria-atomic="true">–</span>
             <div class="p-btns"><button class="btn btn-outline btn-sm" id="auditPrev" disabled>← Prev</button> <button class="btn btn-outline btn-sm" id="auditNext" disabled>Next →</button></div>
           </div>
         </div>
@@ -733,7 +766,7 @@
                     <p>Connect to any Odoo instance — Cloud, Odoo.sh, or self-hosted — for live data</p>
                   </div>
                   <div class="stg-card-head-right">
-                    <span class="stg-status-pill" id="odooStatusTag">Not connected</span>
+                    <span class="stg-status-pill" id="odooStatusTag" role="status" aria-live="polite">Not connected</span>
                   </div>
                 </div>
                 <div class="stg-card-body">
@@ -748,42 +781,45 @@
                   <!-- Credential fields -->
                   <div class="stg-field-grid odoo-field-grid">
                     <div class="stg-field">
-                      <label>Odoo URL</label>
-                      <input type="text" class="stg-input" id="odooUrl" placeholder="https://yourcompany.odoo.com"/>
+                      <label for="odooUrl">Odoo URL</label>
+                      <input type="url" class="stg-input" id="odooUrl" autocomplete="url" placeholder="https://yourcompany.odoo.com" aria-describedby="odooUrlHelp"/>
+                      <span class="stg-field-help" id="odooUrlHelp">Use the HTTPS site root, without a database or app path.</span>
                     </div>
                     <div class="stg-field">
-                      <label>Database</label>
-                      <input type="text" class="stg-input" id="odooDb" placeholder="yourcompany-live"/>
+                      <label for="odooDb">Database</label>
+                      <input type="text" class="stg-input" id="odooDb" autocomplete="off" placeholder="yourcompany-live" aria-describedby="odooDbHelp"/>
+                      <span class="stg-field-help" id="odooDbHelp">Odoo Online: usually your instance name; otherwise use the exact database name.</span>
                     </div>
                     <div class="stg-field">
-                      <label>Username / email</label>
-                      <input type="text" class="stg-input" id="odooUser" placeholder="admin@yourcompany.com"/>
+                      <label for="odooUser">Username / email</label>
+                      <input type="text" class="stg-input" id="odooUser" autocomplete="username" placeholder="you@yourcompany.com"/>
                     </div>
                     <div class="stg-field">
-                      <label>API key <em>(not your password)</em></label>
-                      <input type="password" class="stg-input" id="odooKey" placeholder="Odoo API key"/>
-                      <span class="stg-field-help">Settings → Users → your account → Account Security → New API Key</span>
+                      <label for="odooKey">API key <em>(not your password)</em></label>
+                      <input type="password" class="stg-input" id="odooKey" autocomplete="new-password" placeholder="Odoo API key" aria-describedby="odooKeyHelp"/>
+                      <span class="stg-field-help" id="odooKeyHelp">Odoo → Settings → Users → your account → Account Security → New API Key. Leave blank to retain a previously saved key.</span>
                     </div>
                     <div class="stg-field span-2">
-                      <label>Proxy URL &nbsp;<span class="stg-badge-free">Free Cloudflare Worker</span></label>
-                      <input type="text" class="stg-input" id="odooProxyUrl" placeholder="https://dashview-proxy.YOUR-NAME.workers.dev"/>
-                      <span class="stg-field-help">Deploy <code>cloudflare-worker.js</code> on <a href="https://workers.cloudflare.com" target="_blank" rel="noopener" style="color:var(--signal-bright);">workers.cloudflare.com</a> (free, no card needed) → paste the Worker URL here to enable live Odoo data.</span>
+                      <label for="odooProxyUrl">Read-only Worker URL &nbsp;<span class="stg-badge-free">Cloudflare Worker</span></label>
+                      <input type="url" class="stg-input" id="odooProxyUrl" autocomplete="url" placeholder="https://dashview-proxy.YOUR-NAME.workers.dev" aria-describedby="odooProxyHelp"/>
+                      <span class="stg-field-help" id="odooProxyHelp">Optional when signed in to DashView. Deploy <code>cloudflare-worker.js</code> and paste its HTTPS <code>.workers.dev</code> URL to use the Odoo Live explorer's read-only Worker path. Task assignments and Team data use authenticated DashView Node API methods, never Worker writes.</span>
                     </div>
                   </div>
 
                   <!-- Security note -->
                   <div class="stg-security-note">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-                    <span>Credentials are saved <b>only in this browser's local storage</b> — never sent to any server except the Cloudflare Worker proxy you deploy yourself. If you set a passcode in Settings → Security, the API key is also encrypted at rest. A proxy URL is required — DashView shows no data until it's set.</span>
+                    <span>Credentials are saved in this browser and sent over HTTPS to the configured Odoo proxy for Odoo Live reads. Task assignments and Team use the authenticated DashView Node API; task writes are limited to allowlisted <code>project.task</code> fields and require an Owner/Admin session. No task write goes through the Worker or directly from the browser to Odoo. A passcode encrypts the saved key at rest.</span>
                   </div>
 
                   <!-- Checkpoints -->
                   <div id="odooSettingsCheckpoints" class="stg-checkpoints-wrap"></div>
+                  <div id="odooActionFeedback" class="odoo-action-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
                   <div class="stg-action-row">
-                    <button class="btn btn-signal btn-sm" id="odooConnectBtn" data-require-perm="manageOdoo">Connect to Odoo</button>
-                    <button class="btn btn-outline btn-sm" id="odooTestBtn">Test connection</button>
-                    <button class="btn btn-outline btn-sm" id="odooDisconnectBtn" style="display:none;color:var(--danger);border-color:var(--danger-10);">Disconnect</button>
+                    <button class="btn btn-signal btn-sm" id="odooConnectBtn" type="button" data-require-perm="manageOdoo">Connect to Odoo</button>
+                    <button class="btn btn-outline btn-sm" id="odooTestBtn" type="button">Test current settings</button>
+                    <button class="btn btn-outline btn-sm" id="odooDisconnectBtn" type="button" hidden style="color:var(--danger);border-color:var(--danger-10);">Disconnect</button>
                     <a href="#odoo-live" class="btn btn-outline btn-sm" data-view="odoo-live" style="margin-left:auto;">Browse live data →</a>
                   </div>
                 </div>
@@ -820,7 +856,7 @@
                       <span class="stg-step-num">3</span>
                       <div class="stg-step-body">
                         <b>Fill the fields above and connect</b>
-                        <p>Enter your Odoo URL, database, username, API key and the Worker URL → click <strong>Connect to Odoo</strong> → open the <a href="#odoo-live" data-view="odoo-live">Odoo (Live)</a> tab — your data loads automatically. No backend server needed, fully works on GitHub Pages.</p>
+                        <p>Enter your Odoo URL, database, username and API key; sign in to DashView to use its authenticated Node API, or add the read-only Worker URL for the Odoo Live explorer → click <strong>Connect to Odoo</strong>. Task assignments and Team use authenticated Node API reads and task writes.</p>
                       </div>
                     </div>
                   </div>
@@ -953,11 +989,12 @@
                 </div>
                 <div class="stg-card-body">
                   <p class="stg-field-help" id="secUnsupported" hidden style="color:var(--danger);">Secure storage needs HTTPS (or localhost). Open the app over HTTPS to enable a passcode.</p>
+                  <p class="stg-field-help">A 12+ character passcode is required before saving Odoo API keys. Keys are encrypted on this device and cleared from memory when the workspace locks.</p>
                   <div class="sec-grid">
                     <div class="stg-field" id="secCurWrap" hidden><label for="secCur">Current passcode</label><input type="password" class="pro-select" id="secCur" autocomplete="current-password"/></div>
-                    <div class="stg-field"><label for="secPass1">New passcode</label><input type="password" class="pro-select" id="secPass1" autocomplete="new-password" placeholder="12+ characters recommended"/>
+                    <div class="stg-field"><label for="secPass1">New passcode</label><input type="password" class="pro-select" id="secPass1" minlength="12" autocomplete="new-password" placeholder="At least 12 characters"/>
                       <div class="sec-meter" id="secMeter" data-s=""><i></i><i></i><i></i><i></i></div><span class="stg-field-help" id="secMeterText"></span></div>
-                    <div class="stg-field"><label for="secPass2">Confirm passcode</label><input type="password" class="pro-select" id="secPass2" autocomplete="new-password"/></div>
+                    <div class="stg-field"><label for="secPass2">Confirm passcode</label><input type="password" class="pro-select" id="secPass2" minlength="12" autocomplete="new-password"/></div>
                     <div class="stg-field"><label for="secAutoLock">Auto-lock after inactivity</label>
                       <select class="pro-select" id="secAutoLock"><option value="1">1 minute</option><option value="5">5 minutes</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="0">Never</option></select></div>
                   </div>
@@ -1404,6 +1441,7 @@
 <script src="js/ai-config-store.js"></script>
 <script src="js/ai-engine.js"></script>
 <script src="js/dashboard-pro.js"></script>
+<script src="js/dashview-api.js"></script>
 <script src="js/auth-service.js"></script>
 <script src="js/odoo-service.js"></script>
 <script src="js/odoo-live.js"></script>

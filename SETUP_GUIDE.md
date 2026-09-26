@@ -85,8 +85,9 @@ Your Browser  →  Cloudflare Worker (free proxy)  →  Your Odoo
 
 ## Production tips (CEO/Director scale)
 
-- **CORS lock-down**: Edit `cloudflare-worker.js` and change `'Access-Control-Allow-Origin': '*'` to your specific GitHub Pages domain
+- **CORS lock-down**: Set `ALLOWED_ORIGINS` and `ALLOWED_ODOO_HOSTS` in the Worker variables to exact production values; do not rely on wildcard defaults
 - **Read-only user**: Create a dedicated read-only Odoo user for the dashboard instead of using an admin account
+- **Browser credential warning**: Worker/browser mode can expose the API key to the browser session. For production, prefer the authenticated Node or FastAPI service with server-managed credentials.
 - **Rate limiting**: Cloudflare Workers free tier = 100,000 requests/day — plenty for a director dashboard
 - **Heavy reports**: Consider adding a caching layer in the Worker for expensive `read_group` calls
 

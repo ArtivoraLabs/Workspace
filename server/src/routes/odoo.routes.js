@@ -20,14 +20,29 @@
 
 const express = require('express');
 const odoo    = require('../services/odooClient');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireOrgRole } = require('../middleware/auth');
+const { validateTaskId, validateTaskInput, validateSigninQuery, requireTaskManager } = require('../services/odooTaskValidation');
 
 const router = express.Router();
 
-// All Odoo routes require a signed-in DashView user.
-// TODO (pre-production): add a server-side role check here so only
-//   admin/owner roles can call these routes (client-side gating today).
-router.use(requireAuth);
+// Odoo access is restricted to organization owners and admins server-side.
+router.use(requireAuth, requireOrgRole('owner', 'admin'));
+
+const MAX_RECORDS = 200;
+
+function validateRecordsInput({ model, domain, fields, limit, offset, order }) {
+  if (!odoo.isSafeModel(model)) return 'model is invalid or not allowed';
+  if (!odoo.isSafeDomain(domain)) return 'domain is invalid';
+  if (!odoo.isSafeFields(fields)) {
+    return 'fields is invalid';
+  }
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > MAX_RECORDS)) {
+    return `limit must be between 1 and ${MAX_RECORDS}`;
+  }
+  if (offset !== undefined && (!Number.isInteger(offset) || offset < 0 || offset > 10000)) return 'offset is invalid';
+  if (order !== undefined && !odoo.isSafeOrder(order)) return 'order is invalid';
+  return null;
+}
 
 // ── credential extraction ─────────────────────────────────────────────────────
 function readCfg(req) {
@@ -38,21 +53,32 @@ function readCfg(req) {
     username: b.username || req.headers['x-odoo-user'],
     apiKey:   b.apiKey   || req.headers['x-odoo-key'],
   };
-  if (!cfg.url || !cfg.db || !cfg.username || !cfg.apiKey) {
+  if ([cfg.url, cfg.db, cfg.username, cfg.apiKey].some(value => typeof value !== 'string' || !value)) {
     throw Object.assign(
       new odoo.OdooError('Missing Odoo credentials (url, db, username, apiKey).', 400),
     );
   }
+  cfg.url = odoo.normalizeUrl(cfg.url);
   return cfg;
 }
 
 // ── uniform error handler ─────────────────────────────────────────────────────
 function handle(res, promise) {
   return promise.catch(err => {
-    const status  = err.status || 500;
-    const message = err.message || 'Odoo request failed';
-    console.error(`[OdooRoute] ${status} — ${message}`);
-    res.status(status).json({ ok: false, error: message });
+    const status = Number.isInteger(err.status) && err.status >= 400 && err.status <= 599
+      ? err.status : 502;
+    const messages = {
+      400: 'Odoo request parameters are invalid.',
+      401: 'Odoo authentication failed.',
+      403: err.message === 'Odoo host is not in the server allowlist.'
+        ? 'Odoo host is not allowed by the server.'
+        : 'Odoo denied access to the requested data or operation.',
+      502: 'Odoo request failed.',
+      503: 'Odoo service is temporarily unavailable.',
+      504: 'Odoo request timed out.',
+    };
+    console.error(`[OdooRoute] request failed (status ${status})`);
+    if (!res.headersSent) res.status(status).json({ ok: false, error: messages[status] || 'Odoo request failed.' });
   });
 }
 
@@ -86,7 +112,7 @@ router.post('/fields', (req, res) => {
   let cfg;
   try { cfg = readCfg(req); } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
   const model = (req.body || {}).model;
-  if (!model) return res.status(400).json({ ok: false, error: 'model is required' });
+  if (!odoo.isSafeModel(model)) return res.status(400).json({ ok: false, error: 'model is invalid or not allowed' });
   handle(res, odoo.getFields(cfg, model).then(fields => res.json({ ok: true, fields })));
 });
 
@@ -95,9 +121,59 @@ router.post('/records', (req, res) => {
   let cfg;
   try { cfg = readCfg(req); } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
   const { model, domain, fields, limit, offset, order } = req.body || {};
-  if (!model) return res.status(400).json({ ok: false, error: 'model is required' });
+  const validationError = validateRecordsInput({ model, domain, fields, limit, offset, order });
+  if (validationError) return res.status(400).json({ ok: false, error: validationError });
   handle(res, odoo.searchRead(cfg, model, { domain, fields, limit, offset, order })
     .then(r => res.json({ ok: true, model, ...r })));
+});
+
+// Task writes deliberately bypass the generic read proxy and are restricted
+// to project.task plus the field mapping in odooClient.createTask/updateTask.
+router.post('/tasks', requireTaskManager, (req, res) => {
+  let cfg;
+  try { cfg = readCfg(req); } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  const input = req.body && req.body.task;
+  const validationError = validateTaskInput(input, { create: true });
+  if (validationError) return res.status(400).json({ ok: false, error: validationError });
+  handle(res, odoo.createTask(cfg, input).then(task => res.status(201).json({ ok: true, task })));
+});
+
+router.patch('/tasks/:id', requireTaskManager, (req, res) => {
+  const id = validateTaskId(req.params.id);
+  if (!id) return res.status(400).json({ ok: false, error: 'Task identifier is invalid.' });
+  let cfg;
+  try { cfg = readCfg(req); } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  const input = req.body && req.body.task;
+  const validationError = validateTaskInput(input);
+  if (validationError) return res.status(400).json({ ok: false, error: validationError });
+  handle(res, odoo.updateTask(cfg, id, input).then(task => res.json({ ok: true, task })));
+});
+
+router.post('/tasks/:id/status', requireTaskManager, (req, res) => {
+  const id = validateTaskId(req.params.id);
+  if (!id) return res.status(400).json({ ok: false, error: 'Task identifier is invalid.' });
+  let cfg;
+  try { cfg = readCfg(req); } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  const input = { stageId: req.body && req.body.stageId };
+  const validationError = validateTaskInput(input);
+  if (validationError) return res.status(400).json({ ok: false, error: validationError });
+  handle(res, odoo.updateTask(cfg, id, input).then(task => res.json({ ok: true, task })));
+});
+
+// Fixed-purpose, owner/admin-only sign-in audit. Does not expose generic model
+// overrides or session/IP/login fields; Odoo ACLs remain authoritative.
+router.post('/audit/signins', (req, res) => {
+  const query = {
+    periodDays: req.body && req.body.periodDays,
+    search: req.body && req.body.search,
+    limit: req.body && req.body.limit,
+    offset: req.body && req.body.offset,
+  };
+  const validationError = validateSigninQuery(query);
+  if (validationError) return res.status(400).json({ ok: false, error: validationError });
+  let cfg;
+  try { cfg = readCfg(req); } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
+  handle(res, odoo.searchSigninLogs(cfg, query).then(result => res.json({ ok: true, ...result })));
 });
 
 // POST /api/odoo/read-group — live aggregated totals (executive KPI cards)
@@ -106,7 +182,13 @@ router.post('/read-group', (req, res) => {
   let cfg;
   try { cfg = readCfg(req); } catch (e) { return res.status(400).json({ ok: false, error: e.message }); }
   const { model, domain, fields, groupby } = req.body || {};
-  if (!model) return res.status(400).json({ ok: false, error: 'model is required' });
+  const validGroupBy = Array.isArray(groupby) && groupby.length <= 5 &&
+    groupby.every(odoo.isSafeGroupBy);
+  const validAggregates = fields === undefined || (Array.isArray(fields) &&
+    fields.length <= 20 && fields.every(odoo.isSafeAggregate));
+  if (!odoo.isSafeModel(model) || !odoo.isSafeDomain(domain) || !validGroupBy || !validAggregates) {
+    return res.status(400).json({ ok: false, error: 'Invalid read-group parameters' });
+  }
   handle(res, odoo.readGroup(cfg, model, { domain, fields, groupby })
     .then(groups => res.json({ ok: true, model, groups })));
 });

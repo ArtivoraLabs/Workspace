@@ -7,7 +7,7 @@
 <meta name="referrer" content="no-referrer"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>AI Assistant — DashView</title>
-<meta name="description" content="DashView's built-in AI Assistant — engineering help, real code debugging, and product guidance. Runs entirely in your browser: no API key, no account, no network calls."/>
+<meta name="description" content="DashView AI Assistant: local, no-key help by default, with optional hosted providers, transparent connection status, and context controls."/>
 <meta name="theme-color" content="#0a0c0b"/>
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml"/>
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png"/>
@@ -81,10 +81,12 @@ svg{display:block;flex-shrink:0}
 .convo-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:var(--r-md);cursor:pointer;transition:.15s;position:relative;group:true}
 .convo-item:hover{background:rgba(232,163,61,.07)}
 .convo-item.active{background:rgba(232,163,61,.13)}
+.convo-item-open{display:flex;align-items:center;gap:9px;flex:1;min-width:0;text-align:left;color:var(--text);border-radius:var(--r-sm)}
+.convo-item-open:focus-visible{outline-offset:3px}
 .convo-item-icon{width:24px;height:24px;border-radius:6px;background:rgba(232,163,61,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--accent2)}
-.convo-item-body{flex:1;min-width:0}
-.convo-item-title{font-size:.8125rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
-.convo-item-preview{font-size:.72rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.convo-item-body{flex:1;min-width:0;display:block}
+.convo-item-title{display:block;font-size:.8125rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.convo-item-preview{display:block;font-size:.72rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .convo-item-del{opacity:0;color:var(--text3);padding:3px;border-radius:4px;transition:.15s;flex-shrink:0}
 .convo-item:hover .convo-item-del{opacity:1}
 .convo-item-del:hover{color:var(--danger);background:rgba(229,101,79,.1)}
@@ -94,9 +96,12 @@ svg{display:block;flex-shrink:0}
 .avatar{width:32px;height:32px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff;flex-shrink:0}
 .sb-user-info p{font-size:.8125rem;font-weight:500}
 .sb-user-info span{font-size:.7rem;color:var(--text3)}
-.sb-api-badge{display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:var(--r-full);background:rgba(79,180,119,.1);border:1px solid rgba(79,180,119,.18);margin-top:6px}
-.sb-api-badge svg{color:var(--success)}
-.sb-api-badge span{font-size:.65rem;color:var(--success);font-weight:500}
+.sb-api-badge{display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:var(--r-full);background:rgba(231,237,231,.05);border:1px solid var(--border);margin-top:6px}
+.sb-api-badge svg,.sb-api-badge span{color:var(--text3)}
+.sb-api-badge[data-state="local"],.sb-api-badge[data-state="connected"]{background:rgba(79,180,119,.1);border-color:rgba(79,180,119,.18)}
+.sb-api-badge[data-state="local"] svg,.sb-api-badge[data-state="local"] span,.sb-api-badge[data-state="connected"] svg,.sb-api-badge[data-state="connected"] span{color:var(--success)}
+.sb-api-badge[data-state="setup"],.sb-api-badge[data-state="error"]{background:rgba(229,101,79,.08);border-color:rgba(229,101,79,.2)}
+.sb-api-badge[data-state="setup"] svg,.sb-api-badge[data-state="setup"] span,.sb-api-badge[data-state="error"] svg,.sb-api-badge[data-state="error"] span{color:var(--danger)}
 
 /* ══════════ MAIN ══════════ */
 .main{display:flex;flex-direction:column;height:100vh;overflow:hidden;position:relative}
@@ -108,6 +113,21 @@ svg{display:block;flex-shrink:0}
 .conv-title-dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 6px var(--success);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .top-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+.ai-runtime{position:relative;z-index:20}
+.ai-runtime>summary{display:flex;align-items:center;gap:7px;list-style:none;cursor:pointer;padding:6px 10px;border:1px solid var(--border);border-radius:var(--r-full);font-size:.72rem;color:var(--text2);white-space:nowrap}
+.ai-runtime>summary::-webkit-details-marker{display:none}
+.ai-runtime>summary:hover{border-color:var(--border-b);color:var(--text)}
+.runtime-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);flex-shrink:0}
+.ai-runtime[data-state="local"] .runtime-dot,.ai-runtime[data-state="connected"] .runtime-dot{background:var(--success);box-shadow:0 0 7px color-mix(in srgb,var(--success) 65%,transparent)}
+.ai-runtime[data-state="connecting"] .runtime-dot{background:var(--warn);animation:pulse 1.2s infinite}
+.ai-runtime[data-state="setup"] .runtime-dot,.ai-runtime[data-state="error"] .runtime-dot{background:var(--danger)}
+.ai-runtime-panel{position:absolute;top:calc(100% + 10px);right:0;width:min(380px,calc(100vw - 28px));padding:16px;border:1px solid var(--border-b);border-radius:var(--r-lg);background:var(--elevated);box-shadow:var(--shadow-lg);color:var(--text);white-space:normal}
+.runtime-panel-title{font-size:.82rem;font-weight:700;margin-bottom:10px}
+.runtime-detail{font-size:.75rem;color:var(--text2);line-height:1.55;margin:0 0 8px}
+.runtime-detail strong{color:var(--text)}
+.runtime-note{border-top:1px solid var(--border);padding-top:9px;margin-top:10px;color:var(--text3)}
+.runtime-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+.runtime-actions .btn{font-size:.7rem;padding:6px 10px}
 .icon-btn{width:32px;height:32px;border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;color:var(--text3);transition:.15s;position:relative}
 .icon-btn:hover{background:rgba(232,163,61,.1);color:var(--text)}
 .theme-toggle svg{position:absolute;transition:opacity .3s ease,transform .5s cubic-bezier(.16,1,.3,1)}
@@ -154,7 +174,7 @@ html[data-theme="light"] .theme-toggle .icon-moon{opacity:0;transform:rotate(70d
 .msg-meta{display:flex;align-items:center;gap:8px;margin-top:5px;font-size:.7rem;color:var(--text3)}
 .msg-row.user .msg-meta{justify-content:flex-end}
 .msg-actions{display:flex;gap:4px;opacity:0;transition:.15s}
-.msg-row:hover .msg-actions{opacity:1}
+.msg-row:hover .msg-actions,.msg-row:focus-within .msg-actions{opacity:1}
 .msg-act-btn{width:24px;height:24px;border-radius:5px;display:flex;align-items:center;justify-content:center;color:var(--text3);transition:.15s}
 .msg-act-btn:hover{background:rgba(232,163,61,.1);color:var(--accent)}
 
@@ -235,6 +255,7 @@ textarea#chatInput::placeholder{color:var(--text3)}
 .hint-chip:hover{border-color:var(--border-b);color:var(--text2)}
 .hint-chip svg{color:var(--accent)}
 .composer-info{font-size:.68rem;color:var(--text3)}
+.composer-info button{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 
 /* ══════════ API KEY MODAL ══════════ */
 .modal-overlay{position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(16px);z-index:500;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:.2s}
@@ -274,7 +295,32 @@ textarea#chatInput::placeholder{color:var(--text3)}
   .mobile-menu-btn{display:flex}
   .suggest-grid{grid-template-columns:1fr}
   .messages-inner{padding:20px 14px}
+  .topbar{padding:0 12px;gap:7px}
+  .top-actions{gap:3px}
+  .top-actions .btn{padding:5px 8px}
+  .composer-footer{align-items:flex-start;gap:8px;flex-wrap:wrap}
+  .composer-hints{max-width:100%;overflow-x:auto;padding-bottom:2px}
 }
+@media(max-width:560px){
+  .top-actions>#aboutTopBtn,.top-actions>a[href="data-studio.html"],.top-actions>a[href="dashboard.html"]{display:none}
+  .top-actions>a[data-ai-settings-link]{font-size:0;padding:7px}
+  .top-actions>a[data-ai-settings-link] svg{width:16px;height:16px}
+  .conv-title{font-size:.8rem;min-width:0}
+  #convTitleText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ai-runtime>summary{font-size:0;gap:0;padding:8px}
+  .ai-runtime>summary .runtime-dot{width:9px;height:9px}
+  .top-actions>#odooChip{max-width:88px;overflow:hidden;text-overflow:ellipsis}
+  .composer-info{width:100%;text-align:right}
+  .msg-actions{opacity:1}
+}
+@media(max-width:360px){
+  .topbar{padding:0 7px;gap:4px}
+  .top-actions{gap:1px}
+  .top-actions>#odooChip{display:none}
+  .empty-state{padding:24px 10px}
+  .suggest-card{padding:12px}
+}
+@media(hover:none){.msg-actions{opacity:1}}
 
 /* ── Match the People (HR) dashboard's glass-card look ──────────────────
    Same idea as .hr-card in css/people.css: translucent surface + blur +
@@ -287,6 +333,44 @@ textarea#chatInput::placeholder{color:var(--text3)}
 .composer-box{background:color-mix(in srgb, var(--surface) 84%, transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
 .modal-card{background:color-mix(in srgb, var(--elevated) 88%, transparent);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
 .msg-content pre{border-radius:var(--r-lg)}
+ .ai-dashboard-artifact{margin:18px 0;padding:22px;border:1px solid var(--border-b);border-radius:var(--r-lg);background:var(--surface);color:var(--text)}
+ .ai-dashboard-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px}
+ .ai-dashboard-head h2{font:700 1.25rem var(--f-display);margin:0 0 5px}
+ .ai-dashboard-meta,.ai-dashboard-notes{font-size:.78rem;line-height:1.55;color:var(--text2);overflow-wrap:anywhere}
+ .ai-dashboard-actions{display:flex;gap:8px;flex-shrink:0}
+ .ai-dashboard-actions button{padding:8px 12px;border:1px solid var(--border-b);border-radius:var(--r-full);color:var(--text);font-size:.78rem}
+ .ai-dashboard-actions button:hover{background:var(--grad-soft)}
+ .ai-dashboard-metric{padding:14px 0;border-top:1px solid var(--border)}
+ .ai-dashboard-metric h3{font:600 .95rem var(--f-display);margin-bottom:10px}
+ .ai-dashboard-bars{display:grid;gap:8px;margin:0 0 14px}
+ .ai-dashboard-bar-row{display:grid;grid-template-columns:minmax(90px,1fr) minmax(100px,2fr) minmax(60px,auto);align-items:center;gap:10px;font-size:.78rem}
+ .ai-dashboard-bar-label{overflow-wrap:anywhere}
+ .ai-dashboard-bar-track{height:12px;border-radius:var(--r-full);background:var(--grad-soft);overflow:hidden}
+ .ai-dashboard-bar-fill{display:block;height:100%;border-radius:inherit;background:var(--grad)}
+ .ai-dashboard-line{display:block;width:100%;max-height:220px;margin:8px 0 14px;overflow:visible}
+ .ai-dashboard-line line{stroke:var(--border-b);stroke-width:1}
+ .ai-dashboard-line path{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+ .ai-dashboard-line circle{fill:var(--accent)}
+ .ai-dashboard-line text{fill:currentColor;font:11px var(--f-body)}
+ .ai-dashboard-table{width:100%;border-collapse:collapse;font-size:.75rem;margin:8px 0 0}
+ .ai-dashboard-table th,.ai-dashboard-table td{text-align:left;border:1px solid var(--border);padding:6px 8px}
+ .ai-dashboard-table th{background:var(--grad-soft);font-weight:600}
+ .ai-dashboard-notes{margin-top:14px}
+ .ai-dashboard-notes h3{font:600 .82rem var(--f-display);color:var(--text);margin:10px 0 4px}
+ .ai-dashboard-readout{white-space:pre-wrap;font-size:.8rem;line-height:1.6;color:var(--text2)}
+ @media print{
+   @page{size:A4;margin:14mm}
+   body.ai-dashboard-printing{display:block;height:auto;min-height:0;overflow:visible;background:#fff}
+   body.ai-dashboard-printing .shell,body.ai-dashboard-printing .main,body.ai-dashboard-printing .messages-area,body.ai-dashboard-printing .messages-inner,body.ai-dashboard-printing .msg-row,body.ai-dashboard-printing .msg-bubble,body.ai-dashboard-printing .msg-content{display:block;position:static;height:auto;max-height:none;overflow:visible;background:transparent}
+   body.ai-dashboard-printing *{visibility:hidden!important}
+   body.ai-dashboard-printing .ai-dashboard-artifact,body.ai-dashboard-printing .ai-dashboard-artifact *{visibility:visible!important}
+   body.ai-dashboard-printing .ai-dashboard-artifact{position:absolute;left:0;top:0;width:100%;margin:0;padding:0;border:0;background:#fff!important;color:#1c2321!important;box-shadow:none}
+   body.ai-dashboard-printing .ai-dashboard-actions{display:none!important}
+   body.ai-dashboard-printing .ai-dashboard-line{color:#1c2321}
+   body.ai-dashboard-printing .ai-dashboard-meta,body.ai-dashboard-printing .ai-dashboard-notes{color:#46504b!important}
+   body.ai-dashboard-printing .ai-dashboard-readout{color:#1c2321!important}
+   body.ai-dashboard-printing .ai-dashboard-metric{break-inside:avoid}
+ }
 </style>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -305,7 +389,7 @@ textarea#chatInput::placeholder{color:var(--text3)}
         <div class="sb-logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 13l3-5 2 3 2-4 3 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         DashView
       </a>
-      <button class="new-chat-btn" id="newChatBtn">
+      <button class="new-chat-btn" id="newChatBtn" type="button" aria-label="Start a new chat">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
         New chat
       </button>
@@ -313,20 +397,20 @@ textarea#chatInput::placeholder{color:var(--text3)}
     <div class="sb-search">
       <div class="sb-search-wrap">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-        <input type="text" placeholder="Search conversations…" id="convoSearch"/>
+        <input type="search" placeholder="Search conversations…" id="convoSearch" aria-label="Search conversations"/>
       </div>
     </div>
     <p class="sb-section-label">Recent</p>
     <div class="convo-list" id="convoList"></div>
     <div class="sb-footer">
-      <div class="sb-user" id="aboutBtn" title="About this AI">
+      <div class="sb-user" id="aboutBtn" title="About this AI" role="button" tabindex="0" aria-label="About this AI">
         <div class="avatar">AK</div>
         <div class="sb-user-info">
           <p>Amara Khan</p>
           <span>acme-corp</span>
-          <div class="sb-api-badge" id="apiBadge">
+          <div class="sb-api-badge" id="apiBadge" data-state="local">
             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
-            <span>Local engine · always on</span>
+            <span>Local engine · on this device</span>
           </div>
         </div>
       </div>
@@ -334,11 +418,11 @@ textarea#chatInput::placeholder{color:var(--text3)}
   </aside>
 
   <!-- ══════════ MAIN ══════════ -->
-  <div class="main">
+  <main class="main">
 
     <!-- TOPBAR -->
-    <div class="topbar">
-      <button class="mobile-menu-btn icon-btn" id="mobileMenuBtn">
+    <header class="topbar">
+      <button class="mobile-menu-btn icon-btn" id="mobileMenuBtn" type="button" aria-label="Open navigation menu">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
       </button>
       <div class="conv-title">
@@ -346,8 +430,24 @@ textarea#chatInput::placeholder{color:var(--text3)}
         <span id="convTitleText">New conversation</span>
       </div>
       <div class="top-actions">
-        <button class="btn btn-outline btn-sm" id="odooChip" type="button" title="Check the Odoo connection" hidden>Odoo …</button>
-        <button class="btn btn-outline btn-sm" id="aboutTopBtn">
+        <details class="ai-runtime" id="aiRuntime" data-state="local">
+          <summary>
+            <span class="runtime-dot" aria-hidden="true"></span>
+            <span id="providerStatusLabel" role="status" aria-live="polite">Local · on this device</span>
+          </summary>
+          <div class="ai-runtime-panel">
+            <p class="runtime-panel-title">Provider &amp; data use</p>
+            <p class="runtime-detail" id="providerDetailsText"></p>
+            <p class="runtime-detail" id="contextDetailsText"></p>
+            <p class="runtime-detail runtime-note" id="privacyDetailsText"></p>
+            <div class="runtime-actions">
+              <a class="btn btn-outline" href="dashboard.html?stg=ai#settings" data-ai-settings-link>Provider settings</a>
+              <button class="btn btn-outline" type="button" id="connectionReportBtn">Check Odoo connection</button>
+            </div>
+          </div>
+        </details>
+        <button class="btn btn-outline btn-sm" id="odooChip" type="button" title="Check the Odoo connection" aria-live="polite" hidden>Odoo …</button>
+        <button class="btn btn-outline btn-sm" id="aboutTopBtn" type="button">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
           About
         </button>
@@ -367,17 +467,17 @@ textarea#chatInput::placeholder{color:var(--text3)}
           <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
           <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
         </button>
-        <button class="icon-btn" id="clearChatBtn" title="Clear conversation">
+        <button class="icon-btn" id="clearChatBtn" type="button" aria-label="Clear conversation" title="Clear conversation">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
         </button>
-        <button class="icon-btn" id="exportChatBtn" title="Export chat">
+        <button class="icon-btn" id="exportChatBtn" type="button" aria-label="Export chat" title="Export chat">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>
         </button>
       </div>
-    </div>
+    </header>
 
     <!-- MESSAGES -->
-    <div class="messages-area" id="messagesArea">
+    <div class="messages-area" id="messagesArea" role="log" aria-label="Conversation" aria-live="polite" aria-relevant="additions">
       <div class="messages-inner" id="messagesInner">
         <!-- Empty state -->
         <div class="empty-state" id="emptyState">
@@ -385,7 +485,7 @@ textarea#chatInput::placeholder{color:var(--text3)}
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M7 13l3-5 2 3 2-4 3 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
           <h2>What can I help you with?</h2>
-          <p>Local intelligence engine — no API key, no account, nothing leaves this tab. Paste code to debug, ask about an engineering topic, ask how a DashView feature works, or just tell me how things are going.</p>
+          <p>Start with a practical task: debug code, explore DashView, plan a rollout, or ask for a report. Local replies stay in this tab; hosted providers and optional company context are clearly labeled.</p>
           <div class="suggest-grid">
             <button class="suggest-card" data-prompt="Debug this function — something's wrong with it:\n\n```js\nfunction getRevenue(orders) {\n  var total = 0\n  for (var i=0; i<orders.length; i++ {\n    total += orders[i].price * orders[i].qty\n  }\n  return total\n}\n```">
               <p>Debug my code</p>
@@ -399,9 +499,9 @@ textarea#chatInput::placeholder{color:var(--text3)}
               <p>Deploys & rollbacks</p>
               <span>Feature flags, canaries, rollback</span>
             </button>
-            <button class="suggest-card" data-prompt="Honestly, I'm feeling pretty overwhelmed with everything on my plate right now.">
-              <p>Just need to talk something through</p>
-              <span>I'll actually listen</span>
+            <button class="suggest-card" data-prompt="status">
+              <p>Check my connections</p>
+              <span>Get a live Odoo connection report</span>
             </button>
           </div>
         </div>
@@ -413,12 +513,9 @@ textarea#chatInput::placeholder{color:var(--text3)}
       <div class="composer-inner">
         <div class="composer-box">
           <div class="composer-top">
-            <textarea id="chatInput" placeholder="Message DashView AI…" rows="1"></textarea>
+            <textarea id="chatInput" aria-label="Message the DashView AI assistant. Press Enter to send; Shift plus Enter for a new line." placeholder="Message DashView AI…" rows="1"></textarea>
             <div class="composer-actions">
-              <button class="attach-btn" title="Attach file">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84L9.41 17.41a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              </button>
-              <button class="send-btn" id="sendBtn" disabled>
+              <button class="send-btn" id="sendBtn" type="button" aria-label="Send message" title="Send message (Enter)" disabled>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg>
               </button>
             </div>
@@ -438,8 +535,8 @@ textarea#chatInput::placeholder{color:var(--text3)}
                 Formulas
               </button>
             </div>
-            <span class="composer-info">DashView AI · <span id="modelLabel">local engine</span></span>
-          </div>
+            <span class="composer-info">DashView AI · <span id="modelLabel">local engine</span> · <button type="button" id="contextDetailsBtn" aria-expanded="false" aria-controls="aiRuntime">data &amp; connection details</button></span>
+          </main>
         </div>
       </div>
     </div>
@@ -449,34 +546,34 @@ textarea#chatInput::placeholder{color:var(--text3)}
 
 <!-- ══════════ ABOUT THIS AI MODAL ══════════ -->
 <div class="modal-overlay" id="aboutModal">
-  <div class="modal-card modal-card-wide">
-    <button class="modal-close" id="aboutModalClose">
+  <div class="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="aboutModalTitle">
+    <button class="modal-close" id="aboutModalClose" type="button" aria-label="Close About this AI">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
     <div class="modal-icon">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
     </div>
-    <h3>About this AI</h3>
-    <p>This isn't a live language model — it's a fast, deterministic engine that runs entirely in this browser tab. Your message is matched against a local knowledge base, and pasted code is run through real static analysis. No API key, no account, no server round-trip, nothing you type ever leaves this tab.</p>
+    <h3 id="aboutModalTitle">About this AI</h3>
+    <p>By default, DashView uses a deterministic local engine: your message stays in this tab, and pasted code can receive local static checks. You can optionally choose a hosted provider in Settings → AI Assistant. The Provider &amp; data use panel shows the selected provider, whether it has actually replied, and what conversation/company context may be included. Conversations remain saved in this browser.</p>
     <div class="about-grid">
       <div class="about-item">
         <div class="about-item-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 16 4-4-4-4M6 8l-4 4 4 4M14.5 4l-5 16"/></svg></div>
-        <div><p>Real code debugging</p><span>Genuine syntax/structure checks for JS, JSON, HTML & Python</span></div>
+        <div><p>Local code diagnostics</p><span>Syntax/structure checks for JS, JSON, HTML & Python in local mode</span></div>
       </div>
       <div class="about-item">
         <div class="about-item-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
-        <div><p>24 engineering topics</p><span>Auth, testing, deploys, caching, scaling, security & more</span></div>
+        <div><p>Engineering &amp; product help</p><span>Local guidance plus optional hosted-model answers</span></div>
       </div>
       <div class="about-item">
         <div class="about-item-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h6"/></svg></div>
-        <div><p>DashView product help</p><span>Import, cleaning, auto-suggest, pivots, hierarchy, formulas</span></div>
+        <div><p>Company reporting</p><span>Hosted providers can use connected Odoo context when enabled</span></div>
       </div>
       <div class="about-item">
         <div class="about-item-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg></div>
-        <div><p>A steady ear</p><span>Not a therapist — but I won't brush past a hard day</span></div>
+        <div><p>Conversation stays local</p><span>Chat history is saved in this browser, across provider changes</span></div>
       </div>
     </div>
-    <p class="modal-note">Answers are deterministic — the same question gets a consistent answer, and I'll say plainly when something's outside what a rule-based engine can do. Type <code style="font-size:.7rem;background:rgba(232,163,61,.1);padding:1px 5px;border-radius:3px">help</code> any time to see the full list.</p>
+    <p class="modal-note">Local answers are deterministic; hosted replies can vary. Direct-provider keys are stored in this browser and sent with requests, so only use a trusted browser profile. Type <code style="font-size:.7rem;background:rgba(232,163,61,.1);padding:1px 5px;border-radius:3px">help</code> in local mode to see supported topics.</p>
     <button class="btn btn-primary btn-block" id="aboutModalGotIt" style="margin-top:16px">Got it →</button>
   </div>
 </div>
@@ -489,12 +586,20 @@ textarea#chatInput::placeholder{color:var(--text3)}
 <script src="js/odoo-service.js"></script>
 <script src="js/ai-company-context.js"></script>
 <script src="js/ai-odoo-agent.js"></script>
+<script src="js/ai-conversation-context.js"></script>
 <script src="js/ai-engine.js"></script>
+<script src="js/report-engine.js"></script>
 <script>
 // ══════════ STATE ══════════
 let conversations = JSON.parse(localStorage.getItem('al_convos') || '{}');
-let activeId = null;
+const ACTIVE_CONVO_KEY = 'al_active_convo_id';
+let activeId = localStorage.getItem(ACTIVE_CONVO_KEY);
+let aiDashboardArtifactId = 0;
+const aiDashboardPayloads = Object.create(null);
 let isStreaming = false;
+let runtimeProvider = null;
+let runtimeOutcome = 'pending';
+let runtimeCheckedAt = 0;
 
 // ══════════ HELPERS ══════════
 const qs = s => document.querySelector(s);
@@ -533,6 +638,101 @@ function genId() { return 'c_'+Date.now().toString(36)+Math.random().toString(36
 
 function saveConvos() { localStorage.setItem('al_convos', JSON.stringify(conversations)); }
 
+function providerLabel(cfg) {
+  if (!cfg || cfg.provider === 'offline') return 'Offline demo engine';
+  const providers = window.DVAIConfig && window.DVAIConfig.PROVIDERS;
+  return (providers && providers[cfg.provider] && providers[cfg.provider].label) || cfg.provider || 'AI provider';
+}
+
+function refreshAssistantStatus(resetOutcome) {
+  const cfg = window.DVAIConfig ? window.DVAIConfig.get() : { provider: 'offline' };
+  const provider = cfg.provider || 'offline';
+  if (provider !== runtimeProvider || resetOutcome) {
+    runtimeProvider = provider;
+    runtimeOutcome = 'pending';
+    runtimeCheckedAt = 0;
+  }
+  const status = qs('#providerStatusLabel');
+  const details = qs('#providerDetailsText');
+  const context = qs('#contextDetailsText');
+  const privacy = qs('#privacyDetailsText');
+  const runtime = qs('#aiRuntime');
+  const model = qs('#modelLabel');
+  const sidebarBadge = qs('#apiBadge');
+  const sidebarLabel = sidebarBadge && sidebarBadge.querySelector('span');
+  const label = providerLabel(cfg);
+  const activeModel = window.DVAIConfig && window.DVAIConfig.activeModel ? window.DVAIConfig.activeModel(cfg) : '';
+  const configured = !!(window.DVAIConfig && window.DVAIConfig.isConfigured());
+  let state = 'local';
+  let stateLabel = 'Local · on this device';
+  let providerText = 'The offline demo engine runs in this tab. It does not contact an AI provider.';
+
+  if (provider !== 'offline' && !configured) {
+    state = 'setup';
+    stateLabel = 'Setup needed · ' + label;
+    providerText = label + ' is selected but is not ready. Add the required key or backend URL in Provider settings. No hosted request has been sent; local replies remain available.';
+  } else if (provider !== 'offline') {
+    state = runtimeOutcome === 'connecting' ? 'connecting' : runtimeOutcome === 'connected' ? 'connected' : runtimeOutcome === 'error' ? 'error' : 'ready';
+    stateLabel = state === 'connecting' ? 'Connecting · ' + label
+      : state === 'connected' ? 'Responded · ' + label
+      : state === 'error' ? 'Last request failed · ' + label
+      : 'Configured · ' + label;
+    providerText = state === 'connected'
+      ? label + ' returned a response' + (runtimeCheckedAt ? ' at ' + new Date(runtimeCheckedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '') + '. This confirms the last request only.'
+      : state === 'error'
+        ? 'The most recent request to ' + label + ' failed. Check the error in the conversation, your provider settings, and your network. No background connectivity check is running.'
+        : state === 'connecting'
+            ? 'A request to ' + label + (activeModel ? ' (' + activeModel + ')' : '') + ' is in progress. The status changes to responded or failed when it finishes.'
+            : label + (activeModel ? ' (' + activeModel + ')' : '') + ' is configured, but has not been tested yet. Connectivity is checked when you send a message.';
+  }
+
+  if (status) status.textContent = stateLabel;
+  if (details) details.textContent = providerText;
+  if (runtime) runtime.setAttribute('data-state', state);
+  if (model) model.textContent = provider === 'offline' ? 'local engine' : (activeModel || label);
+  if (sidebarBadge) sidebarBadge.setAttribute('data-state', state);
+  if (sidebarLabel) sidebarLabel.textContent = state === 'local' ? 'Local engine · on this device'
+    : state === 'setup' ? 'Provider setup needed · local mode'
+      : state === 'connecting' ? 'Provider connecting'
+        : state === 'connected' ? 'Provider responded'
+          : state === 'error' ? 'Provider unavailable'
+            : 'Provider not tested';
+
+  if (context) {
+    if (provider === 'offline') {
+      context.textContent = 'Data sent: none. Messages and conversation history remain in this browser. Local replies do not use GitHub, dashboard, or Odoo records.';
+    } else if (!configured) {
+      context.textContent = 'Your conversation is still saved locally. No hosted request is made until this provider is configured and you send a message.';
+    } else if (provider === 'dashview') {
+      context.textContent = 'Hosted requests include your current prompt and up to 24 recent prior messages (up to 24,000 characters of prior context). The backend may use its configured Odoo tools; browser dashboard context is not attached by this page.';
+    } else {
+      const contextEnabled = cfg.includeCompanyContext !== false;
+      context.textContent = 'Hosted requests include your current prompt and up to 24 recent prior messages (up to 24,000 characters of prior context). ' +
+        (contextEnabled
+          ? 'Company context is on: dashboard project/GitHub summaries and relevant Odoo records may also be included when available.'
+          : 'Company context is off: dashboard and Odoo context are not added by this page.') +
+        ' Full conversation history remains saved in this browser.';
+    }
+  }
+  if (privacy) {
+    privacy.textContent = provider === 'offline'
+      ? 'No provider connection is made. Conversation history is saved in this browser.'
+      : provider === 'dashview'
+        ? 'Model-provider keys stay on the configured backend. The browser sends the current prompt/history to that backend using the available app session or service key.'
+        : 'This provider key is stored in this browser’s settings and sent with requests to the provider or configured proxy. Use a trusted browser profile; credentials are never displayed here.';
+    privacy.textContent += ' Connectivity is based on the last request, not a background ping.';
+  }
+}
+
+function recordProviderOutcome(provider, outcome) {
+  const current = window.DVAIConfig ? window.DVAIConfig.get() : { provider: 'offline' };
+  if (current.provider !== provider) return;
+  runtimeProvider = provider;
+  runtimeOutcome = outcome;
+  runtimeCheckedAt = Date.now();
+  refreshAssistantStatus();
+}
+
 // ══════════ CONVERSATION LIST ══════════
 function renderConvoList(filter='') {
   const list = qs('#convoList');
@@ -546,21 +746,20 @@ function renderConvoList(filter='') {
     const c = conversations[id];
     const preview = c.messages?.[c.messages.length-1]?.content?.slice(0,60)||'';
     return `<div class="convo-item${id===activeId?' active':''}" data-id="${esc(id)}">
-      <div class="convo-item-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-      <div class="convo-item-body">
-        <p class="convo-item-title">${esc(c.title||'New conversation')}</p>
-        <p class="convo-item-preview">${esc(preview)}</p>
-      </div>
-      <button class="convo-item-del" data-del="${esc(id)}" title="Delete">
+      <button class="convo-item-open" type="button" aria-current="${id===activeId?'page':'false'}" aria-label="Open conversation: ${esc(c.title||'New conversation')}">
+        <span class="convo-item-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+        <span class="convo-item-body">
+          <span class="convo-item-title">${esc(c.title||'New conversation')}</span>
+          <span class="convo-item-preview">${esc(preview)}</span>
+        </span>
+      </button>
+      <button class="convo-item-del" data-del="${esc(id)}" type="button" title="Delete conversation" aria-label="Delete conversation: ${esc(c.title||'New conversation')}">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
       </button>
     </div>`;
   }).join('');
-  list.querySelectorAll('.convo-item').forEach(item => {
-    item.addEventListener('click', e => {
-      if (e.target.closest('[data-del]')) return;
-      loadConvo(item.dataset.id);
-    });
+  list.querySelectorAll('.convo-item-open').forEach(item => {
+    item.addEventListener('click', () => loadConvo(item.closest('.convo-item').dataset.id));
   });
   list.querySelectorAll('[data-del]').forEach(btn => {
     btn.addEventListener('click', e => {
@@ -572,6 +771,7 @@ function renderConvoList(filter='') {
 
 function loadConvo(id) {
   activeId = id;
+  localStorage.setItem(ACTIVE_CONVO_KEY, id);
   const c = conversations[id];
   qs('#convTitleText').textContent = c.title || 'New conversation';
   const inner = qs('#messagesInner');
@@ -579,7 +779,7 @@ function loadConvo(id) {
   if (!c.messages || !c.messages.length) {
     inner.appendChild(createEmptyState());
   } else {
-    c.messages.forEach(m => appendMessage(m.role, m.content, false, m.tag));
+    c.messages.forEach(m => appendMessage(m.role, m.content, false, m.tag, m.dashboard, m.liveOdoo));
   }
   renderConvoList();
   scrollBottom();
@@ -597,6 +797,7 @@ function startNewChat() {
   const id = genId();
   conversations[id] = { title:'', messages:[], updatedAt:Date.now() };
   activeId = id;
+  localStorage.setItem(ACTIVE_CONVO_KEY, id);
   saveConvos();
   const inner = qs('#messagesInner');
   inner.innerHTML = '';
@@ -611,13 +812,23 @@ function createEmptyState() {
   div.id = 'emptyState';
   const cfg = window.DVAIConfig ? window.DVAIConfig.get() : null;
   const live = !!(cfg && window.DVAIConfig.isConfigured() && cfg.provider !== 'offline');
-  const providerLabel = live ? ((window.DVAIConfig.PROVIDERS[cfg.provider] || {}).label || cfg.provider) : '';
+  const chosenProvider = !!(cfg && cfg.provider && cfg.provider !== 'offline');
+  const selectedLabel = chosenProvider ? providerLabel(cfg) : '';
+  const hasCompanyContext = !!(cfg && cfg.includeCompanyContext !== false);
+  const odooConnected = !!(window.DVOdoo && window.DVOdoo.isConnected && window.DVOdoo.isConnected());
+  const responseNote = runtimeOutcome === 'connected'
+    ? 'The last request received a reply.'
+    : runtimeOutcome === 'error'
+      ? 'The last request failed; see provider status for details.'
+      : 'Connectivity is checked when you send a message.';
   const introText = live
-    ? `Connected to ${esc(providerLabel)}${cfg.includeCompanyContext !== false ? ', with your dashboard and Odoo data as context' : ''}. Ask about your company, your projects, or anything else.`
-    : `Local intelligence engine — no API key, no account, nothing leaves this tab. Paste code to debug, ask about an engineering topic, ask how a DashView feature works, or just tell me how things are going.`;
-  const companyPrompt = live
-    ? `<button class="suggest-card" data-prompt="Give me a quick summary of my company right now — recent sales orders, top products, and any CRM leads worth following up on."><p>Summarize my company</p><span>Pulled from your connected Odoo data</span></button>`
-    : `<button class="suggest-card" data-prompt="Honestly, I'm feeling pretty overwhelmed with everything on my plate right now."><p>Just need to talk something through</p><span>I'll actually listen</span></button>`;
+    ? `Configured for ${esc(selectedLabel)}${hasCompanyContext && cfg.provider !== 'dashview' ? ', with optional dashboard and Odoo context' : ''}. ${responseNote}`
+    : chosenProvider
+      ? `${esc(selectedLabel)} is selected but needs setup. You can still use the local demo engine while you configure a provider.`
+      : `The local demo engine runs in this tab with no provider key or network calls. Paste code to debug, explore DashView, plan a rollout, or check your connections.`;
+  const companyPrompt = live && hasCompanyContext && odooConnected
+    ? `<button class="suggest-card" data-prompt="Create a concise business report from the connected Odoo data: summarize recent sales orders, top products, and CRM leads worth following up on. Separate observed figures from recommendations."><p>Report on my business</p><span>Use connected Odoo data; label figures and insights</span></button>`
+    : `<button class="suggest-card" data-prompt="status"><p>Check my connections</p><span>Get a live Odoo connection report</span></button>`;
   div.innerHTML = `
     <div class="empty-logo"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M7 13l3-5 2 3 2-4 3 6" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
     <h2>What can I help you with?</h2>
@@ -625,7 +836,7 @@ function createEmptyState() {
     <div class="suggest-grid">
       <button class="suggest-card" data-prompt="Debug this function — something's wrong with it:\n\n\`\`\`js\nfunction getRevenue(orders) {\n  var total = 0\n  for (var i=0; i<orders.length; i++ {\n    total += orders[i].price * orders[i].qty\n  }\n  return total\n}\n\`\`\`"><p>Debug my code</p><span>Real static analysis, not a guess</span></button>
       <button class="suggest-card" data-prompt="How does the auto-suggest engine in Data Studio decide which charts and KPIs to recommend?"><p>How does Data Studio work?</p><span>Column typing & auto-suggest</span></button>
-      <button class="suggest-card" data-prompt="What's the safest way to roll out a risky deploy and roll it back if something breaks?"><p>Deploys & rollbacks</p><span>Feature flags, canaries, rollback</span></button>
+      <button class="suggest-card" data-prompt="What's the safest way to roll out a risky deploy and roll it back if something breaks?"><p>Plan a safe rollout</p><span>Canary steps, success signals, and rollback</span></button>
       ${companyPrompt}
     </div>`;
   div.querySelectorAll('.suggest-card').forEach(btn => {
@@ -634,7 +845,12 @@ function createEmptyState() {
   return div;
 }
 
-// Initialize
+// Reopen the selected thread; on older installs without an active-id key,
+// resume the most recently updated conversation rather than creating a
+// fresh empty thread every time the page is opened.
+if (!conversations[activeId]) {
+  activeId = Object.keys(conversations).sort((a, b) => (conversations[b].updatedAt || 0) - (conversations[a].updatedAt || 0))[0] || null;
+}
 if (!activeId) startNewChat();
 else loadConvo(activeId);
 
@@ -758,9 +974,43 @@ function renderKpiBlock(raw) {
   return cards.length ? '<div class="ai-kpi-grid">' + cards.join('') + '</div>' : null;
 }
 
-function renderMarkdown(text) {
+function renderAIDashboard(payload, narrative) {
+  if (!payload || payload.version !== 1 || !Array.isArray(payload.metrics) || !payload.metrics.length) return null;
+  const artifactId = 'ai-dashboard-' + (++aiDashboardArtifactId);
+  const insightsText = String(narrative || '').replace(/\n\n\*Live Odoo ·[^*]*\*/g, '').replace(/```[\s\S]*?```/g, '').replace(/^\s*#{1,6}\s*/gm, '').replace(/[*_`]/g, '').replace(/\|/g, ' · ').replace(/\n{3,}/g, '\n\n').slice(0, 12000).trim();
+  aiDashboardPayloads[artifactId] = Object.assign({}, payload, { insightsText: insightsText });
+  const known = Object.keys(aiDashboardPayloads);
+  if (known.length > 20) delete aiDashboardPayloads[known[0]];
+  const generated = new Date(payload.generatedAt);
+  const date = Number.isNaN(generated.getTime()) ? 'Date unavailable' : generated.toLocaleString();
+  const charts = payload.metrics.map((metric) => {
+    const rows = Array.isArray(metric.rows) ? metric.rows.filter((r) => r && Number.isFinite(Number(r.value))).slice(0, 24) : [];
+    if (!rows.length) return '';
+    const max = Math.max(...rows.map((r) => Math.abs(Number(r.value)))) || 1;
+    const values = rows.map((r) => `<tr><th scope="row">${esc(r.label || '')}</th><td>${esc(String(r.value))}</td><td>${r.count == null ? '—' : esc(String(r.count))}</td></tr>`).join('');
+    const bars = rows.map((r) => `<div class="ai-dashboard-bar-row"><span class="ai-dashboard-bar-label">${esc(r.label || '')}</span><span class="ai-dashboard-bar-track"><span class="ai-dashboard-bar-fill" style="width:${Math.max(3, Math.abs(Number(r.value)) / max * 100).toFixed(1)}%"></span></span><strong>${esc(String(r.value))}</strong></div>`).join('');
+    let visual = `<div class="ai-dashboard-bars" role="img" aria-label="${esc(metric.title || 'Metric')} bar chart; exact values are listed in the table below">${bars}</div>`;
+    if (metric.chartType === 'line' && rows.length > 1) {
+      const low = Math.min(...rows.map((r) => Number(r.value))), high = Math.max(...rows.map((r) => Number(r.value))), span = high - low || 1;
+      const points = rows.map((r, i) => ({ x: 28 + i * 504 / (rows.length - 1), y: 104 - (Number(r.value) - low) / span * 66 }));
+      const path = points.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+      const step = Math.ceil(rows.length / 6), maxIndex = rows.reduce((best, r, i, all) => Number(r.value) > Number(all[best].value) ? i : best, 0);
+      const marks = points.map((p, i) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3"/>${i % step === 0 || i === rows.length - 1 ? `<text x="${p.x.toFixed(1)}" y="128" text-anchor="middle">${esc(String(rows[i].label).slice(0, 14))}</text>` : ''}${i === maxIndex || i === rows.length - 1 ? `<text x="${p.x.toFixed(1)}" y="${Math.max(16, p.y - 8).toFixed(1)}" text-anchor="middle">${esc(String(rows[i].value))}</text>` : ''}`).join('');
+      visual = `<svg class="ai-dashboard-line" viewBox="0 0 560 140" role="img" aria-label="${esc(metric.title || 'Metric')} line chart; exact values are listed in the table below"><line x1="20" y1="110" x2="540" y2="110"/><path d="${path}"/>${marks}</svg>`;
+    }
+    return `<section class="ai-dashboard-metric"><h3>${esc(metric.title || metric.model || 'Odoo metric')}</h3>${visual}<table class="ai-dashboard-table"><caption>${esc(metric.title || 'Metric')} — exact returned Odoo values</caption><thead><tr><th scope="col">Group</th><th scope="col">${esc(metric.measure || 'Value')}</th><th scope="col">Records</th></tr></thead><tbody>${values}</tbody></table></section>`;
+  }).join('');
+  const kpis = (payload.kpis || []).filter((k) => k && Number.isFinite(Number(k.value))).map((k) => `<div class="ai-kpi"><div class="ai-kpi-label">${esc(k.label || '')}</div><div class="ai-kpi-value">${esc(String(k.value))}</div><div class="ai-kpi-delta">${esc(k.queryId || 'Odoo result')}</div></div>`).join('');
+  const methods = (payload.methods || []).map((x) => `<li>${esc(x)}</li>`).join('');
+  const limits = (payload.limitations || []).map((x) => `<li>${esc(x)}</li>`).join('');
+  return `<section class="ai-dashboard-artifact" aria-label="Odoo data dashboard" data-ai-dashboard-id="${artifactId}"><header class="ai-dashboard-head"><div><h2>${esc(payload.title || 'Odoo dashboard')}</h2><div class="ai-dashboard-meta">Generated ${esc(date)} · ${esc(payload.source || 'Live Odoo query results')}${payload.currency ? ' · Currency: ' + esc(payload.currency) : ''}</div></div><div class="ai-dashboard-actions"><button type="button" data-ai-dashboard-export>Export board-ready PDF</button><button type="button" data-ai-dashboard-print>Print / Save as PDF</button></div></header>${kpis ? `<div class="ai-kpi-grid">${kpis}</div>` : ''}${charts}<div class="ai-dashboard-notes">${insightsText ? `<h3>Executive read-out</h3><div class="ai-dashboard-readout">${esc(insightsText)}</div>` : ''}<h3>Method and sources</h3><ul>${methods || '<li>Read-only Odoo query results</li>'}</ul><h3>Limitations</h3><ul>${limits || '<li>Only returned data is represented; no missing values are estimated.</li>'}</ul></div></section>`;
+}
+
+function renderMarkdown(text, liveOdoo=false) {
   // Model output can echo Odoo text typed by outsiders (web-form leads, partner names) — escape it all first.
-  text = esc(String(text == null ? '' : text));
+  text = String(text == null ? '' : text);
+  if (liveOdoo) text = text.replace(/```(?:kpi|chart|dashboard)\s*\r?\n[\s\S]*?```/gi, '');
+  text = esc(text);
   // GFM tables — run first so pipe rows aren't mangled by the paragraph/
   // list passes below. Matches a header row, a |---|---| separator row,
   // then any number of body rows.
@@ -819,7 +1069,7 @@ function renderMarkdown(text) {
 }
 
 // ══════════ MESSAGES ══════════
-function appendMessage(role, content, animate=true, tag=null) {
+function appendMessage(role, content, animate=true, tag=null, dashboard=null, liveOdoo=false) {
   const emptyState = qs('#emptyState');
   if (emptyState) emptyState.remove();
 
@@ -835,14 +1085,14 @@ function appendMessage(role, content, animate=true, tag=null) {
     <div class="msg-avatar ${role}">${avatarContent}</div>
     <div class="msg-bubble">
       ${tagHtml}
-      <div class="msg-content" id="msg-${Date.now()}">${role==='ai'?renderMarkdown(content):esc(content)}</div>
+      <div class="msg-content" id="msg-${Date.now()}">${role==='ai'?renderMarkdown(content, liveOdoo) + (dashboard ? renderAIDashboard(dashboard, content) : ''):esc(content)}</div>
       <div class="msg-meta">
         <span>${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
         <div class="msg-actions">
-          <button class="msg-act-btn" onclick="copyMsg(this)" title="Copy">
+          <button class="msg-act-btn" type="button" onclick="copyMsg(this)" title="Copy" aria-label="Copy message">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
-          ${role==='ai'?`<button class="msg-act-btn" onclick="regenMsg()" title="Regenerate"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>`:''}
+          ${role==='ai'?`<button class="msg-act-btn" type="button" onclick="regenMsg()" title="Regenerate" aria-label="Regenerate answer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></button>`:''}
         </div>
       </div>
     </div>`;
@@ -897,6 +1147,8 @@ function scrollBottom() {
 function sendMessage(content, isRegen=false) {
   if (!content?.trim() || isStreaming) return;
   content = content.trim();
+  const DATA_Q = /\b(odoo|sales?|revenue|invoices?|orders?|customers?|clients?|vendors?|suppliers?|purchases?|stock|inventory|leads?|pipeline|employees?|expenses?|tasks?|receivables?|payables?|profit|bikri|udhaar|khareed|maal)\b/i;
+  const DASHBOARD_DATA_Q = /\b(dashboards?|board report)\b/i.test(content) && /\b(focused|board-ready|executive|company|business|data|metric|analytics|odoo|sales?|revenue)\b/i.test(content);
 
   isStreaming = true;
   qs('#sendBtn').disabled = true;
@@ -936,6 +1188,15 @@ function sendMessage(content, isRegen=false) {
       c.updatedAt = Date.now(); saveConvos(); renderConvoList();
       isStreaming = false; qs('#sendBtn').disabled = !qs('#chatInput').value.trim();
       refreshOdooChip(false);
+    }).catch(function (err) {
+      hideTyping();
+      var text = 'Could not complete the Odoo connection report: ' + (err && err.message ? err.message : 'unknown error') + '. Check Settings → Odoo and try again.';
+      appendMessage('ai', text, true, 'Odoo status');
+      c.messages.push({ role: 'ai', content: text, tag: 'Odoo status' });
+      c.updatedAt = Date.now(); saveConvos(); renderConvoList();
+    }).finally(function () {
+      isStreaming = false;
+      qs('#sendBtn').disabled = !qs('#chatInput').value.trim();
     });
     return;
   }
@@ -944,14 +1205,38 @@ function sendMessage(content, isRegen=false) {
     // ── Real API mode: call the configured provider (Grok or Claude) directly
     //    from the browser, with company context (Odoo + dashboard) folded
     //    into the system prompt when that's turned on in Settings. ──
-    var history = (c.messages || []).map(function (m) { return { role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }; });
+    var history = window.DVAIConversationContext.limitHistory((c.messages || []).map(function (m) { return { role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }; }));
     var cfg = window.DVAIConfig.get();
+    refreshAssistantStatus();
+    runtimeProvider = cfg.provider;
+    runtimeOutcome = 'pending';
+    refreshAssistantStatus();
     var odooLive = !!(window.DVOdoo && window.DVOdoo.isConnected());
     var useAgent = odooLive && cfg.includeCompanyContext !== false && cfg.provider !== 'dashview' && window.DVOdooAgent;
+    var needsCompanyData = DATA_Q.test(content) || DASHBOARD_DATA_Q;
+    if (needsCompanyData && !useAgent) {
+      var unavailable = cfg.includeCompanyContext === false
+        ? 'Odoo company context is disabled in AI settings.'
+        : !odooLive
+          ? 'Odoo is not connected in this workspace.'
+          : 'The selected provider cannot run the guarded read-only Odoo query workflow.';
+      var unavailableText = '**Live company data is unavailable.** ' + unavailable + ' No metrics were generated. Connect Odoo, enable Odoo context, and select a supported hosted AI provider to analyze company data.';
+      hideTyping();
+      appendMessage('ai', unavailableText, true, 'Live Odoo unavailable');
+      c.messages.push({ role: 'ai', content: unavailableText, tag: 'Live Odoo unavailable' });
+      c.updatedAt = Date.now();
+      saveConvos();
+      renderConvoList();
+      isStreaming = false;
+      qs('#sendBtn').disabled = !qs('#chatInput').value.trim();
+      return;
+    }
+    runtimeOutcome = 'connecting';
+    refreshAssistantStatus();
     var answerPromise;
     if (useAgent) {
       // Targeted mode: plan → fetch exactly what the question needs from Odoo → answer from those rows.
-      answerPromise = window.DVOdooAgent.ask(content, history, { systemPrompt: cfg.systemPrompt });
+      answerPromise = window.DVOdooAgent.askDetailed(content, history, { systemPrompt: cfg.systemPrompt });
     } else {
       var contextPromise = (cfg.includeCompanyContext !== false && cfg.provider !== 'dashview' && window.DVAICompanyContext)
         ? window.DVAICompanyContext.build().catch(function () { return ''; })
@@ -965,15 +1250,19 @@ function sendMessage(content, isRegen=false) {
       });
     }
 
-    answerPromise.then(function (aiContent) {
+    answerPromise.then(function (result) {
+      var aiContent = typeof result === 'string' ? result : result.content;
+      var dashboard = result && result.dashboard || null;
+      var liveOdoo = !!(result && result.liveOdoo);
       hideTyping();
-      appendMessage('ai', aiContent, true, null);
-      c.messages.push({ role: 'ai', content: aiContent, tag: null });
+      appendMessage('ai', aiContent, true, null, dashboard, liveOdoo);
+      c.messages.push({ role: 'ai', content: aiContent, tag: null, dashboard: dashboard, liveOdoo: liveOdoo });
       c.updatedAt = Date.now();
       saveConvos();
       renderConvoList();
       isStreaming = false;
       qs('#sendBtn').disabled = !qs('#chatInput').value.trim();
+      recordProviderOutcome(cfg.provider, 'connected');
     }).catch(function (err) {
       hideTyping();
       var msg = 'Could not get an answer (' + err.message + '). If this mentions the provider or a rate limit, check your key/plan in Settings → AI Assistant; if it mentions Odoo or the Worker, type **status** to see exactly what is broken.';
@@ -982,6 +1271,7 @@ function sendMessage(content, isRegen=false) {
       saveConvos(); renderConvoList();
       isStreaming = false;
       qs('#sendBtn').disabled = !qs('#chatInput').value.trim();
+      recordProviderOutcome(cfg.provider, 'error');
     });
     return;
   }
@@ -991,9 +1281,8 @@ function sendMessage(content, isRegen=false) {
   // zero delay reads as jarring/robotic, so we pace it slightly, the same
   // way a human would take a beat before typing a reply.
   const delay = 380 + Math.random() * 480;
-  const DATA_Q = /\b(odoo|sales?|revenue|invoices?|orders?|customers?|clients?|vendors?|suppliers?|purchases?|stock|inventory|leads?|pipeline|employees?|expenses?|tasks?|receivables?|payables?|profit|bikri|udhaar|khareed|maal)\b/i;
-  // Only when Odoo is actually in play — the offline engine still answers questions about DashView itself.
-  const offlineNeedsProvider = !!((window.DVOdoo && window.DVOdoo.isConnected()) || /odoo/i.test(content)) && DATA_Q.test(content);
+  // Company metrics always require the configured live Odoo path; the local rules engine must not simulate them.
+  const offlineNeedsProvider = DATA_Q.test(content) || DASHBOARD_DATA_Q;
   setTimeout(() => {
     let aiContent, aiTag = null;
     try {
@@ -1054,16 +1343,94 @@ document.querySelectorAll('.hint-chip, .suggest-card').forEach(btn => {
 });
 
 // ══════════ ABOUT MODAL ══════════
-function openAboutModal() { qs('#aboutModal').classList.add('open'); }
-function closeAboutModal() { qs('#aboutModal').classList.remove('open'); }
+let aboutReturnFocus = null;
+function openAboutModal() {
+  aboutReturnFocus = document.activeElement;
+  qs('#aboutModal').classList.add('open');
+  qs('#aboutModalClose').focus();
+}
+function closeAboutModal() {
+  qs('#aboutModal').classList.remove('open');
+  if (aboutReturnFocus && aboutReturnFocus.focus) aboutReturnFocus.focus();
+}
 
 on(qs('#aboutBtn'), 'click', openAboutModal);
+on(qs('#aboutBtn'), 'keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    openAboutModal();
+  }
+});
 on(qs('#aboutTopBtn'), 'click', openAboutModal);
 on(qs('#aboutModalClose'), 'click', closeAboutModal);
 on(qs('#aboutModalGotIt'), 'click', closeAboutModal);
 on(qs('#aboutModal'), 'click', e => { if(e.target===e.currentTarget) closeAboutModal(); });
+on(qs('#aboutModal'), 'keydown', e => {
+  if (e.key !== 'Tab' || !qs('#aboutModal').classList.contains('open')) return;
+  const focusable = Array.from(qs('#aboutModal').querySelectorAll('button:not([disabled]), a[href]'));
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+});
+on(qs('#contextDetailsBtn'), 'click', () => {
+  const panel = qs('#aiRuntime');
+  panel.open = true;
+  qs('#contextDetailsBtn').setAttribute('aria-expanded', 'true');
+  panel.querySelector('summary').focus();
+});
+on(qs('#aiRuntime'), 'toggle', () => {
+  qs('#contextDetailsBtn').setAttribute('aria-expanded', qs('#aiRuntime').open ? 'true' : 'false');
+});
+on(qs('#connectionReportBtn'), 'click', () => {
+  qs('#aiRuntime').open = false;
+  sendMessage('status');
+});
 
 // ══════════ EXPORT CHAT ══════════
+function printAIDashboard(section) {
+  if (!section) return;
+  let cleanupTimer;
+  const cleanup = () => {
+    document.body.classList.remove('ai-dashboard-printing');
+    if (cleanupTimer) clearTimeout(cleanupTimer);
+  };
+  document.body.classList.add('ai-dashboard-printing');
+  window.addEventListener('afterprint', cleanup, { once: true });
+  cleanupTimer = setTimeout(cleanup, 30000);
+  window.print();
+}
+document.addEventListener('click', event => {
+  const exportBtn = event.target.closest('[data-ai-dashboard-export]');
+  const printBtn = event.target.closest('[data-ai-dashboard-print]');
+  if (!exportBtn && !printBtn) return;
+  const section = event.target.closest('.ai-dashboard-artifact');
+  if (!section) return;
+  if (printBtn) {
+    toast('In the print dialog, choose “Save as PDF”. This browser fallback does not download a PDF automatically.', 'info');
+    printAIDashboard(section);
+    return;
+  }
+  const payload = aiDashboardPayloads[section.dataset.aiDashboardId];
+  if (payload && window.DVReportEngine && typeof window.DVReportEngine.generateAIDashboardPdf === 'function') {
+    window.DVReportEngine.generateAIDashboardPdf(payload).then(() => {
+      toast('Board-ready dashboard PDF exported.', 'success');
+    }).catch(() => {
+      toast('The PDF library could not be loaded. Opening the browser print dialog; choose “Save as PDF”.', 'info');
+      printAIDashboard(section);
+    });
+  } else {
+    toast('PDF export tooling is unavailable. Opening the browser print dialog; choose “Save as PDF”.', 'info');
+    printAIDashboard(section);
+  }
+});
+
 on(qs('#exportChatBtn'), 'click', () => {
   const c = conversations[activeId];
   if (!c?.messages?.length) { toast('Nothing to export yet'); return; }
@@ -1093,6 +1460,11 @@ on(qs('#clearChatBtn'), 'click', () => {
   loadConvo(activeId);
   toast('Conversation cleared');
 });
+window.addEventListener('storage', e => {
+  if (e.key === 'dashview_ai_config') refreshAssistantStatus(true);
+});
+window.addEventListener('focus', () => refreshAssistantStatus());
+document.addEventListener('dv:odoo-config-saved', () => refreshAssistantStatus());
 
 // Close sidebar on outside click (mobile)
 document.addEventListener('click', e => {
@@ -1105,6 +1477,7 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeAboutModal();
+    qs('#aiRuntime').open = false;
     if (window.innerWidth <= 768) qs('#sidebar').classList.remove('open');
   }
   if ((e.metaKey || e.ctrlKey) && e.key === 'n') { e.preventDefault(); startNewChat(); }
@@ -1117,12 +1490,13 @@ if (!Object.keys(conversations).length) {
     var cfg = window.DVAIConfig ? window.DVAIConfig.get() : null;
     if (cfg && window.DVAIConfig.isConfigured() && cfg.provider !== 'offline') {
       var label = (window.DVAIConfig.PROVIDERS[cfg.provider] || {}).label || cfg.provider;
-      toast(label + ' connected — ask about your work or your company', 'success', 4000);
+      toast(label + ' configured — connection is checked after your first request', 'success', 4500);
     } else {
-      toast('Local AI ready — no API key or account needed. Add one in Settings → AI Assistant.', 'success', 4500);
+      toast('Local AI ready — no provider key needed. You can optionally configure a hosted provider in Settings → AI Assistant.', 'success', 5000);
     }
   }, 900);
 }
+refreshAssistantStatus();
 </script>
 <script>
 // ══════════ ODOO STATUS CHIP ══════════

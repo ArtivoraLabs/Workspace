@@ -18,13 +18,20 @@ https://TUMHARA-USERNAME.github.io/REPO-NAME/
 
 ## ✅ Step 2: Odoo Connect karna (Cloudflare Worker — Free)
 
+> **Production safety:** The Worker/browser flow is intended for low-trust or
+> development deployments. Configure exact `ALLOWED_ORIGINS` and
+> `ALLOWED_ODOO_HOSTS` values before deploying, and use a dedicated read-only
+> Odoo account. Never put an administrator credential in the browser.
+
 ### 2a. Cloudflare Worker deploy karo (5 minute)
 
 1. **workers.cloudflare.com** kholo → Free account banao (no credit card)
 2. **"Create Application"** → **"Create Worker"**
 3. Is repo ka `cloudflare-worker.js` file ka sara code copy karo
 4. Worker editor mein paste karo → **Save & Deploy**
-5. Worker URL copy karo:
+5. Worker variables mein `ALLOWED_ORIGINS` (exact dashboard origin) aur
+   `ALLOWED_ODOO_HOSTS` (exact Odoo hostname) set karo
+6. Worker URL copy karo:
    ```
    https://dashview-proxy.TUMHARA-NAME.workers.dev
    ```
@@ -78,7 +85,7 @@ npm start               # :4000 pe chalta hai
 /
 ├── .github/
 │   └── workflows/
-│       └── pages.yml          ← Auto-deploy GitHub Actions
+│       └── static.yml         ← Auto-deploy GitHub Actions
 ├── js/
 │   └── odoo-service.js        ← Updated: Cloudflare Worker support
 ├── server/                    ← Optional Node.js backend

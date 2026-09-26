@@ -19,7 +19,6 @@
    ========================================================================== */
 
 const CORS = {
-  'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Access-Control-Max-Age':       '86400',
@@ -38,7 +37,7 @@ const AI_MAX_REPLY_TOKENS = 4096;
    Set as Worker variables (wrangler.jsonc "vars", or Dashboard → Settings → Variables):
      ALLOWED_ORIGINS     comma-separated, e.g. https://YOU.github.io
      ALLOWED_ODOO_HOSTS  comma-separated, e.g. yourcompany.odoo.com
-   Both empty = previous behaviour (any site, any Odoo host). */
+   Both must be configured before production credentials flow through this Worker. */
 const list = (v) => String(v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 export default {
@@ -46,7 +45,8 @@ export default {
     const origins = list(env.ALLOWED_ORIGINS), hosts = list(env.ALLOWED_ODOO_HOSTS);
     const origin  = request.headers.get('Origin') || '';
     const blocked = origins.length > 0 && origin !== '' && !origins.includes(origin.toLowerCase());
-    const cors    = { ...CORS, 'Access-Control-Allow-Origin': origins.length ? (origin && !blocked ? origin : origins[0]) : '*' };
+    const cors    = { ...CORS };
+    if (origins.length && origin && !blocked) cors['Access-Control-Allow-Origin'] = origin;
     const reply   = (data, status = 200) => json(data, status, cors);
 
     /* ── Preflight ── */

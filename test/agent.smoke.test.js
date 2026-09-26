@@ -64,6 +64,22 @@ const H = [{ role: 'user', content: 'pichle mahine ki sales?' }];
     ok('sanitize reports why others were dropped', p.notes.length === 3);
     ok('json loose parse survives fences/prose', T.parseJsonLoose('Sure!\n```json\n{"queries":[]}\n```') && T.parseJsonLoose('nope') === null);
     ok('date table has this_month/last_month', /this_month: \d{4}-\d\d-01/.test(T.dateTable(new Date(2026, 8, 24))) && /last_month: 2026-08-01 to 2026-08-31/.test(T.dateTable(new Date(2026, 8, 24))));
+    ok('dashboard intent is detected explicitly', T.isDashboardQuestion('Build a focused dashboard for sales'));
+    ok('dashboard is not inferred for a generic lookup', !T.isDashboardQuestion('How many confirmed orders?'));
+    const dashboard = T.dashboardArtifact('Sales by customer dashboard', [
+      { id: 'q1', op: 'read-group', model: 'sale.order', domain: [['state', '=', 'sale']], groupby: ['partner_id'], fields: ['amount_total:sum'], limit: 2 }
+    ], { q1: { ok: true, op: 'read-group', groups: [{ partner_id: [1, 'Northwind'], __count: 2, amount_total: 900 }, { partner_id: [2, 'Contoso'], __count: 1, amount_total: 300 }] } }, { company: 'Acme', currency: 'PKR' }, new Date('2026-09-26T00:00:00Z'));
+    ok('dashboard artifact only charts returned metric values and includes provenance/limits',
+      dashboard.metrics[0].rows.map((r) => r.value).join() === '900,300' &&
+      dashboard.metrics[0].rows[0].label === 'Northwind' && /sale\.order/.test(dashboard.methods[0]) &&
+      /Live Odoo/.test(dashboard.source) && /Only successful read-only/.test(dashboard.limitations.join(' ')));
+    const countOnly = T.dashboardArtifact('Orders by stage', [
+      { id: 'q-count', op: 'read-group', model: 'sale.order', domain: [], groupby: ['state'], fields: [], limit: 10 }
+    ], { 'q-count': { ok: true, op: 'read-group', groups: [{ state: 'sale', __count: 4 }, { state: 'draft', __count: 2 }] } }, {}, new Date('2026-09-26T00:00:00Z'));
+    ok('count-only grouped results become exact dashboard rows',
+      countOnly.metrics[0].measure === 'record count' &&
+      countOnly.metrics[0].rows.map((r) => r.label + ':' + r.value).join() === 'sale:4,draft:2');
+    ok('no successful metric rows produces no dashboard artifact', T.dashboardArtifact('Dashboard', [{ id: 'q2', op: 'read-group', model: 'sale.order', groupby: ['partner_id'], fields: ['amount_total:sum'] }], { q2: { ok: false } }, {}, new Date()) === null);
   }
 
   /* ── full flow: plan → one batch → answer with exact rows ── */
@@ -78,9 +94,34 @@ const H = [{ role: 'user', content: 'pichle mahine ki sales?' }];
     const answerSys = calls.llm[1].sys;
     ok('answer prompt carries exact Odoo rows + server-side total', /Acme \| count=3 \| amount_total=9000/.test(answerSys) && /TOTAL of shown groups: count=4, amount_total=9500/.test(answerSys));
     ok('answer prompt keeps the base system prompt, currency and no-invent rule', /^BASE/.test(answerSys) && /PKR/.test(answerSys) && /never say you lack access/i.test(answerSys));
+    ok('analysis instructions require explicit evidence, cause, trade-off, opportunity and next-step sections',
+      /"Data"/.test(answerSys) && /"Evidence"/.test(answerSys) && /"Root causes \/ contributors"/.test(answerSys) &&
+      /"Trade-offs"/.test(answerSys) && /"Improvement opportunities"/.test(answerSys) && /"Next steps"/.test(answerSys) &&
+      /label them as hypotheses/i.test(answerSys));
     ok('planner is told which areas are unavailable', /UNAVAILABLE: HR \[not installed\], CRM \[no access\]/.test(calls.llm[0].sys));
     ok('exactly one batch call (single login)', calls.rpc.filter((c) => c[0] === 'batch').length === 1);
     ok('reply has a data-trace footer', /Top customer: Acme/.test(out) && /Live Odoo · 1 query \(sale\.order\)/.test(out));
+  }
+
+  {
+    const plan = { queries: [{ id: 'q1', op: 'read-group', model: 'sale.order', domain: [['state', '=', 'sale']], groupby: ['date_order:month'], measures: ['amount_total:sum'], limit: 3 }] };
+    const { A } = makeEnv({
+      rpc: (ep) => ep === 'diagnose' ? Promise.resolve(diagOk) : Promise.resolve({
+        ok: true, results: { q1: { ok: true, op: 'read-group', groups: [{ 'date_order:month': '2026-08', __count: 4, amount_total: 800 }, { 'date_order:month': '2026-09', __count: 2, amount_total: 450 }] } }
+      }),
+      llm: (m, s, n) => Promise.resolve(n === 1 ? JSON.stringify(plan) : 'Observed data: two returned monthly totals.')
+    });
+    const result = await A.askDetailed('Create a focused sales dashboard', H, {});
+    const artifact = result.dashboard;
+    ok('focused dashboard response carries a deterministic Odoo metric artifact',
+      artifact && artifact.metrics[0].chartType === 'line' &&
+      artifact.metrics[0].rows.map((r) => r.value).join() === '800,450' &&
+      /Live Odoo/.test(artifact.source) && artifact.generatedAt === new Date(artifact.generatedAt).toISOString());
+    ok('artifact includes exact query provenance and no locally invented comparisons',
+      artifact && /date_order:month/.test(artifact.methods.join(' ')) &&
+      /Only successful read-only/.test(artifact.limitations.join(' ')) && !/growth|target/i.test(JSON.stringify(artifact.metrics)));
+    ok('dashboard metrics are out-of-band, not model-authored answer text',
+      /^Observed data: two returned monthly totals\./.test(result.content) && !/```dashboard/.test(result.content));
   }
 
   /* ── repair round: bad field → model corrects → success ── */
